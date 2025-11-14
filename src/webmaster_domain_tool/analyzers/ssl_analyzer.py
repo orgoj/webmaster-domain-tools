@@ -9,6 +9,13 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Certificate expiry thresholds (in days)
+SSL_EXPIRY_CRITICAL_DAYS = 30
+SSL_EXPIRY_WARNING_DAYS = 60
+
+# Default SSL port
+DEFAULT_SSL_PORT = 443
+
 
 @dataclass
 class CertificateInfo:
@@ -52,7 +59,7 @@ class SSLAnalyzer:
         """
         self.timeout = timeout
 
-    def analyze(self, domain: str, port: int = 443) -> SSLAnalysisResult:
+    def analyze(self, domain: str, port: int = DEFAULT_SSL_PORT) -> SSLAnalysisResult:
         """
         Perform comprehensive SSL/TLS analysis of a domain.
 
@@ -195,11 +202,11 @@ class SSLAnalyzer:
             cert_info.errors.append(
                 f"Certificate expired {abs(cert_info.days_until_expiry)} days ago"
             )
-        elif cert_info.days_until_expiry < 30:
+        elif cert_info.days_until_expiry < SSL_EXPIRY_CRITICAL_DAYS:
             cert_info.warnings.append(
                 f"Certificate expires in {cert_info.days_until_expiry} days"
             )
-        elif cert_info.days_until_expiry < 60:
+        elif cert_info.days_until_expiry < SSL_EXPIRY_WARNING_DAYS:
             cert_info.warnings.append(
                 f"Certificate expires in {cert_info.days_until_expiry} days (consider renewal)"
             )

@@ -1,6 +1,7 @@
 """Command-line interface for webmaster-domain-tool."""
 
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -26,11 +27,78 @@ app = typer.Typer(
 console = Console()
 
 
+# Validation functions
+def validate_domain(domain: str) -> str:
+    """Validate domain name format."""
+    # Remove protocol and trailing slash if present
+    domain = domain.replace("http://", "").replace("https://", "").rstrip("/")
+
+    # Basic domain validation regex
+    domain_pattern = re.compile(
+        r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+    )
+
+    if not domain_pattern.match(domain):
+        raise typer.BadParameter(
+            f"Invalid domain format: {domain}. Expected format: example.com"
+        )
+
+    return domain
+
+
+def validate_timeout(value: float) -> float:
+    """Validate timeout value."""
+    if value <= 0 or value > 300:
+        raise typer.BadParameter("Timeout must be between 0 and 300 seconds")
+    return value
+
+
+def validate_max_redirects(value: int) -> int:
+    """Validate max redirects value."""
+    if value < 0 or value > 50:
+        raise typer.BadParameter("Max redirects must be between 0 and 50")
+    return value
+
+
+def validate_nameservers(value: Optional[str]) -> Optional[str]:
+    """Validate nameserver IP addresses."""
+    if value is None:
+        return None
+
+    import ipaddress
+
+    nameservers = value.split(",")
+    for ns in nameservers:
+        ns = ns.strip()
+        try:
+            ipaddress.ip_address(ns)
+        except ValueError:
+            raise typer.BadParameter(f"Invalid nameserver IP address: {ns}")
+
+    return value
+
+
+def validate_config_file(value: Optional[str]) -> Optional[str]:
+    """Validate config file exists."""
+    if value is None:
+        return None
+
+    config_path = Path(value)
+    if not config_path.exists():
+        raise typer.BadParameter(f"Config file does not exist: {value}")
+
+    if not config_path.is_file():
+        raise typer.BadParameter(f"Config path is not a file: {value}")
+
+    return value
+
+
 @app.command()
 def analyze(
     domain: str = typer.Argument(
         ...,
         help="Domain to analyze (e.g., example.com)",
+        callback=validate_domain,
     ),
     # Verbosity options
     quiet: bool = typer.Option(
@@ -88,18 +156,21 @@ def analyze(
         10.0,
         "--timeout",
         "-t",
-        help="HTTP request timeout in seconds",
+        help="HTTP request timeout in seconds (0-300)",
+        callback=validate_timeout,
     ),
     max_redirects: int = typer.Option(
         10,
         "--max-redirects",
-        help="Maximum number of redirects to follow",
+        help="Maximum number of redirects to follow (0-50)",
+        callback=validate_max_redirects,
     ),
     # DNS options
     nameservers: Optional[str] = typer.Option(
         None,
         "--nameservers",
         help="Comma-separated list of nameservers to use (e.g., '8.8.8.8,1.1.1.1')",
+        callback=validate_nameservers,
     ),
     # Output options
     no_color: bool = typer.Option(
@@ -113,6 +184,7 @@ def analyze(
         "--config",
         "-c",
         help="Path to config file (overrides default config locations)",
+        callback=validate_config_file,
     ),
     # RBL options
     check_rbl: Optional[bool] = typer.Option(
@@ -147,11 +219,9 @@ def analyze(
     # Create console with color preference
     use_color = config.output.color if no_color is False else not no_color
     output_console = Console(force_terminal=use_color, no_color=not use_color)
-    formatter = OutputFormatter(console=output_console)
+    formatter = OutputFormatter(console=output_console, verbosity=verbosity)
 
-    # Normalize domain
-    domain = domain.replace("http://", "").replace("https://", "").rstrip("/")
-
+    # Domain is already normalized by validate_domain callback
     logger.info(f"Starting analysis for {domain}")
 
     # Print header

@@ -4,10 +4,14 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# HTTP redirect thresholds
+MAX_REDIRECT_WARNING = 3
 
 
 @dataclass
@@ -145,8 +149,6 @@ class HTTPAnalyzer:
                         if redirect_to:
                             # Handle relative URLs
                             if redirect_to.startswith("/"):
-                                from urllib.parse import urlparse
-
                                 parsed = urlparse(current_url)
                                 redirect_to = f"{parsed.scheme}://{parsed.netloc}{redirect_to}"
 
@@ -251,7 +253,7 @@ class HTTPAnalyzer:
                 )
 
         # Check for too many redirects
-        if len(chain.responses) > 3:
+        if len(chain.responses) > MAX_REDIRECT_WARNING:
             result.warnings.append(
                 f"{chain.start_url} has {len(chain.responses)} redirects (consider reducing)"
             )
