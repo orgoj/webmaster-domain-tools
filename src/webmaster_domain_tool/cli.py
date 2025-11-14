@@ -1,6 +1,7 @@
 """Command-line interface for webmaster-domain-tool."""
 
 import logging
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -11,6 +12,8 @@ from .analyzers.http_analyzer import HTTPAnalyzer
 from .analyzers.ssl_analyzer import SSLAnalyzer
 from .analyzers.email_security import EmailSecurityAnalyzer
 from .analyzers.security_headers import SecurityHeadersAnalyzer
+from .analyzers.rbl_checker import RBLChecker, extract_ips_from_dns_result
+from .config import load_config, create_default_user_config, Config
 from .utils.logger import setup_logger, VerbosityLevel
 from .utils.output import OutputFormatter
 
@@ -104,6 +107,19 @@ def analyze(
         "--no-color",
         help="Disable colored output",
     ),
+    # Config options
+    config_file: Optional[str] = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to config file (overrides default config locations)",
+    ),
+    # RBL options
+    check_rbl: Optional[bool] = typer.Option(
+        None,
+        "--check-rbl/--no-check-rbl",
+        help="Check IP addresses against blacklists (RBL)",
+    ),
 ) -> None:
     """
     Analyze a domain and display comprehensive information for webmasters.
@@ -111,6 +127,10 @@ def analyze(
     This tool checks DNS records, HTTP/HTTPS redirects, SSL certificates,
     email security (SPF, DKIM, DMARC), and security headers.
     """
+    # Load configuration
+    config = load_config()
+
+    # Merge CLI arguments with config (CLI takes precedence)
     # Determine verbosity level
     if debug:
         verbosity: VerbosityLevel = "debug"
@@ -119,13 +139,14 @@ def analyze(
     elif quiet:
         verbosity = "quiet"
     else:
-        verbosity = "normal"
+        verbosity = config.output.verbosity  # type: ignore
 
     # Setup logger
     logger = setup_logger(level=verbosity)
 
     # Create console with color preference
-    output_console = Console(force_terminal=not no_color, no_color=no_color)
+    use_color = config.output.color if no_color is False else not no_color
+    output_console = Console(force_terminal=use_color, no_color=not use_color)
     formatter = OutputFormatter(console=output_console)
 
     # Normalize domain
@@ -136,12 +157,24 @@ def analyze(
     # Print header
     formatter.print_header(domain)
 
+    # Merge skip options with config
+    skip_dns = skip_dns or config.analysis.skip_dns
+    skip_http = skip_http or config.analysis.skip_http
+    skip_ssl = skip_ssl or config.analysis.skip_ssl
+    skip_email = skip_email or config.analysis.skip_email
+    skip_headers = skip_headers or config.analysis.skip_headers
+
+    # Determine RBL check
+    do_rbl_check = check_rbl if check_rbl is not None else config.email.check_rbl
+
     try:
         # DNS Analysis
+        dns_result = None
         if not skip_dns:
             logger.info("Running DNS analysis...")
             dns_analyzer = DNSAnalyzer(
-                nameservers=nameservers.split(",") if nameservers else None
+                nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
+                check_dnssec=config.dns.check_dnssec,
             )
             dns_result = dns_analyzer.analyze(domain)
             formatter.print_dns_results(dns_result)
@@ -149,35 +182,36 @@ def analyze(
             dns_result = None
 
         # HTTP/HTTPS Analysis
+        http_result = None
         if not skip_http:
             logger.info("Running HTTP/HTTPS analysis...")
             http_analyzer = HTTPAnalyzer(
-                timeout=timeout,
-                max_redirects=max_redirects,
+                timeout=timeout if timeout else config.http.timeout,
+                max_redirects=max_redirects if max_redirects else config.http.max_redirects,
             )
             http_result = http_analyzer.analyze(domain)
             formatter.print_http_results(http_result)
-        else:
-            http_result = None
 
         # SSL/TLS Analysis
+        ssl_result = None
         if not skip_ssl:
             logger.info("Running SSL/TLS analysis...")
-            ssl_analyzer = SSLAnalyzer(timeout=timeout)
+            ssl_analyzer = SSLAnalyzer(
+                timeout=timeout if timeout else config.http.timeout
+            )
             ssl_result = ssl_analyzer.analyze(domain)
             formatter.print_ssl_results(ssl_result)
-        else:
-            ssl_result = None
 
         # Email Security Analysis
+        email_result = None
         if not skip_email:
             logger.info("Running email security analysis...")
-            selectors = dkim_selectors.split(",") if dkim_selectors else None
+            selectors = (
+                dkim_selectors.split(",") if dkim_selectors else config.email.dkim_selectors
+            )
             email_analyzer = EmailSecurityAnalyzer(dkim_selectors=selectors)
             email_result = email_analyzer.analyze(domain)
             formatter.print_email_security_results(email_result)
-        else:
-            email_result = None
 
         # Security Headers Analysis
         security_headers_results = []
@@ -203,6 +237,21 @@ def analyze(
                     formatter.print_security_headers_results(headers_result)
                     seen_urls.add(headers_result.url)
 
+        # RBL (Blacklist) Check
+        rbl_result = None
+        if do_rbl_check and dns_result:
+            logger.info("Running RBL blacklist check...")
+            ips = extract_ips_from_dns_result(dns_result)
+            if ips:
+                rbl_checker = RBLChecker(
+                    rbl_servers=config.email.rbl_servers,
+                    timeout=config.dns.timeout,
+                )
+                rbl_result = rbl_checker.check_ips(ips)
+                formatter.print_rbl_results(rbl_result)
+            else:
+                logger.debug("No IP addresses found for RBL check")
+
         # Print summary
         formatter.print_summary(
             dns_result=dns_result,
@@ -210,6 +259,7 @@ def analyze(
             ssl_result=ssl_result,
             email_result=email_result,
             security_headers=security_headers_results,
+            rbl_result=rbl_result,
         )
 
         logger.info("Analysis complete")
@@ -220,6 +270,21 @@ def analyze(
     except Exception as e:
         logger.error(f"Unexpected error during analysis: {e}", exc_info=debug)
         console.print(f"\n[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def create_config() -> None:
+    """Create default user configuration file."""
+    try:
+        config_path = create_default_user_config()
+        console.print(f"[green]✓[/green] Created config file: [cyan]{config_path}[/cyan]")
+        console.print(
+            f"\nEdit this file to customize default settings.\n"
+            f"You can also create a local config: [dim].webmaster-domain-tool.toml[/dim]"
+        )
+    except Exception as e:
+        console.print(f"[red]Error creating config: {e}[/red]")
         raise typer.Exit(1)
 
 

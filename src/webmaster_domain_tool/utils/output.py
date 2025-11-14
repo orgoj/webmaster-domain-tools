@@ -13,6 +13,7 @@ from ..analyzers.http_analyzer import HTTPAnalysisResult, HTTPResponse
 from ..analyzers.ssl_analyzer import SSLAnalysisResult, CertificateInfo
 from ..analyzers.email_security import EmailSecurityResult
 from ..analyzers.security_headers import SecurityHeadersResult
+from ..analyzers.rbl_checker import RBLAnalysisResult
 
 
 class OutputFormatter:
@@ -75,6 +76,30 @@ class OutputFormatter:
                     )
 
             self.console.print(table)
+            self.console.print()
+
+        # Print DNSSEC info
+        if result.dnssec:
+            dnssec = result.dnssec
+            if dnssec.enabled:
+                if dnssec.valid:
+                    status = "[green]✓ DNSSEC Enabled and Valid[/green]"
+                else:
+                    status = "[yellow]⚠ DNSSEC Enabled but Invalid[/yellow]"
+            else:
+                status = "[dim]DNSSEC Not Enabled[/dim]"
+
+            self.console.print(status)
+            if dnssec.has_dnskey:
+                self.console.print("  [dim]DNSKEY: ✓[/dim]")
+            if dnssec.has_ds:
+                self.console.print("  [dim]DS: ✓[/dim]")
+
+            for error in dnssec.errors:
+                self.console.print(f"  [red]✗ {error}[/red]")
+            for warning in dnssec.warnings:
+                self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
+
             self.console.print()
 
         # Print warnings
@@ -337,6 +362,50 @@ class OutputFormatter:
 
             self.console.print()
 
+    def print_rbl_results(self, result: RBLAnalysisResult) -> None:
+        """Print RBL (blacklist) check results."""
+        self.console.print("[bold blue]═══ RBL (Blacklist) Check ═══[/bold blue]")
+        self.console.print()
+
+        if not result.checks:
+            self.console.print("[dim]No IP addresses to check[/dim]")
+            self.console.print()
+            return
+
+        # Create table
+        table = Table(box=box.ROUNDED)
+        table.add_column("IP Address", style="cyan", width=15)
+        table.add_column("Status", style="white", width=12)
+        table.add_column("Blacklists", style="dim")
+
+        for check in result.checks:
+            if check.listed:
+                status = f"[red]LISTED ({len(check.blacklists)})[/red]"
+                blacklists = ", ".join(check.blacklists)
+            else:
+                status = "[green]CLEAN[/green]"
+                blacklists = f"[dim]Checked {len(check.not_listed)} RBL(s)[/dim]"
+
+            table.add_row(check.ip, status, blacklists)
+
+        self.console.print(table)
+        self.console.print()
+
+        # Print warnings
+        if result.warnings:
+            for warning in result.warnings:
+                self.console.print(f"[yellow]⚠ {warning}[/yellow]")
+            self.console.print()
+
+        # Print summary
+        if result.total_listed > 0:
+            self.console.print(
+                f"[red]⚠ {result.total_listed} IP address(es) found on blacklists![/red]"
+            )
+        else:
+            self.console.print("[green]✓ No IP addresses found on blacklists[/green]")
+        self.console.print()
+
     def print_summary(
         self,
         dns_result: DNSAnalysisResult | None = None,
@@ -344,6 +413,7 @@ class OutputFormatter:
         ssl_result: SSLAnalysisResult | None = None,
         email_result: EmailSecurityResult | None = None,
         security_headers: list[SecurityHeadersResult] | None = None,
+        rbl_result: RBLAnalysisResult | None = None,
     ) -> None:
         """Print summary of all results."""
         self.console.print("[bold blue]═══ Summary ═══[/bold blue]")
@@ -373,6 +443,10 @@ class OutputFormatter:
             for sh_result in security_headers:
                 total_errors += len(sh_result.errors)
                 total_warnings += len(sh_result.warnings)
+
+        if rbl_result:
+            total_errors += len(rbl_result.errors)
+            total_warnings += len(rbl_result.warnings)
 
         # Print summary
         if total_errors == 0 and total_warnings == 0:

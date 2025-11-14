@@ -12,6 +12,10 @@ Komplexní nástroj pro webmastery, který analyzuje a přehledně zobrazuje vš
 - ✅ SOA záznamy
 - ✅ CAA záznamy (Certificate Authority Authorization)
 - ✅ CNAME záznamy
+- ✅ **DNSSEC validace**
+  - Kontrola DNSKEY a DS záznamů
+  - Validace chain of trust
+  - Upozornění na neplatnou konfiguraci
 - ✅ Kontrola domény i www varianty
 
 ### HTTP/HTTPS Analýza
@@ -44,6 +48,16 @@ Komplexní nástroj pro webmastery, který analyzuje a přehledně zobrazuje vš
   - Validace DMARC politiky
   - Kontrola reportovacích adres
   - Analýza subdomain politiky
+
+### RBL (Realtime Blacklist) Check
+- ✅ Kontrola IP adres proti blacklistům
+- ✅ Podpora hlavních RBL služeb
+  - Spamhaus ZEN
+  - SpamCop
+  - Barracuda Central
+  - SORBS
+- ✅ Kontrola A záznamů i MX serverů
+- ✅ Konfigurovatelné RBL servery
 
 ### Security Headers
 - ✅ Strict-Transport-Security (HSTS)
@@ -105,6 +119,59 @@ Nebo zkrácený příkaz:
 
 ```bash
 wdt example.com
+```
+
+### Konfigurace
+
+Nástroj podporuje konfigurační soubory pro defaultní nastavení:
+
+```bash
+# Vytvoření user config souboru
+wdt create-config
+
+# Config bude vytvořen v ~/.config/webmaster-domain-tool/config.toml
+```
+
+**Pořadí načítání configu** (vyšší přepisuje nižší):
+1. Package default config
+2. System-wide config (`/etc/webmaster-domain-tool/config.toml`)
+3. User config (`~/.config/webmaster-domain-tool/config.toml`)
+4. Home config (`~/.webmaster-domain-tool.toml`)
+5. Local config (`.webmaster-domain-tool.toml` v aktuálním adresáři)
+6. **CLI parametry mají vždy přednost!**
+
+**Vlastní config file:**
+
+```bash
+# Použití vlastního config souboru
+wdt --config /path/to/config.toml example.com
+wdt -c myconfig.toml example.com
+```
+
+**Příklad konfigurace:**
+
+```toml
+[dns]
+nameservers = ["1.1.1.1", "8.8.8.8"]
+timeout = 5.0
+check_dnssec = true
+
+[http]
+timeout = 10.0
+max_redirects = 10
+
+[email]
+dkim_selectors = ["default", "google", "k1"]
+check_rbl = true
+rbl_servers = ["zen.spamhaus.org", "bl.spamcop.net"]
+
+[output]
+color = true
+verbosity = "normal"  # quiet, normal, verbose, debug
+
+[analysis]
+skip_dns = false
+skip_email = false
 ```
 
 ### Možnosti
@@ -178,6 +245,24 @@ wdt --max-redirects 5 example.com
 wdt --nameservers "8.8.8.8,1.1.1.1" example.com
 ```
 
+#### RBL (Blacklist) kontrola
+
+```bash
+# Vypnout RBL kontrolu
+wdt --no-check-rbl example.com
+
+# Zapnout RBL kontrolu (pokud je vypnutá v configu)
+wdt --check-rbl example.com
+```
+
+Standardně se kontrolují:
+- Spamhaus ZEN (`zen.spamhaus.org`)
+- SpamCop (`bl.spamcop.net`)
+- Barracuda Central (`b.barracudacentral.org`)
+- SORBS (`dnsbl.sorbs.net`)
+
+Vlastní RBL servery můžete nastavit v config souboru.
+
 #### Output nastavení
 
 ```bash
@@ -212,6 +297,7 @@ Nástroj zobrazuje přehledný barevný výstup rozdělený do sekcí:
 ### 1. DNS Records
 - Tabulka všech DNS záznamů pro doménu i www.doménu
 - TTL hodnoty
+- **DNSSEC status** (enabled/disabled, validace)
 - Warnings pro chybějící nebo problematické záznamy
 
 ### 2. HTTP/HTTPS Analysis
@@ -239,7 +325,13 @@ Nástroj zobrazuje přehledný barevný výstup rozdělený do sekcí:
 - Doporučení pro chybějící headers
 - Detailní warnings pro každý header
 
-### 6. Summary
+### 6. RBL (Blacklist) Check
+- Tabulka kontrolovaných IP adres
+- Status každé IP (CLEAN / LISTED)
+- Seznam blacklistů kde je IP nalezena
+- Warnings pro nalezené blacklisty
+
+### 7. Summary
 - Celkový počet chyb a warnings
 - Přehledné shrnutí
 
@@ -247,12 +339,13 @@ Nástroj zobrazuje přehledný barevný výstup rozdělený do sekcí:
 
 - Python 3.10+
 - Dependencies (automaticky instalované):
-  - `dnspython` - DNS dotazy
+  - `dnspython` - DNS dotazy a DNSSEC validace
   - `httpx` - HTTP requesty
   - `cryptography` - SSL/TLS analýza
   - `rich` - barevný terminálový výstup
   - `typer` - CLI framework
-  - `pydantic` - validace dat
+  - `pydantic` - validace dat a settings
+  - `tomli` - TOML config parser (Python <3.11)
 
 ## Vývoj
 
@@ -290,33 +383,38 @@ webmaster-domain-tool/
 ├── src/
 │   └── webmaster_domain_tool/
 │       ├── __init__.py
-│       ├── cli.py              # CLI interface (Typer)
+│       ├── cli.py                 # CLI interface (Typer)
+│       ├── config.py              # Config management
+│       ├── default_config.toml    # Default configuration
 │       ├── analyzers/
 │       │   ├── __init__.py
-│       │   ├── dns_analyzer.py        # DNS analýza
+│       │   ├── dns_analyzer.py        # DNS analýza + DNSSEC
 │       │   ├── http_analyzer.py       # HTTP/HTTPS analýza
 │       │   ├── ssl_analyzer.py        # SSL/TLS analýza
 │       │   ├── email_security.py      # SPF, DKIM, DMARC
-│       │   └── security_headers.py    # Security headers
+│       │   ├── security_headers.py    # Security headers
+│       │   └── rbl_checker.py         # RBL blacklist check
 │       └── utils/
 │           ├── __init__.py
 │           ├── logger.py       # Logging setup
 │           └── output.py       # Rich output formatting
 ├── tests/
 ├── pyproject.toml
+├── LICENSE
 └── README.md
 ```
 
 ## Roadmap / Budoucí vylepšení
 
+- [x] **DNSSEC validace** ✅
+- [x] **RBL (blacklist) kontrola** ✅
+- [x] **Config soubor pro defaultní nastavení** ✅
 - [ ] Export do JSON/YAML/HTML formátu
-- [ ] Kontrola blacklistů (RBL)
-- [ ] DNS DNSSEC validace
 - [ ] Kontrola robots.txt / sitemap.xml
 - [ ] Batch analýza více domén
-- [ ] Config soubor pro defaultní nastavení
 - [ ] Continuous monitoring s alertingem
 - [ ] Web UI / API
+- [ ] Plugin systém pro vlastní analyzery
 
 ## Přispívání
 

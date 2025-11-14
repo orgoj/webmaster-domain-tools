@@ -1,0 +1,55 @@
+# Webmaster Domain Tool - Default Configuration
+
+[dns]
+# DNS nameservers to use (default: Google DNS, Cloudflare DNS)
+nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1"]
+# DNS query timeout in seconds
+timeout = 5.0
+# Check DNSSEC validation
+check_dnssec = true
+
+[http]
+# HTTP request timeout in seconds
+timeout = 10.0
+# Maximum number of redirects to follow
+max_redirects = 10
+# Custom user agent (optional)
+# user_agent = "Mozilla/5.0 (compatible; WebmasterDomainTool/0.1)"
+
+[email]
+# DKIM selectors to check
+dkim_selectors = [
+    "default",
+    "google",
+    "k1",
+    "k2",
+    "selector1",
+    "selector2",
+    "dkim",
+    "mail",
+    "s1",
+    "s2",
+]
+# Check realtime blacklists (RBL) for mail servers
+check_rbl = true
+# RBL servers to query
+rbl_servers = [
+    "zen.spamhaus.org",        # Spamhaus ZEN (combined list)
+    "bl.spamcop.net",          # SpamCop
+    "b.barracudacentral.org",  # Barracuda
+    "dnsbl.sorbs.net",         # SORBS
+]
+
+[output]
+# Enable colored output
+color = true
+# Verbosity level: quiet, normal, verbose, debug
+verbosity = "normal"
+
+[analysis]
+# Skip individual analysis modules
+skip_dns = false
+skip_http = false
+skip_ssl = false
+skip_email = false
+skip_headers = false
