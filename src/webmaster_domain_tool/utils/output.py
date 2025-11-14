@@ -10,39 +10,108 @@ from rich import box
 
 from ..analyzers.dns_analyzer import DNSAnalysisResult
 from ..analyzers.http_analyzer import HTTPAnalysisResult, HTTPResponse
-from ..analyzers.ssl_analyzer import SSLAnalysisResult, CertificateInfo
+from ..analyzers.ssl_analyzer import (
+    SSLAnalysisResult,
+    CertificateInfo,
+    SSL_EXPIRY_CRITICAL_DAYS,
+    SSL_EXPIRY_WARNING_DAYS,
+)
 from ..analyzers.email_security import EmailSecurityResult
 from ..analyzers.security_headers import SecurityHeadersResult
 from ..analyzers.rbl_checker import RBLAnalysisResult
+
+# Output formatting constants
+MAX_SAN_DISPLAY = 5
+SECURITY_SCORE_GOOD = 75
+SECURITY_SCORE_WARNING = 50
 
 
 class OutputFormatter:
     """Formats analysis results for console output."""
 
-    def __init__(self, console: Console | None = None):
+    def __init__(self, console: Console | None = None, verbosity: str = "normal"):
         """
         Initialize output formatter.
 
         Args:
             console: Rich console instance (creates new one if not provided)
+            verbosity: Output verbosity level (quiet, normal, verbose, debug)
         """
         self.console = console or Console()
+        self.verbosity = verbosity
 
     def print_header(self, domain: str) -> None:
         """Print analysis header."""
-        self.console.print()
-        self.console.print(
-            Panel(
-                f"[bold cyan]Webmaster Domain Analysis[/bold cyan]\n"
-                f"[white]Domain:[/white] [yellow]{domain}[/yellow]",
-                box=box.DOUBLE,
-                expand=False,
+        if self.verbosity == "quiet":
+            self.console.print(f"[bold]{domain}[/bold]")
+        else:
+            self.console.print()
+            self.console.print(
+                Panel(
+                    f"[bold cyan]Webmaster Domain Analysis[/bold cyan]\n"
+                    f"[white]Domain:[/white] [yellow]{domain}[/yellow]",
+                    box=box.DOUBLE,
+                    expand=False,
+                )
             )
-        )
-        self.console.print()
+            self.console.print()
 
     def print_dns_results(self, result: DNSAnalysisResult) -> None:
         """Print DNS analysis results."""
+        if self.verbosity == "quiet":
+            self._print_dns_quiet(result)
+            return
+        elif self.verbosity == "normal":
+            self._print_dns_compact(result)
+            return
+        else:  # verbose or debug
+            self._print_dns_verbose(result)
+
+    def _print_dns_quiet(self, result: DNSAnalysisResult) -> None:
+        """Print DNS results in quiet mode (single line)."""
+        if result.errors:
+            status = f"[red]✗ DNS: {len(result.errors)} errors[/red]"
+        elif result.warnings:
+            status = f"[yellow]⚠ DNS: OK, {len(result.warnings)} warnings[/yellow]"
+        else:
+            record_types = set(k.split(":")[1] for k in result.records.keys())
+            status = f"[green]✓ DNS: {', '.join(sorted(record_types))}[/green]"
+        self.console.print(status)
+
+    def _print_dns_compact(self, result: DNSAnalysisResult) -> None:
+        """Print DNS results in compact mode."""
+        self.console.print("[bold blue]DNS[/bold blue]")
+
+        if result.errors:
+            for error in result.errors:
+                self.console.print(f"  [red]✗ {error}[/red]")
+            return
+
+        # Show only record counts by type
+        record_counts = {}
+        for key in result.records.keys():
+            domain, record_type = key.rsplit(":", 1)
+            if record_type not in record_counts:
+                record_counts[record_type] = 0
+            record_counts[record_type] += len(result.records[key])
+
+        for record_type, count in sorted(record_counts.items()):
+            self.console.print(f"  {record_type}: {count} record(s)")
+
+        # Show PTR count
+        if result.ptr_records:
+            self.console.print(f"  PTR: {len(result.ptr_records)} record(s)")
+
+        # Show DNSSEC status
+        if result.dnssec and result.dnssec.enabled:
+            status = "✓" if result.dnssec.valid else "⚠"
+            self.console.print(f"  DNSSEC: [{('green' if result.dnssec.valid else 'yellow')}]{status}[/]")
+
+        if result.warnings:
+            self.console.print(f"  [yellow]⚠ {len(result.warnings)} warning(s)[/yellow]")
+
+    def _print_dns_verbose(self, result: DNSAnalysisResult) -> None:
+        """Print DNS results in verbose mode (full detail)."""
         self.console.print("[bold blue]═══ DNS Records ═══[/bold blue]")
         self.console.print()
 
@@ -78,6 +147,13 @@ class OutputFormatter:
             self.console.print(table)
             self.console.print()
 
+        # Print PTR (reverse DNS) records
+        if result.ptr_records:
+            self.console.print("[cyan]PTR Records (Reverse DNS):[/cyan]")
+            for ip, ptr in result.ptr_records.items():
+                self.console.print(f"  {ip} → {ptr}")
+            self.console.print()
+
         # Print DNSSEC info
         if result.dnssec:
             dnssec = result.dnssec
@@ -110,6 +186,51 @@ class OutputFormatter:
 
     def print_http_results(self, result: HTTPAnalysisResult) -> None:
         """Print HTTP/HTTPS analysis results."""
+        if self.verbosity == "quiet":
+            self._print_http_quiet(result)
+            return
+        elif self.verbosity == "normal":
+            self._print_http_compact(result)
+            return
+        else:
+            self._print_http_verbose(result)
+
+    def _print_http_quiet(self, result: HTTPAnalysisResult) -> None:
+        """Print HTTP results in quiet mode."""
+        if result.errors:
+            status = f"[red]✗ HTTP: {len(result.errors)} errors[/red]"
+        elif result.warnings:
+            status = f"[yellow]⚠ HTTP: OK, {len(result.warnings)} warnings[/yellow]"
+        else:
+            ok_chains = sum(1 for c in result.chains if c.responses and c.responses[-1].status_code == 200)
+            status = f"[green]✓ HTTP: {ok_chains}/{len(result.chains)} OK[/green]"
+        self.console.print(status)
+
+    def _print_http_compact(self, result: HTTPAnalysisResult) -> None:
+        """Print HTTP results in compact mode."""
+        self.console.print("[bold blue]HTTP/HTTPS[/bold blue]")
+
+        for chain in result.chains:
+            if chain.responses:
+                last_response = chain.responses[-1]
+                if last_response.status_code == 200:
+                    status_color = "green"
+                    status_symbol = "✓"
+                elif last_response.error:
+                    status_color = "red"
+                    status_symbol = "✗"
+                else:
+                    status_color = "yellow"
+                    status_symbol = "⚠"
+
+                redirect_info = f" ({len(chain.responses)-1} redirects)" if len(chain.responses) > 1 else ""
+                self.console.print(f"  [{status_color}]{status_symbol}[/] {chain.start_url}{redirect_info}")
+
+        if result.warnings and self.verbosity != "quiet":
+            self.console.print(f"  [yellow]⚠ {len(result.warnings)} warning(s)[/yellow]")
+
+    def _print_http_verbose(self, result: HTTPAnalysisResult) -> None:
+        """Print HTTP results in verbose mode."""
         self.console.print("[bold blue]═══ HTTP/HTTPS Analysis ═══[/bold blue]")
         self.console.print()
 
@@ -151,6 +272,64 @@ class OutputFormatter:
 
     def print_ssl_results(self, result: SSLAnalysisResult) -> None:
         """Print SSL/TLS analysis results."""
+        if self.verbosity == "quiet":
+            self._print_ssl_quiet(result)
+            return
+        elif self.verbosity == "normal":
+            self._print_ssl_compact(result)
+            return
+        else:
+            self._print_ssl_verbose(result)
+
+    def _print_ssl_quiet(self, result: SSLAnalysisResult) -> None:
+        """Print SSL results in quiet mode."""
+        if not result.certificates:
+            status = "[red]✗ SSL: No certificates[/red]"
+        elif result.errors:
+            status = f"[red]✗ SSL: {len(result.errors)} errors[/red]"
+        elif result.warnings:
+            min_days = min((c.days_until_expiry for c in result.certificates.values() if not c.errors), default=999)
+            status = f"[yellow]⚠ SSL: Valid ({min_days}d), {len(result.warnings)} warnings[/yellow]"
+        else:
+            min_days = min((c.days_until_expiry for c in result.certificates.values()), default=999)
+            status = f"[green]✓ SSL: Valid ({min_days} days)[/green]"
+        self.console.print(status)
+
+    def _print_ssl_compact(self, result: SSLAnalysisResult) -> None:
+        """Print SSL results in compact mode."""
+        self.console.print("[bold blue]SSL/TLS[/bold blue]")
+
+        if not result.certificates:
+            self.console.print("  [red]✗ No certificates found[/red]")
+            return
+
+        for domain, cert in result.certificates.items():
+            if cert.errors:
+                self.console.print(f"  [red]✗ {domain}: {cert.errors[0]}[/red]")
+            else:
+                if cert.days_until_expiry < SSL_EXPIRY_CRITICAL_DAYS:
+                    color = "red"
+                    symbol = "✗"
+                elif cert.days_until_expiry < SSL_EXPIRY_WARNING_DAYS:
+                    color = "yellow"
+                    symbol = "⚠"
+                else:
+                    color = "green"
+                    symbol = "✓"
+
+                issuer = cert.issuer.get("organizationName", cert.issuer.get("commonName", "Unknown"))
+                self.console.print(
+                    f"  [{color}]{symbol}[/] {domain}: {issuer} ({cert.days_until_expiry}d)"
+                )
+
+        if result.protocols:
+            self.console.print(f"  TLS: {', '.join(result.protocols)}")
+
+        if result.warnings:
+            self.console.print(f"  [yellow]⚠ {len(result.warnings)} warning(s)[/yellow]")
+
+    def _print_ssl_verbose(self, result: SSLAnalysisResult) -> None:
+        """Print SSL results in verbose mode."""
         self.console.print("[bold blue]═══ SSL/TLS Certificates ═══[/bold blue]")
         self.console.print()
 
@@ -194,9 +373,9 @@ class OutputFormatter:
             # Expiry with color based on days left
             if cert.days_until_expiry < 0:
                 expiry_str = f"[red]{cert.not_after.strftime('%Y-%m-%d %H:%M:%S')} (EXPIRED)[/red]"
-            elif cert.days_until_expiry < 30:
+            elif cert.days_until_expiry < SSL_EXPIRY_CRITICAL_DAYS:
                 expiry_str = f"[red]{cert.not_after.strftime('%Y-%m-%d %H:%M:%S')} ({cert.days_until_expiry} days)[/red]"
-            elif cert.days_until_expiry < 60:
+            elif cert.days_until_expiry < SSL_EXPIRY_WARNING_DAYS:
                 expiry_str = f"[yellow]{cert.not_after.strftime('%Y-%m-%d %H:%M:%S')} ({cert.days_until_expiry} days)[/yellow]"
             else:
                 expiry_str = f"[green]{cert.not_after.strftime('%Y-%m-%d %H:%M:%S')} ({cert.days_until_expiry} days)[/green]"
@@ -205,9 +384,9 @@ class OutputFormatter:
 
             # SAN
             if cert.san:
-                san_str = ", ".join(cert.san[:5])
-                if len(cert.san) > 5:
-                    san_str += f" ... (+{len(cert.san) - 5} more)"
+                san_str = ", ".join(cert.san[:MAX_SAN_DISPLAY])
+                if len(cert.san) > MAX_SAN_DISPLAY:
+                    san_str += f" ... (+{len(cert.san) - MAX_SAN_DISPLAY} more)"
                 table.add_row("SAN", san_str)
 
             self.console.print(table)
@@ -250,6 +429,67 @@ class OutputFormatter:
 
     def print_email_security_results(self, result: EmailSecurityResult) -> None:
         """Print email security analysis results."""
+        if self.verbosity == "quiet":
+            self._print_email_quiet(result)
+            return
+        elif self.verbosity == "normal":
+            self._print_email_compact(result)
+            return
+        else:
+            self._print_email_verbose(result)
+
+    def _print_email_quiet(self, result: EmailSecurityResult) -> None:
+        """Print email security results in quiet mode."""
+        spf_ok = result.spf and result.spf.is_valid
+        dmarc_ok = result.dmarc and result.dmarc.is_valid
+        dkim_count = len(result.dkim)
+
+        if spf_ok and dmarc_ok and dkim_count > 0:
+            status = f"[green]✓ Email: SPF, DKIM({dkim_count}), DMARC[/green]"
+        elif result.errors:
+            status = f"[red]✗ Email: {len(result.errors)} errors[/red]"
+        else:
+            missing = []
+            if not spf_ok:
+                missing.append("SPF")
+            if not dmarc_ok:
+                missing.append("DMARC")
+            if dkim_count == 0:
+                missing.append("DKIM")
+            status = f"[yellow]⚠ Email: Missing {', '.join(missing)}[/yellow]"
+        self.console.print(status)
+
+    def _print_email_compact(self, result: EmailSecurityResult) -> None:
+        """Print email security results in compact mode."""
+        self.console.print("[bold blue]Email Security[/bold blue]")
+
+        # SPF
+        if result.spf:
+            symbol = "✓" if result.spf.is_valid else "⚠"
+            color = "green" if result.spf.is_valid else "yellow"
+            self.console.print(f"  [{color}]{symbol}[/] SPF: {result.spf.qualifier}")
+        else:
+            self.console.print("  [red]✗ SPF: Not configured[/red]")
+
+        # DKIM
+        if result.dkim:
+            self.console.print(f"  [green]✓[/] DKIM: {len(result.dkim)} selector(s)")
+        else:
+            self.console.print("  [yellow]⚠ DKIM: None found[/yellow]")
+
+        # DMARC
+        if result.dmarc:
+            symbol = "✓" if result.dmarc.is_valid else "⚠"
+            color = "green" if result.dmarc.is_valid and result.dmarc.policy in ("quarantine", "reject") else "yellow"
+            self.console.print(f"  [{color}]{symbol}[/] DMARC: {result.dmarc.policy}")
+        else:
+            self.console.print("  [red]✗ DMARC: Not configured[/red]")
+
+        if result.warnings:
+            self.console.print(f"  [yellow]⚠ {len(result.warnings)} warning(s)[/yellow]")
+
+    def _print_email_verbose(self, result: EmailSecurityResult) -> None:
+        """Print email security results in verbose mode."""
         self.console.print("[bold blue]═══ Email Security (SPF, DKIM, DMARC) ═══[/bold blue]")
         self.console.print()
 
@@ -321,11 +561,58 @@ class OutputFormatter:
 
     def print_security_headers_results(self, result: SecurityHeadersResult) -> None:
         """Print security headers analysis results."""
+        if self.verbosity == "quiet":
+            self._print_security_headers_quiet(result)
+            return
+        elif self.verbosity == "normal":
+            self._print_security_headers_compact(result)
+            return
+        else:
+            self._print_security_headers_verbose(result)
+
+    def _print_security_headers_quiet(self, result: SecurityHeadersResult) -> None:
+        """Print security headers results in quiet mode."""
+        if result.score >= SECURITY_SCORE_GOOD:
+            status = f"[green]✓ Headers: {result.score}/100[/green]"
+        elif result.score >= SECURITY_SCORE_WARNING:
+            status = f"[yellow]⚠ Headers: {result.score}/100[/yellow]"
+        else:
+            status = f"[red]✗ Headers: {result.score}/100[/red]"
+        self.console.print(status)
+
+    def _print_security_headers_compact(self, result: SecurityHeadersResult) -> None:
+        """Print security headers results in compact mode."""
+        score_color = (
+            "green"
+            if result.score >= SECURITY_SCORE_GOOD
+            else "yellow"
+            if result.score >= SECURITY_SCORE_WARNING
+            else "red"
+        )
+        self.console.print(f"[bold blue]Security Headers[/bold blue] [{score_color}]({result.score}/100)[/]")
+
+        present_count = sum(1 for h in result.headers.values() if h.present)
+        total_count = len(result.headers)
+        self.console.print(f"  {present_count}/{total_count} headers present")
+
+        # Show only missing critical headers
+        missing_headers = [name for name, check in result.headers.items() if not check.present]
+        if missing_headers:
+            self.console.print(f"  [yellow]Missing: {', '.join(missing_headers[:3])}{'...' if len(missing_headers) > 3 else ''}[/yellow]")
+
+    def _print_security_headers_verbose(self, result: SecurityHeadersResult) -> None:
+        """Print security headers results in verbose mode."""
         self.console.print("[bold blue]═══ Security Headers ═══[/bold blue]")
         self.console.print()
 
         # Print score
-        score_color = "green" if result.score >= 75 else "yellow" if result.score >= 50 else "red"
+        score_color = (
+            "green"
+            if result.score >= SECURITY_SCORE_GOOD
+            else "yellow"
+            if result.score >= SECURITY_SCORE_WARNING
+            else "red"
+        )
         self.console.print(
             f"[{score_color}]Security Score: {result.score}/100[/{score_color}]"
         )
@@ -364,6 +651,43 @@ class OutputFormatter:
 
     def print_rbl_results(self, result: RBLAnalysisResult) -> None:
         """Print RBL (blacklist) check results."""
+        if self.verbosity == "quiet":
+            self._print_rbl_quiet(result)
+            return
+        elif self.verbosity == "normal":
+            self._print_rbl_compact(result)
+            return
+        else:
+            self._print_rbl_verbose(result)
+
+    def _print_rbl_quiet(self, result: RBLAnalysisResult) -> None:
+        """Print RBL results in quiet mode."""
+        if not result.checks:
+            return  # Skip if no checks
+        if result.total_listed > 0:
+            status = f"[red]✗ RBL: {result.total_listed} IP(s) blacklisted[/red]"
+        else:
+            status = f"[green]✓ RBL: All clean ({len(result.checks)} checked)[/green]"
+        self.console.print(status)
+
+    def _print_rbl_compact(self, result: RBLAnalysisResult) -> None:
+        """Print RBL results in compact mode."""
+        if not result.checks:
+            return
+
+        self.console.print("[bold blue]RBL Check[/bold blue]")
+
+        listed_count = sum(1 for c in result.checks if c.listed)
+        if listed_count > 0:
+            self.console.print(f"  [red]✗ {listed_count}/{len(result.checks)} IP(s) blacklisted[/red]")
+            for check in result.checks:
+                if check.listed:
+                    self.console.print(f"    {check.ip}: {', '.join(check.blacklists[:2])}")
+        else:
+            self.console.print(f"  [green]✓ All {len(result.checks)} IP(s) clean[/green]")
+
+    def _print_rbl_verbose(self, result: RBLAnalysisResult) -> None:
+        """Print RBL results in verbose mode."""
         self.console.print("[bold blue]═══ RBL (Blacklist) Check ═══[/bold blue]")
         self.console.print()
 
@@ -416,8 +740,16 @@ class OutputFormatter:
         rbl_result: RBLAnalysisResult | None = None,
     ) -> None:
         """Print summary of all results."""
-        self.console.print("[bold blue]═══ Summary ═══[/bold blue]")
-        self.console.print()
+        if self.verbosity == "quiet":
+            return  # No summary in quiet mode
+
+        if self.verbosity == "normal":
+            # Compact summary
+            self.console.print()
+        else:
+            # Verbose summary
+            self.console.print("[bold blue]═══ Summary ═══[/bold blue]")
+            self.console.print()
 
         # Count issues
         total_errors = 0

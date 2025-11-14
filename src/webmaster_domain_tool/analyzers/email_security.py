@@ -8,6 +8,10 @@ import dns.exception
 
 logger = logging.getLogger(__name__)
 
+# SPF validation thresholds
+SPF_MAX_INCLUDES_WARNING = 8
+SPF_MAX_INCLUDES_LIMIT = 10
+
 
 @dataclass
 class SPFRecord:
@@ -198,9 +202,9 @@ class EmailSecurityAnalyzer:
 
         # Check for too many DNS lookups (SPF limit is 10)
         include_count = sum(1 for m in spf.mechanisms if m.startswith("include:"))
-        if include_count > 8:
+        if include_count > SPF_MAX_INCLUDES_WARNING:
             spf.warnings.append(
-                f"SPF has {include_count} includes (limit is 10, may cause issues)"
+                f"SPF has {include_count} includes (limit is {SPF_MAX_INCLUDES_LIMIT}, may cause issues)"
             )
 
         # Check for common issues

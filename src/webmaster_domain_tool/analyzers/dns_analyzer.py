@@ -8,6 +8,7 @@ import dns.resolver
 import dns.exception
 import dns.dnssec
 import dns.name
+import dns.reversename
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class DNSAnalysisResult:
 
     domain: str
     records: dict[str, list[DNSRecord]] = field(default_factory=dict)
+    ptr_records: dict[str, str] = field(default_factory=dict)  # IP -> PTR mapping
     dnssec: DNSSECInfo | None = None
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -105,6 +107,9 @@ class DNSAnalyzer:
 
         # Validate MX records
         self._validate_mx_records(result)
+
+        # Check PTR records for A records
+        self._check_ptr_records(result)
 
         # Check DNSSEC
         if self.check_dnssec:
@@ -196,6 +201,48 @@ class DNSAnalyzer:
                         result.warnings.append(
                             f"MX host {mx_host} does not resolve: {str(e)}"
                         )
+
+    def _check_ptr_records(self, result: DNSAnalysisResult) -> None:
+        """Check PTR (reverse DNS) records for all A records."""
+        # Collect all A records (IPv4)
+        a_record_keys = [k for k in result.records.keys() if k.endswith(":A")]
+
+        for a_key in a_record_keys:
+            for a_record in result.records[a_key]:
+                ip_address = a_record.value
+
+                try:
+                    # Perform reverse DNS lookup
+                    rev_name = dns.reversename.from_address(ip_address)
+                    answers = self.resolver.resolve(rev_name, "PTR")
+
+                    if answers:
+                        # Get first PTR record
+                        ptr_value = str(answers[0]).rstrip(".")
+                        result.ptr_records[ip_address] = ptr_value
+                        logger.debug(f"PTR record for {ip_address}: {ptr_value}")
+
+                        # Validate PTR record points back to original domain
+                        # Forward lookup PTR value to verify it resolves to the same IP
+                        try:
+                            forward_answers = self.resolver.resolve(ptr_value, "A")
+                            forward_ips = [str(rdata) for rdata in forward_answers]
+
+                            if ip_address not in forward_ips:
+                                result.warnings.append(
+                                    f"PTR record {ptr_value} for {ip_address} does not resolve back to {ip_address}"
+                                )
+                        except Exception:
+                            result.warnings.append(
+                                f"PTR record {ptr_value} for {ip_address} does not resolve in forward lookup"
+                            )
+                except dns.resolver.NXDOMAIN:
+                    logger.debug(f"No PTR record for {ip_address}")
+                    result.warnings.append(f"No PTR record found for {ip_address}")
+                except dns.resolver.NoAnswer:
+                    logger.debug(f"No PTR record for {ip_address}")
+                except Exception as e:
+                    logger.debug(f"Error checking PTR for {ip_address}: {e}")
 
     def _check_dnssec(self, domain: str) -> DNSSECInfo:
         """
