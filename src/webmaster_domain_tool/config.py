@@ -162,11 +162,52 @@ class ServiceVerificationConfig(BaseModel):
     )
 
 
+def _get_default_verification_services() -> list[ServiceVerificationConfig]:
+    """Get default list of predefined verification services."""
+    return [
+        ServiceVerificationConfig(
+            name="Google",
+            ids=[],
+            dns_pattern="google-site-verification={id}",
+            file_pattern="google{id}.html",
+            meta_name="google-site-verification",
+            auto_detect=True,
+        ),
+        ServiceVerificationConfig(
+            name="Facebook",
+            ids=[],
+            dns_pattern="facebook-domain-verification={id}",
+            meta_name="facebook-domain-verification",
+            auto_detect=True,
+        ),
+        ServiceVerificationConfig(
+            name="Pinterest",
+            ids=[],
+            meta_name="p:domain_verify",
+            auto_detect=True,
+        ),
+        ServiceVerificationConfig(
+            name="Bing",
+            ids=[],
+            file_pattern="BingSiteAuth.xml",
+            meta_name="msvalidate.01",
+            auto_detect=True,
+        ),
+        ServiceVerificationConfig(
+            name="Yandex",
+            ids=[],
+            file_pattern="yandex_{id}.html",
+            meta_name="yandex-verification",
+            auto_detect=True,
+        ),
+    ]
+
+
 class SiteVerificationConfig(BaseModel):
     """Site verification configuration for multiple services."""
 
     services: list[ServiceVerificationConfig] = Field(
-        default_factory=list,
+        default_factory=_get_default_verification_services,
         description="List of verification services to check",
     )
 
@@ -359,10 +400,43 @@ dkim_selectors = ["default", "google", "k1", "k2", "selector1", "selector2"]
 check_rbl = false
 rbl_servers = ["zen.spamhaus.org", "bl.spamcop.net", "b.barracudacentral.org", "dnsbl.sorbs.net"]
 
-[google]
-# Google Site Verification IDs to check (empty by default)
-# Example: verification_ids = ["abcd1234efgh5678", "ijkl9012mnop3456"]
-verification_ids = []
+# Site Verification - predefined services (Google, Facebook, Pinterest, Bing, Yandex)
+# Add your verification IDs to the 'ids' array or use CLI args (--google-id, --facebook-id, etc.)
+
+[[site_verification.services]]
+name = "Google"
+ids = []  # Add your Google Site Verification IDs here or use --google-id
+dns_pattern = "google-site-verification={id}"
+file_pattern = "google{id}.html"
+meta_name = "google-site-verification"
+auto_detect = true
+
+[[site_verification.services]]
+name = "Facebook"
+ids = []  # Add your Facebook Domain Verification IDs here or use --facebook-id
+dns_pattern = "facebook-domain-verification={id}"
+meta_name = "facebook-domain-verification"
+auto_detect = true
+
+[[site_verification.services]]
+name = "Pinterest"
+ids = []  # Add your Pinterest Domain Verification IDs here or use --pinterest-id
+meta_name = "p:domain_verify"
+auto_detect = true
+
+[[site_verification.services]]
+name = "Bing"
+ids = []  # Add your Bing Site Verification IDs here or use --bing-id
+file_pattern = "BingSiteAuth.xml"
+meta_name = "msvalidate.01"
+auto_detect = true
+
+[[site_verification.services]]
+name = "Yandex"
+ids = []  # Add your Yandex Webmaster Verification IDs here or use --yandex-id
+file_pattern = "yandex_{id}.html"
+meta_name = "yandex-verification"
+auto_detect = true
 
 [output]
 color = true
@@ -374,7 +448,7 @@ skip_http = false
 skip_ssl = false
 skip_email = false
 skip_headers = false
-skip_google = false
+skip_site_verification = false
 """
         )
         logger.info(f"Created default config file: {config_path}")

@@ -164,9 +164,9 @@ def analyze(
         "--skip-headers",
         help="Skip security headers analysis",
     ),
-    skip_google: bool = typer.Option(
+    skip_site_verification: bool = typer.Option(
         False,
-        "--skip-google/--skip-site-verification",
+        "--skip-site-verification",
         help="Skip site verification analysis (Google, Facebook, Pinterest, etc.)",
     ),
     # Email security options
@@ -175,11 +175,31 @@ def analyze(
         "--dkim-selectors",
         help="Comma-separated list of DKIM selectors to check (e.g., 'default,google,k1')",
     ),
-    # Google services options
-    google_verification_ids: Optional[str] = typer.Option(
+    # Site verification options
+    google_id: Optional[str] = typer.Option(
         None,
-        "--google-verification-ids",
-        help="Comma-separated list of Google Site Verification IDs to check",
+        "--google-id",
+        help="Google Site Verification ID to check",
+    ),
+    facebook_id: Optional[str] = typer.Option(
+        None,
+        "--facebook-id",
+        help="Facebook Domain Verification ID to check",
+    ),
+    pinterest_id: Optional[str] = typer.Option(
+        None,
+        "--pinterest-id",
+        help="Pinterest Domain Verification ID to check",
+    ),
+    bing_id: Optional[str] = typer.Option(
+        None,
+        "--bing-id",
+        help="Bing Site Verification ID to check",
+    ),
+    yandex_id: Optional[str] = typer.Option(
+        None,
+        "--yandex-id",
+        help="Yandex Webmaster Verification ID to check",
     ),
     # HTTP options
     timeout: float = typer.Option(
@@ -268,7 +288,7 @@ def analyze(
     skip_ssl = skip_ssl or config.analysis.skip_ssl
     skip_email = skip_email or config.analysis.skip_email
     skip_headers = skip_headers or config.analysis.skip_headers
-    skip_google = skip_google or config.analysis.skip_site_verification
+    skip_site_verification = skip_site_verification or config.analysis.skip_site_verification
 
     # Determine RBL check
     do_rbl_check = check_rbl if check_rbl is not None else config.email.check_rbl
@@ -360,43 +380,42 @@ def analyze(
 
         # Site Verification Analysis (Google, Facebook, Pinterest, etc.)
         site_verification_result = None
-        if not skip_google:
-            # Build list of service configurations
+        if not skip_site_verification:
+            # Build list of service configurations from config
             services = []
-
-            # Add services from config
             for service_cfg in config.site_verification.services:
                 services.append(ServiceConfig(
                     name=service_cfg.name,
-                    ids=service_cfg.ids,
+                    ids=list(service_cfg.ids),  # Copy to avoid modifying config
                     dns_pattern=service_cfg.dns_pattern,
                     file_pattern=service_cfg.file_pattern,
                     meta_name=service_cfg.meta_name,
                     auto_detect=service_cfg.auto_detect,
                 ))
 
-            # Handle legacy --google-verification-ids CLI parameter
-            # (add/override Google service if provided via CLI)
-            if google_verification_ids:
-                google_ids = google_verification_ids.split(",")
-                # Check if Google service already exists in config
-                google_service_idx = next(
-                    (i for i, svc in enumerate(services) if svc.name == "Google"),
-                    None
-                )
-                if google_service_idx is not None:
-                    # Override IDs for existing Google service
-                    services[google_service_idx].ids = google_ids
-                else:
-                    # Add new Google service with CLI IDs
-                    services.append(ServiceConfig(
-                        name="Google",
-                        ids=google_ids,
-                        dns_pattern="google-site-verification={id}",
-                        file_pattern="google{id}.html",
-                        meta_name="google-site-verification",
-                        auto_detect=True,
-                    ))
+            # Add CLI-provided IDs to corresponding services
+            cli_ids = {
+                "Google": google_id,
+                "Facebook": facebook_id,
+                "Pinterest": pinterest_id,
+                "Bing": bing_id,
+                "Yandex": yandex_id,
+            }
+
+            for service_name, cli_id in cli_ids.items():
+                if cli_id:
+                    # Find service in list
+                    service = next((s for s in services if s.name == service_name), None)
+                    if service:
+                        # Add CLI ID to existing service (if not already there)
+                        if cli_id not in service.ids:
+                            service.ids.append(cli_id)
+                    else:
+                        # Service not in config, log warning
+                        logger.warning(
+                            f"Service '{service_name}' not found in config. "
+                            f"Add it to config.site_verification.services to use --{service_name.lower()}-id"
+                        )
 
             # Only run if there are services configured
             if services:
