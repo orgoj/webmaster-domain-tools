@@ -1,0 +1,26 @@
+#!/bin/bash
+# Session Start Hook - Auto-setup development environment
+# This script runs automatically when Claude Code session starts
+
+set -e
+
+echo "🔧 Setting up development environment..."
+
+# Install dev dependencies if not already installed
+if [ ! -d ".venv" ]; then
+    echo "📦 Installing dependencies with uv..."
+    uv sync --dev
+else
+    echo "✅ Virtual environment already exists"
+fi
+
+# Install pre-commit hooks
+if [ ! -f ".git/hooks/pre-commit" ]; then
+    echo "🪝 Installing pre-commit hooks..."
+    uv run pre-commit install
+    echo "✅ Pre-commit hooks installed"
+else
+    echo "✅ Pre-commit hooks already installed"
+fi
+
+echo "✨ Development environment ready!"
