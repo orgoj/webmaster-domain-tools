@@ -171,25 +171,20 @@ class HTTPAnalyzer:
                         chain.final_url = current_url
                         break
 
-            except httpx.SSLError as e:
-                logger.warning(f"SSL error for {current_url}: {e}")
-                http_response = HTTPResponse(
-                    url=current_url,
-                    status_code=0,
-                    headers={},
-                    error=f"SSL error: {str(e)}",
-                    ssl_verified=False,
-                )
-                chain.responses.append(http_response)
-                break
-
             except httpx.ConnectError as e:
+                # ConnectError includes SSL errors, connection refused, etc.
                 logger.warning(f"Connection error for {current_url}: {e}")
+
+                # Check if it's SSL-related error by looking at the error message
+                error_msg = str(e).lower()
+                is_ssl_error = any(ssl_term in error_msg for ssl_term in ['ssl', 'certificate', 'tls'])
+
                 http_response = HTTPResponse(
                     url=current_url,
                     status_code=0,
                     headers={},
-                    error=f"Connection error: {str(e)}",
+                    error=f"SSL error: {str(e)}" if is_ssl_error else f"Connection error: {str(e)}",
+                    ssl_verified=False if is_ssl_error else True,
                 )
                 chain.responses.append(http_response)
                 break
