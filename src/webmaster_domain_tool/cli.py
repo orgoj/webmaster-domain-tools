@@ -23,7 +23,7 @@ def _no_border_panel_init(self, *args, **kwargs):
 rich.panel.Panel.__init__ = _no_border_panel_init
 
 from .analyzers.dns_analyzer import DNSAnalyzer
-from .analyzers.http_analyzer import HTTPAnalyzer
+from .analyzers.http_analyzer import HTTPAnalyzer, HTTPAnalysisResult, HTTPResponse
 from .analyzers.ssl_analyzer import SSLAnalyzer
 from .analyzers.email_security import EmailSecurityAnalyzer
 from .analyzers.security_headers import SecurityHeadersAnalyzer
@@ -111,6 +111,73 @@ def validate_config_file(value: Optional[str]) -> Optional[str]:
         raise typer.BadParameter(f"Config path is not a file: {value}")
 
     return value
+
+
+def get_preferred_final_url(
+    http_result: HTTPAnalysisResult,
+) -> tuple[str | None, HTTPResponse | None, list[str]]:
+    """
+    Analyze redirect chains and return the preferred final URL.
+
+    This function checks all redirect chains and determines the single
+    canonical final URL to use for content analysis (security headers,
+    tracking codes, etc.).
+
+    Args:
+        http_result: HTTP analysis result with redirect chains
+
+    Returns:
+        Tuple of (preferred_url, preferred_response, warnings):
+        - preferred_url: The selected final URL (or None if no successful chains)
+        - preferred_response: The HTTP response for that URL (or None)
+        - warnings: List of warning messages if chains are inconsistent
+    """
+    warnings = []
+
+    # Collect unique final URLs from all successful redirect chains
+    final_urls = {}  # normalized_url -> (original_url, response)
+
+    for chain in http_result.chains:
+        if chain.responses:
+            last_response = chain.responses[-1]
+            if last_response.status_code == 200:
+                # Normalize URL for comparison (remove trailing slash, lowercase)
+                normalized_url = last_response.url.rstrip('/').lower()
+
+                if normalized_url not in final_urls:
+                    final_urls[normalized_url] = (last_response.url, last_response)
+
+    # No successful final URLs found
+    if not final_urls:
+        return None, None, warnings
+
+    # All chains lead to the same final URL - perfect!
+    if len(final_urls) == 1:
+        normalized_url = list(final_urls.keys())[0]
+        final_url, final_response = final_urls[normalized_url]
+        logger.debug(f"All redirect chains lead to the same final URL: {final_url}")
+        return final_url, final_response, warnings
+
+    # Multiple different final URLs - this is a configuration issue
+    urls_list = [url for url, _ in final_urls.values()]
+    warning_msg = f"Redirect chains lead to different final URLs: {', '.join(urls_list)}"
+    warnings.append(warning_msg)
+    logger.warning(warning_msg)
+
+    # Choose preferred URL (priority: https with www > https without www > http)
+    def url_priority(url: str) -> tuple[int, int, str]:
+        """Return priority tuple (https=0/http=1, has_www=0/no_www=1, url)."""
+        is_https = 0 if url.startswith('https://') else 1
+        has_www = 0 if '://www.' in url else 1
+        return (is_https, has_www, url)
+
+    # Sort by priority and take the best one
+    preferred_normalized = min(final_urls.keys(),
+                              key=lambda k: url_priority(final_urls[k][0]))
+    preferred_url, preferred_response = final_urls[preferred_normalized]
+
+    logger.info(f"Using preferred final URL for analysis: {preferred_url}")
+    return preferred_url, preferred_response, warnings
 
 
 @app.command()
@@ -345,71 +412,27 @@ def analyze(
         if not skip_headers and http_result:
             logger.info("Running security headers analysis...")
 
-            # Prepare enabled checks from config
-            enabled_checks = {
-                "check_strict_transport_security": config.security_headers.check_strict_transport_security,
-                "check_content_security_policy": config.security_headers.check_content_security_policy,
-                "check_x_frame_options": config.security_headers.check_x_frame_options,
-                "check_x_content_type_options": config.security_headers.check_x_content_type_options,
-                "check_referrer_policy": config.security_headers.check_referrer_policy,
-                "check_permissions_policy": config.security_headers.check_permissions_policy,
-                "check_x_xss_protection": config.security_headers.check_x_xss_protection,
-                "check_content_type": config.security_headers.check_content_type,
-            }
+            # Get the preferred final URL from all redirect chains
+            final_url, final_response, url_warnings = get_preferred_final_url(http_result)
 
-            # Analyze final destinations from all redirect chains
-            # Check if all chains lead to the same final URL
-            final_urls = {}  # normalized_url -> (original_url, response)
+            # Add any warnings about inconsistent redirect chains
+            http_result.warnings.extend(url_warnings)
 
-            for chain in http_result.chains:
-                if chain.responses:
-                    last_response = chain.responses[-1]
-                    if last_response.status_code == 200:
-                        # Normalize URL for comparison (remove trailing slash, lowercase)
-                        normalized_url = last_response.url.rstrip('/').lower()
+            # Only analyze if we have a successful final URL
+            if final_url and final_response:
+                # Prepare enabled checks from config
+                enabled_checks = {
+                    "check_strict_transport_security": config.security_headers.check_strict_transport_security,
+                    "check_content_security_policy": config.security_headers.check_content_security_policy,
+                    "check_x_frame_options": config.security_headers.check_x_frame_options,
+                    "check_x_content_type_options": config.security_headers.check_x_content_type_options,
+                    "check_referrer_policy": config.security_headers.check_referrer_policy,
+                    "check_permissions_policy": config.security_headers.check_permissions_policy,
+                    "check_x_xss_protection": config.security_headers.check_x_xss_protection,
+                    "check_content_type": config.security_headers.check_content_type,
+                }
 
-                        if normalized_url not in final_urls:
-                            final_urls[normalized_url] = (last_response.url, last_response)
-
-            # Check consistency: all chains should lead to the same final URL
-            if len(final_urls) > 1:
-                # Multiple different final URLs - this is a configuration issue
-                urls_list = [url for url, _ in final_urls.values()]
-                warning_msg = f"Redirect chains lead to different final URLs: {', '.join(urls_list)}"
-                http_result.warnings.append(warning_msg)
-                logger.warning(warning_msg)
-
-                # Choose preferred URL (priority: https with www > https without www > http)
-                def url_priority(url: str) -> tuple[int, int, str]:
-                    """Return priority tuple (https=0/http=1, has_www=0/no_www=1, url)."""
-                    is_https = 0 if url.startswith('https://') else 1
-                    has_www = 0 if '://www.' in url else 1
-                    return (is_https, has_www, url)
-
-                # Sort by priority and take the best one
-                preferred_normalized = min(final_urls.keys(),
-                                          key=lambda k: url_priority(final_urls[k][0]))
-                preferred_url, preferred_response = final_urls[preferred_normalized]
-
-                logger.info(f"Using preferred final URL for analysis: {preferred_url}")
-
-                # Analyze only the preferred URL
-                headers_analyzer = SecurityHeadersAnalyzer(enabled_checks=enabled_checks)
-                headers_result = headers_analyzer.analyze(
-                    preferred_response.url,
-                    preferred_response.headers,
-                )
-                security_headers_results.append(headers_result)
-                formatter.print_security_headers_results(headers_result)
-
-            elif len(final_urls) == 1:
-                # All chains lead to the same final URL - perfect!
-                normalized_url = list(final_urls.keys())[0]
-                final_url, final_response = final_urls[normalized_url]
-
-                logger.debug(f"All redirect chains lead to the same final URL: {final_url}")
-
-                # Analyze the single final URL
+                # Analyze the preferred final URL
                 headers_analyzer = SecurityHeadersAnalyzer(enabled_checks=enabled_checks)
                 headers_result = headers_analyzer.analyze(
                     final_response.url,
@@ -483,7 +506,16 @@ def analyze(
                     timeout=timeout if timeout else config.http.timeout,
                     nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
                 )
-                site_verification_result = site_verification_analyzer.analyze(domain)
+
+                # Use preferred final URL from HTTP analysis if available
+                verification_url = None
+                if http_result:
+                    final_url, final_response, _ = get_preferred_final_url(http_result)
+                    verification_url = final_url
+
+                site_verification_result = site_verification_analyzer.analyze(
+                    domain, url=verification_url
+                )
                 formatter.print_site_verification_results(site_verification_result)
 
         # RBL (Blacklist) Check

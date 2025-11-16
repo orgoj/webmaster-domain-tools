@@ -121,12 +121,16 @@ class SiteVerificationAnalyzer:
             self.resolver.nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1"]
             logger.debug("Using fallback public DNS servers")
 
-    def analyze(self, domain: str) -> SiteVerificationAnalysisResult:
+    def analyze(
+        self, domain: str, url: str | None = None
+    ) -> SiteVerificationAnalysisResult:
         """
         Perform comprehensive site verification analysis for all configured services.
 
         Args:
             domain: The domain to analyze
+            url: Optional specific URL to fetch (e.g., final URL from redirects).
+                 If not provided, will construct URL from domain.
 
         Returns:
             SiteVerificationAnalysisResult with verification and tracking information
@@ -138,7 +142,7 @@ class SiteVerificationAnalyzer:
         domain = domain.rstrip(".")
 
         # Fetch HTML content once (will be used for multiple checks)
-        self._fetch_html_content(domain, result)
+        self._fetch_html_content(domain, result, preferred_url=url)
 
         # Process each service
         for service_config in self.services:
@@ -443,16 +447,50 @@ class SiteVerificationAnalyzer:
         return detected_results
 
     def _fetch_html_content(
-        self, domain: str, result: SiteVerificationAnalysisResult
+        self,
+        domain: str,
+        result: SiteVerificationAnalysisResult,
+        preferred_url: str | None = None,
     ) -> None:
         """
-        Fetch HTML content from the domain (tries HTTPS first, falls back to HTTP).
+        Fetch HTML content from the domain or specific URL.
 
         Args:
             domain: Domain to fetch
             result: Result object to store HTML content
+            preferred_url: Optional specific URL to fetch (e.g., from redirect analysis).
+                          If provided, only this URL will be tried.
         """
-        # Try HTTPS first
+        # If preferred URL is provided, use it directly
+        if preferred_url:
+            try:
+                with httpx.Client(
+                    timeout=self.timeout,
+                    follow_redirects=False,  # URL is already final
+                    verify=True,
+                ) as client:
+                    response = client.get(
+                        preferred_url,
+                        headers={"User-Agent": self.user_agent},
+                    )
+
+                    if response.status_code == 200:
+                        result.html_content = response.text
+                        logger.debug(f"Successfully fetched HTML content from {preferred_url}")
+                        return
+                    else:
+                        error_msg = f"HTTP {response.status_code}"
+                        result.html_fetch_error = error_msg
+                        logger.warning(f"Failed to fetch HTML from {preferred_url}: {error_msg}")
+                        return
+
+            except Exception as e:
+                error_msg = f"Failed to fetch: {str(e)}"
+                result.html_fetch_error = error_msg
+                logger.warning(f"Error fetching HTML from {preferred_url}: {e}")
+                return
+
+        # No preferred URL - try HTTPS first, then HTTP
         https_url = f"https://{domain}"
         https_error = None
 
