@@ -20,6 +20,7 @@ from ..analyzers.email_security import EmailSecurityResult
 from ..analyzers.security_headers import SecurityHeadersResult
 from ..analyzers.rbl_checker import RBLAnalysisResult
 from ..analyzers.site_verification_analyzer import SiteVerificationAnalysisResult
+from ..analyzers.whois_analyzer import WhoisAnalysisResult
 
 # Output formatting constants
 MAX_SAN_DISPLAY = 5
@@ -57,6 +58,184 @@ class OutputFormatter:
             self.console.print(f"[bold cyan]Webmaster Domain Analysis[/bold cyan]")
             self.console.print(f"Domain: [yellow]{domain}[/yellow]")
             self.console.print()
+
+    def print_whois_results(self, result: WhoisAnalysisResult) -> None:
+        """Print WHOIS analysis results."""
+        if self.verbosity == "quiet":
+            self._print_whois_quiet(result)
+            return
+        elif self.verbosity == "normal":
+            self._print_whois_compact(result)
+            return
+        else:  # verbose or debug
+            self._print_whois_verbose(result)
+
+    def _print_whois_quiet(self, result: WhoisAnalysisResult) -> None:
+        """Print WHOIS results in quiet mode."""
+        if result.errors:
+            status = f"[red]✗ WHOIS: {len(result.errors)} errors[/red]"
+        elif result.warnings:
+            status = f"[yellow]⚠ WHOIS: {len(result.warnings)} warnings[/yellow]"
+        elif result.registrar and result.expiration_date:
+            status = f"[green]✓ WHOIS: {result.registrar}[/green]"
+        else:
+            status = "[dim]WHOIS: Limited data[/dim]"
+        self.console.print(status)
+
+    def _print_whois_compact(self, result: WhoisAnalysisResult) -> None:
+        """Print WHOIS results in compact mode."""
+        self.console.print("[bold blue]WHOIS[/bold blue]")
+
+        # Handle errors
+        if result.errors:
+            for error in result.errors:
+                self.all_errors.append(("WHOIS", error))
+                self.console.print(f"  [red]✗ {error}[/red]")
+            return
+
+        # Registrar
+        if result.registrar:
+            self.console.print(f"  Registrar: {result.registrar}")
+        else:
+            warning_msg = "Registrar information not available"
+            self.all_warnings.append(("WHOIS", warning_msg))
+            self.console.print(f"  [yellow]⚠ {warning_msg}[/yellow]")
+
+        # Expiration date with color coding
+        if result.expiration_date:
+            exp_str = result.expiration_date.strftime("%Y-%m-%d")
+            if result.days_until_expiry is not None:
+                if result.days_until_expiry < 0:
+                    # Expired - shown as error
+                    self.console.print(f"  [red]Expires: {exp_str} (EXPIRED)[/red]")
+                elif result.days_until_expiry <= 7:
+                    # Critical - shown as error
+                    self.console.print(
+                        f"  [red]Expires: {exp_str} ({result.days_until_expiry} days)[/red]"
+                    )
+                elif result.days_until_expiry <= 30:
+                    # Warning
+                    self.console.print(
+                        f"  [yellow]Expires: {exp_str} ({result.days_until_expiry} days)[/yellow]"
+                    )
+                else:
+                    # OK
+                    self.console.print(
+                        f"  [green]Expires: {exp_str} ({result.days_until_expiry} days)[/green]"
+                    )
+            else:
+                self.console.print(f"  Expires: {exp_str}")
+        else:
+            warning_msg = "Expiration date not available"
+            self.all_warnings.append(("WHOIS", warning_msg))
+            self.console.print(f"  [yellow]⚠ {warning_msg}[/yellow]")
+
+        # Owner/Registrant (if available)
+        if result.registrant_name or result.registrant_organization:
+            owner_parts = []
+            if result.registrant_organization:
+                owner_parts.append(result.registrant_organization)
+            if result.registrant_name:
+                owner_parts.append(result.registrant_name)
+            self.console.print(f"  Owner: {' / '.join(owner_parts)}")
+
+        # Admin contact (if available)
+        if result.admin_name or result.admin_email:
+            admin_parts = []
+            if result.admin_name:
+                admin_parts.append(result.admin_name)
+            if result.admin_email:
+                admin_parts.append(result.admin_email)
+            self.console.print(f"  Admin: {' / '.join(admin_parts)}")
+
+        # Warnings
+        for warning in result.warnings:
+            self.all_warnings.append(("WHOIS", warning))
+            self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
+
+    def _print_whois_verbose(self, result: WhoisAnalysisResult) -> None:
+        """Print WHOIS results in verbose mode."""
+        self.console.print("[bold blue]WHOIS Registration Information[/bold blue]")
+
+        # Handle errors
+        if result.errors:
+            for error in result.errors:
+                self.all_errors.append(("WHOIS", error))
+                self.console.print(f"  [red]✗ {error}[/red]")
+            return
+
+        # Create table for WHOIS info
+        table = Table(show_header=False, box=box.SIMPLE, padding=(0, 1))
+        table.add_column("Field", style="cyan", width=20)
+        table.add_column("Value")
+
+        # Domain
+        table.add_row("Domain", result.domain)
+
+        # Registrar
+        if result.registrar:
+            table.add_row("Registrar", result.registrar)
+        else:
+            table.add_row("Registrar", "[yellow]Not available[/yellow]")
+
+        # Dates
+        if result.creation_date:
+            table.add_row("Created", result.creation_date.strftime("%Y-%m-%d %H:%M:%S"))
+
+        if result.updated_date:
+            table.add_row("Updated", result.updated_date.strftime("%Y-%m-%d %H:%M:%S"))
+
+        if result.expiration_date:
+            exp_str = result.expiration_date.strftime("%Y-%m-%d %H:%M:%S")
+            if result.days_until_expiry is not None:
+                if result.days_until_expiry < 0:
+                    exp_display = f"[red]{exp_str} (EXPIRED {abs(result.days_until_expiry)} days ago)[/red]"
+                elif result.days_until_expiry <= 7:
+                    exp_display = f"[red]{exp_str} ({result.days_until_expiry} days)[/red]"
+                elif result.days_until_expiry <= 30:
+                    exp_display = f"[yellow]{exp_str} ({result.days_until_expiry} days)[/yellow]"
+                else:
+                    exp_display = f"[green]{exp_str} ({result.days_until_expiry} days)[/green]"
+            else:
+                exp_display = exp_str
+            table.add_row("Expires", exp_display)
+
+        # Registrant
+        if result.registrant_organization:
+            table.add_row("Organization", result.registrant_organization)
+
+        if result.registrant_name:
+            table.add_row("Registrant", result.registrant_name)
+
+        # Admin contact
+        if result.admin_name:
+            table.add_row("Admin Name", result.admin_name)
+
+        if result.admin_email:
+            table.add_row("Admin Email", result.admin_email)
+
+        # Nameservers
+        if result.nameservers:
+            ns_list = "\n".join(result.nameservers[:5])  # Show first 5
+            if len(result.nameservers) > 5:
+                ns_list += f"\n... and {len(result.nameservers) - 5} more"
+            table.add_row("Nameservers", ns_list)
+
+        # Status
+        if result.status:
+            status_list = "\n".join(result.status[:3])  # Show first 3
+            if len(result.status) > 3:
+                status_list += f"\n... and {len(result.status) - 3} more"
+            table.add_row("Status", status_list)
+
+        self.console.print(table)
+
+        # Warnings
+        if result.warnings:
+            self.console.print()
+            for warning in result.warnings:
+                self.all_warnings.append(("WHOIS", warning))
+                self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
     def print_dns_results(self, result: DNSAnalysisResult) -> None:
         """Print DNS analysis results."""
@@ -1123,6 +1302,7 @@ class OutputFormatter:
 
     def print_summary(
         self,
+        whois_result: WhoisAnalysisResult | None = None,
         dns_result: DNSAnalysisResult | None = None,
         http_result: HTTPAnalysisResult | None = None,
         ssl_result: SSLAnalysisResult | None = None,

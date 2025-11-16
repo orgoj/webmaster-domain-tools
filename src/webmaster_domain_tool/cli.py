@@ -32,6 +32,7 @@ from .analyzers.site_verification_analyzer import (
     SiteVerificationAnalyzer,
     ServiceConfig,
 )
+from .analyzers.whois_analyzer import WhoisAnalyzer
 from .config import load_config, create_default_user_config, Config
 from .utils.logger import setup_logger, VerbosityLevel
 from .utils.output import OutputFormatter
@@ -169,6 +170,11 @@ def analyze(
         "--skip-site-verification",
         help="Skip site verification analysis (Google, Facebook, Pinterest, etc.)",
     ),
+    skip_whois: bool = typer.Option(
+        False,
+        "--skip-whois",
+        help="Skip WHOIS registration analysis",
+    ),
     # Email security options
     dkim_selectors: Optional[str] = typer.Option(
         None,
@@ -269,11 +275,23 @@ def analyze(
     skip_email = skip_email or config.analysis.skip_email
     skip_headers = skip_headers or config.analysis.skip_headers
     skip_site_verification = skip_site_verification or config.analysis.skip_site_verification
+    skip_whois = skip_whois or config.analysis.skip_whois
 
     # Determine RBL check
     do_rbl_check = check_rbl if check_rbl is not None else config.email.check_rbl
 
     try:
+        # WHOIS Analysis
+        whois_result = None
+        if not skip_whois:
+            logger.info("Running WHOIS analysis...")
+            whois_analyzer = WhoisAnalyzer(
+                expiry_warning_days=config.whois.expiry_warning_days,
+                expiry_critical_days=config.whois.expiry_critical_days,
+            )
+            whois_result = whois_analyzer.analyze(domain)
+            formatter.print_whois_results(whois_result)
+
         # DNS Analysis
         dns_result = None
         if not skip_dns:
@@ -443,6 +461,7 @@ def analyze(
 
         # Print summary
         formatter.print_summary(
+            whois_result=whois_result,
             dns_result=dns_result,
             http_result=http_result,
             ssl_result=ssl_result,

@@ -124,6 +124,19 @@ class EmailConfig(BaseModel):
     )
 
 
+class WhoisConfig(BaseModel):
+    """WHOIS registration information configuration."""
+
+    expiry_warning_days: int = Field(
+        default=30,
+        description="Number of days before domain expiry to show warning",
+    )
+    expiry_critical_days: int = Field(
+        default=7,
+        description="Number of days before domain expiry to show critical error",
+    )
+
+
 class OutputConfig(BaseModel):
     """Output configuration."""
 
@@ -223,6 +236,7 @@ class AnalysisConfig(BaseModel):
     skip_site_verification: bool = Field(
         default=False, description="Skip site verification analysis"
     )
+    skip_whois: bool = Field(default=False, description="Skip WHOIS analysis")
 
 
 class Config(BaseSettings):
@@ -237,6 +251,7 @@ class Config(BaseSettings):
     ssl: SSLConfig = Field(default_factory=SSLConfig)
     security_headers: SecurityHeadersConfig = Field(default_factory=SecurityHeadersConfig)
     email: EmailConfig = Field(default_factory=EmailConfig)
+    whois: WhoisConfig = Field(default_factory=WhoisConfig)
     site_verification: SiteVerificationConfig = Field(default_factory=SiteVerificationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
@@ -400,6 +415,11 @@ dkim_selectors = ["default", "google", "k1", "k2", "selector1", "selector2"]
 check_rbl = false
 rbl_servers = ["zen.spamhaus.org", "bl.spamcop.net", "b.barracudacentral.org", "dnsbl.sorbs.net"]
 
+[whois]
+# Domain expiry warning thresholds (days before expiry)
+expiry_warning_days = 30
+expiry_critical_days = 7
+
 # Site Verification - predefined services (Google, Facebook, Pinterest, Bing, Yandex)
 # Add your verification IDs to the 'ids' array or use CLI args (--google-id, --facebook-id, etc.)
 
@@ -449,6 +469,7 @@ skip_ssl = false
 skip_email = false
 skip_headers = false
 skip_site_verification = false
+skip_whois = false
 """
         )
         logger.info(f"Created default config file: {config_path}")
