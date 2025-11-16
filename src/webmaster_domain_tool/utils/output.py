@@ -1594,7 +1594,6 @@ class OutputFormatter:
         """Print SEO files analysis results."""
         if self.verbosity == "quiet":
             return
-
         self.console.print("[bold blue]SEO Files[/bold blue]")
 
         # robots.txt
