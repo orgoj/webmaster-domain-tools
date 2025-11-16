@@ -1250,6 +1250,10 @@ class OutputFormatter:
 
         # Print status for each service
         for service_result in result.service_results:
+            # Skip services with no results
+            if not service_result.verification_results and not service_result.detected_verification_ids:
+                continue
+
             # Count verification results
             verified_count = sum(1 for v in service_result.verification_results if v.found)
             total_verification = len(service_result.verification_results)
@@ -1268,10 +1272,7 @@ class OutputFormatter:
 
             if parts:
                 status = f"[green]✓ {service_result.service}: {', '.join(parts)}[/green]"
-            else:
-                status = f"[dim]{service_result.service}: no checks configured[/dim]"
-
-            self.console.print(status)
+                self.console.print(status)
 
         # Print tracking codes count if any (Google-specific legacy)
         if result.tracking_codes:
@@ -1292,6 +1293,10 @@ class OutputFormatter:
 
         # Print results for each service
         for service_result in result.service_results:
+            # Skip services with no results
+            if not service_result.verification_results and not service_result.detected_verification_ids:
+                continue
+
             self.console.print(f"  [bold cyan]{service_result.service}[/bold cyan]")
 
             # Print Site Verification results (configured)
@@ -1365,6 +1370,10 @@ class OutputFormatter:
 
         # Print verification tables for each service
         for service_result in result.service_results:
+            # Skip services with no results
+            if not service_result.verification_results and not service_result.detected_verification_ids:
+                continue
+
             self.console.print(f"[bold cyan]═══ {service_result.service} ═══[/bold cyan]")
             self.console.print()
 
