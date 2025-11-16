@@ -905,6 +905,9 @@ class OutputFormatter:
         verified_count = sum(1 for v in result.verification_results if v.found)
         total_verification = len(result.verification_results)
 
+        # Count auto-detected verification IDs
+        detected_count = len(result.detected_verification_ids)
+
         # Count tracking codes
         tracking_count = len(result.tracking_codes)
 
@@ -917,6 +920,8 @@ class OutputFormatter:
                     parts.append(f"verified {verified_count}/{total_verification}")
                 else:
                     parts.append(f"[yellow]verified {verified_count}/{total_verification}[/yellow]")
+            if detected_count > 0:
+                parts.append(f"{detected_count} auto-detected")
             if tracking_count > 0:
                 parts.append(f"{tracking_count} tracking code(s)")
 
@@ -936,9 +941,9 @@ class OutputFormatter:
             self.all_warnings.append(("Google", f"Could not fetch HTML: {result.html_fetch_error}"))
             self.console.print(f"  [yellow]⚠ Could not fetch HTML: {result.html_fetch_error}[/yellow]")
 
-        # Print Site Verification results
+        # Print Site Verification results (configured)
         if result.verification_results:
-            self.console.print("  [dim]Site Verification:[/dim]")
+            self.console.print("  [dim]Site Verification (configured):[/dim]")
             for verification in result.verification_results:
                 if verification.found:
                     methods_str = ", ".join(verification.methods)
@@ -954,6 +959,16 @@ class OutputFormatter:
                         f"    [red]✗ {verification.verification_id}[/red] "
                         f"[dim](not found)[/dim]"
                     )
+
+        # Print auto-detected verification IDs
+        if result.detected_verification_ids:
+            self.console.print("  [dim]Site Verification (auto-detected):[/dim]")
+            for verification in result.detected_verification_ids:
+                methods_str = ", ".join(verification.methods)
+                self.console.print(
+                    f"    [cyan]ℹ {verification.verification_id}[/cyan] "
+                    f"[dim]({methods_str})[/dim]"
+                )
 
         # Print tracking codes
         if result.tracking_codes:
@@ -995,9 +1010,9 @@ class OutputFormatter:
             self.console.print("[green]✓ HTML content fetched successfully[/green]")
             self.console.print()
 
-        # Site Verification Table
+        # Site Verification Table (configured)
         if result.verification_results:
-            self.console.print("[bold]Site Verification[/bold]")
+            self.console.print("[bold]Site Verification (Configured)[/bold]")
             table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
             table.add_column("Verification ID")
             table.add_column("Status")
@@ -1015,6 +1030,23 @@ class OutputFormatter:
                     )
 
                 table.add_row(verification.verification_id, status, methods)
+
+            self.console.print(table)
+            self.console.print()
+
+        # Auto-detected Verification IDs Table
+        if result.detected_verification_ids:
+            self.console.print("[bold]Site Verification (Auto-detected)[/bold]")
+            table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
+            table.add_column("Verification ID")
+            table.add_column("Methods Found")
+
+            for verification in result.detected_verification_ids:
+                methods = ", ".join(verification.methods)
+                table.add_row(
+                    f"[cyan]{verification.verification_id}[/cyan]",
+                    methods
+                )
 
             self.console.print(table)
             self.console.print()

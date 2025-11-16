@@ -39,8 +39,11 @@ class GoogleAnalysisResult:
     html_content: str | None = None  # Cached HTML content
     html_fetch_error: str | None = None
 
-    # Site verification results
+    # Site verification results (configured to check)
     verification_results: list[GoogleVerificationResult] = field(default_factory=list)
+
+    # Auto-detected verification IDs (found but not in config)
+    detected_verification_ids: list[GoogleVerificationResult] = field(default_factory=list)
 
     # Tracking codes
     tracking_codes: list[TrackingCode] = field(default_factory=list)
@@ -119,10 +122,13 @@ class GoogleAnalyzer:
         # Fetch HTML content once (will be used for multiple checks)
         self._fetch_html_content(domain, result)
 
-        # Check Google Site Verification for each ID
+        # Check Google Site Verification for each configured ID
         for verification_id in self.verification_ids:
             verification_result = self._check_verification(domain, verification_id, result)
             result.verification_results.append(verification_result)
+
+        # Auto-detect verification IDs (that aren't in config)
+        self._detect_verification_ids(domain, result)
 
         # Detect tracking codes in HTML
         if result.html_content:
@@ -159,12 +165,8 @@ class GoogleAnalyzer:
                     result.html_fetch_error = error_msg
                     logger.warning(error_msg)
 
-        except httpx.SSLError as e:
-            error_msg = f"SSL error fetching HTML: {str(e)}"
-            result.html_fetch_error = error_msg
-            logger.warning(error_msg)
-
         except httpx.ConnectError as e:
+            # ConnectError includes SSL errors, connection refused, etc.
             error_msg = f"Connection error fetching HTML: {str(e)}"
             result.html_fetch_error = error_msg
             logger.warning(error_msg)
@@ -318,6 +320,67 @@ class GoogleAnalyzer:
         )
 
         return bool(pattern.search(html_content) or pattern_reversed.search(html_content))
+
+    def _detect_verification_ids(self, domain: str, result: GoogleAnalysisResult) -> None:
+        """
+        Auto-detect Google Site Verification IDs from DNS and HTML.
+        Only detects IDs that aren't already in configured verification_ids.
+
+        Args:
+            domain: Domain to check
+            result: Result object to store detected IDs
+        """
+        detected_ids: set[str] = set()
+
+        # Extract IDs from DNS TXT records
+        try:
+            answers = self.resolver.resolve(domain, "TXT")
+            for rdata in answers:
+                txt_value = str(rdata).strip('"')
+                # Look for google-site-verification=XXXXX
+                match = re.search(r'google-site-verification=([a-zA-Z0-9_-]+)', txt_value)
+                if match:
+                    verification_id = match.group(1)
+                    # Only add if not in configured IDs
+                    if verification_id not in self.verification_ids:
+                        detected_ids.add(verification_id)
+                        logger.debug(f"Auto-detected verification ID in DNS: {verification_id}")
+        except dns.resolver.NXDOMAIN:
+            logger.debug(f"Domain {domain} does not exist")
+        except dns.resolver.NoAnswer:
+            logger.debug(f"No TXT records found for {domain}")
+        except Exception as e:
+            logger.debug(f"Error checking DNS TXT for verification IDs: {e}")
+
+        # Extract IDs from HTML meta tags
+        if result.html_content:
+            # Look for: <meta name="google-site-verification" content="XXXXX">
+            pattern = re.compile(
+                r'<meta\s+name=["\']google-site-verification["\']\s+content=["\']([a-zA-Z0-9_-]+)["\']',
+                re.IGNORECASE
+            )
+            # Also check reversed attribute order
+            pattern_reversed = re.compile(
+                r'<meta\s+content=["\']([a-zA-Z0-9_-]+)["\']\s+name=["\']google-site-verification["\']',
+                re.IGNORECASE
+            )
+
+            for match in pattern.finditer(result.html_content):
+                verification_id = match.group(1)
+                if verification_id not in self.verification_ids:
+                    detected_ids.add(verification_id)
+                    logger.debug(f"Auto-detected verification ID in HTML meta: {verification_id}")
+
+            for match in pattern_reversed.finditer(result.html_content):
+                verification_id = match.group(1)
+                if verification_id not in self.verification_ids:
+                    detected_ids.add(verification_id)
+                    logger.debug(f"Auto-detected verification ID in HTML meta: {verification_id}")
+
+        # Create verification results for detected IDs
+        for verification_id in sorted(detected_ids):
+            verification_result = self._check_verification(domain, verification_id, result)
+            result.detected_verification_ids.append(verification_result)
 
     def _detect_tracking_codes(self, result: GoogleAnalysisResult) -> None:
         """
