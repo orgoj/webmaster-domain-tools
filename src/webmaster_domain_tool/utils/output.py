@@ -529,7 +529,8 @@ class OutputFormatter:
         if result.spf:
             symbol = "✓" if result.spf.is_valid else "⚠"
             color = "green" if result.spf.is_valid else "yellow"
-            self.console.print(f"  [{color}]{symbol}[/] SPF: {result.spf.qualifier}")
+            # Show full SPF record
+            self.console.print(f"  [{color}]{symbol}[/] SPF: {result.spf.record}")
         else:
             self.console.print("  [red]✗ SPF: Not configured[/red]")
 
