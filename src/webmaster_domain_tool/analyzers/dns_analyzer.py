@@ -342,7 +342,7 @@ class DNSAnalyzer:
 
                             if ip_address not in forward_ips:
                                 result.warnings.append(
-                                    f"PTR record {ptr_value} for {ip_address} does not resolve back to {ip_address}"
+                                    f"PTR record {ptr_value} for {ip_address} resolves to {', '.join(forward_ips)} (mismatch)"
                                 )
                         except Exception:
                             result.warnings.append(

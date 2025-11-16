@@ -67,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Favicon warning logic only warns about default paths when HTML has favicons defined
 - SSL issuer display logic now checks cert.issuer instead of cert.status
 - Multi-layer ICO files now show all embedded dimensions instead of just first layer
+- PTR record mismatch warning now shows actual IP address it resolves to instead of repeating original IP
 
 ## [0.1.0] - 2024-XX-XX
 
