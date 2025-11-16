@@ -16,6 +16,24 @@ max_redirects = 10
 # Custom user agent (optional)
 # user_agent = "Mozilla/5.0 (compatible; WebmasterDomainTool/0.1)"
 
+[ssl]
+# Number of days before certificate expiry to show warning
+# Default: 14 days (suitable for Let's Encrypt auto-renewal)
+cert_expiry_warning_days = 14
+# Number of days before certificate expiry to show critical error
+cert_expiry_critical_days = 7
+
+[security_headers]
+# Enable or disable individual security header checks
+check_strict_transport_security = true
+check_content_security_policy = true
+check_x_frame_options = true
+check_x_content_type_options = true
+check_referrer_policy = true
+check_permissions_policy = true
+check_x_xss_protection = true
+check_content_type = true
+
 [email]
 # DKIM selectors to check
 dkim_selectors = [

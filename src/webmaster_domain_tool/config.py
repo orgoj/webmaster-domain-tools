@@ -37,6 +37,56 @@ class HTTPConfig(BaseModel):
     )
 
 
+class SSLConfig(BaseModel):
+    """SSL/TLS analysis configuration."""
+
+    cert_expiry_warning_days: int = Field(
+        default=14,
+        description="Number of days before certificate expiry to show warning (default: 14 for Let's Encrypt auto-renewal)",
+    )
+    cert_expiry_critical_days: int = Field(
+        default=7,
+        description="Number of days before certificate expiry to show critical error",
+    )
+
+
+class SecurityHeadersConfig(BaseModel):
+    """Security headers check configuration."""
+
+    check_strict_transport_security: bool = Field(
+        default=True,
+        description="Check Strict-Transport-Security (HSTS) header",
+    )
+    check_content_security_policy: bool = Field(
+        default=True,
+        description="Check Content-Security-Policy (CSP) header",
+    )
+    check_x_frame_options: bool = Field(
+        default=True,
+        description="Check X-Frame-Options header",
+    )
+    check_x_content_type_options: bool = Field(
+        default=True,
+        description="Check X-Content-Type-Options header",
+    )
+    check_referrer_policy: bool = Field(
+        default=True,
+        description="Check Referrer-Policy header",
+    )
+    check_permissions_policy: bool = Field(
+        default=True,
+        description="Check Permissions-Policy header",
+    )
+    check_x_xss_protection: bool = Field(
+        default=True,
+        description="Check X-XSS-Protection header",
+    )
+    check_content_type: bool = Field(
+        default=True,
+        description="Check Content-Type header",
+    )
+
+
 class EmailConfig(BaseModel):
     """Email security configuration."""
 
@@ -99,6 +149,8 @@ class Config(BaseSettings):
 
     dns: DNSConfig = Field(default_factory=DNSConfig)
     http: HTTPConfig = Field(default_factory=HTTPConfig)
+    ssl: SSLConfig = Field(default_factory=SSLConfig)
+    security_headers: SecurityHeadersConfig = Field(default_factory=SecurityHeadersConfig)
     email: EmailConfig = Field(default_factory=EmailConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
@@ -238,6 +290,22 @@ check_dnssec = true
 timeout = 10.0
 max_redirects = 10
 # user_agent = "Custom User Agent"
+
+[ssl]
+# Certificate expiry warning threshold (days before expiry)
+cert_expiry_warning_days = 14
+cert_expiry_critical_days = 7
+
+[security_headers]
+# Enable or disable individual security header checks
+check_strict_transport_security = true
+check_content_security_policy = true
+check_x_frame_options = true
+check_x_content_type_options = true
+check_referrer_policy = true
+check_permissions_policy = true
+check_x_xss_protection = true
+check_content_type = true
 
 [email]
 dkim_selectors = ["default", "google", "k1", "k2", "selector1", "selector2"]

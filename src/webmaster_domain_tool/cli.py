@@ -7,6 +7,20 @@ from typing import Optional
 
 import typer
 from rich.console import Console
+from rich import box
+import rich.panel
+
+# Remove borders from CLI help output by monkey-patching Panel
+_original_panel_init = rich.panel.Panel.__init__
+
+
+def _no_border_panel_init(self, *args, **kwargs):
+    # Remove borders from panels - use HORIZONTALS for minimal formatting
+    kwargs['box'] = box.HORIZONTALS
+    return _original_panel_init(self, *args, **kwargs)
+
+
+rich.panel.Panel.__init__ = _no_border_panel_init
 
 from .analyzers.dns_analyzer import DNSAnalyzer
 from .analyzers.http_analyzer import HTTPAnalyzer
@@ -268,7 +282,9 @@ def analyze(
         if not skip_ssl:
             logger.info("Running SSL/TLS analysis...")
             ssl_analyzer = SSLAnalyzer(
-                timeout=timeout if timeout else config.http.timeout
+                timeout=timeout if timeout else config.http.timeout,
+                cert_expiry_warning_days=config.ssl.cert_expiry_warning_days,
+                cert_expiry_critical_days=config.ssl.cert_expiry_critical_days,
             )
             ssl_result = ssl_analyzer.analyze(domain)
             formatter.print_ssl_results(ssl_result)
@@ -289,12 +305,24 @@ def analyze(
         if not skip_headers and http_result:
             logger.info("Running security headers analysis...")
 
+            # Prepare enabled checks from config
+            enabled_checks = {
+                "check_strict_transport_security": config.security_headers.check_strict_transport_security,
+                "check_content_security_policy": config.security_headers.check_content_security_policy,
+                "check_x_frame_options": config.security_headers.check_x_frame_options,
+                "check_x_content_type_options": config.security_headers.check_x_content_type_options,
+                "check_referrer_policy": config.security_headers.check_referrer_policy,
+                "check_permissions_policy": config.security_headers.check_permissions_policy,
+                "check_x_xss_protection": config.security_headers.check_x_xss_protection,
+                "check_content_type": config.security_headers.check_content_type,
+            }
+
             # Analyze headers from final URLs in redirect chains
             for chain in http_result.chains:
                 if chain.responses:
                     last_response = chain.responses[-1]
                     if last_response.status_code == 200:
-                        headers_analyzer = SecurityHeadersAnalyzer()
+                        headers_analyzer = SecurityHeadersAnalyzer(enabled_checks=enabled_checks)
                         headers_result = headers_analyzer.analyze(
                             last_response.url,
                             last_response.headers,

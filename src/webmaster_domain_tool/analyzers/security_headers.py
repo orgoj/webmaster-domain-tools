@@ -39,43 +39,61 @@ class SecurityHeadersAnalyzer:
             "description": "HSTS - Forces HTTPS connections",
             "recommendation": "max-age=31536000; includeSubDomains; preload",
             "weight": 15,
+            "config_key": "check_strict_transport_security",
         },
         "Content-Security-Policy": {
             "description": "CSP - Prevents XSS and injection attacks",
             "recommendation": "default-src 'self'; script-src 'self'; object-src 'none'",
             "weight": 20,
+            "config_key": "check_content_security_policy",
         },
         "X-Frame-Options": {
             "description": "Prevents clickjacking",
             "recommendation": "DENY or SAMEORIGIN",
             "weight": 10,
+            "config_key": "check_x_frame_options",
         },
         "X-Content-Type-Options": {
             "description": "Prevents MIME sniffing",
             "recommendation": "nosniff",
             "weight": 10,
+            "config_key": "check_x_content_type_options",
         },
         "Referrer-Policy": {
             "description": "Controls referrer information",
             "recommendation": "strict-origin-when-cross-origin or no-referrer",
             "weight": 10,
+            "config_key": "check_referrer_policy",
         },
         "Permissions-Policy": {
             "description": "Controls browser features",
             "recommendation": "geolocation=(), microphone=(), camera=()",
             "weight": 10,
+            "config_key": "check_permissions_policy",
         },
         "X-XSS-Protection": {
             "description": "Legacy XSS protection (deprecated, use CSP instead)",
             "recommendation": "0 (disabled, use CSP instead)",
             "weight": 5,
+            "config_key": "check_x_xss_protection",
         },
         "Content-Type": {
             "description": "Specifies content MIME type",
             "recommendation": "text/html; charset=utf-8",
             "weight": 5,
+            "config_key": "check_content_type",
         },
     }
+
+    def __init__(self, enabled_checks: dict[str, bool] | None = None):
+        """
+        Initialize security headers analyzer.
+
+        Args:
+            enabled_checks: Dictionary of header config keys to enabled status
+                           (e.g., {"check_strict_transport_security": True})
+        """
+        self.enabled_checks = enabled_checks or {}
 
     def analyze(self, url: str, headers: dict[str, str]) -> SecurityHeadersResult:
         """
@@ -99,6 +117,12 @@ class SecurityHeadersAnalyzer:
 
         # Check each security header
         for header_name, header_info in self.SECURITY_HEADERS.items():
+            # Skip if disabled in config
+            config_key = header_info.get("config_key")
+            if config_key and not self.enabled_checks.get(config_key, True):
+                logger.debug(f"Skipping {header_name} check (disabled in config)")
+                continue
+
             header_lower = header_name.lower()
             check = SecurityHeaderCheck(
                 header_name=header_name,

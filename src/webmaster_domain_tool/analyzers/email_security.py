@@ -62,6 +62,7 @@ class EmailSecurityResult:
     spf: SPFRecord | None = None
     dkim: dict[str, DKIMRecord] = field(default_factory=dict)
     dmarc: DMARCRecord | None = None
+    dkim_selectors_searched: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -104,7 +105,7 @@ class EmailSecurityAnalyzer:
             EmailSecurityResult with SPF, DKIM, and DMARC information
         """
         logger.info(f"Starting email security analysis for {domain}")
-        result = EmailSecurityResult(domain=domain)
+        result = EmailSecurityResult(domain=domain, dkim_selectors_searched=self.dkim_selectors)
 
         # Normalize domain
         domain = domain.rstrip(".")
@@ -123,10 +124,8 @@ class EmailSecurityAnalyzer:
                 result.errors.extend(dkim_record.errors)
                 result.warnings.extend(dkim_record.warnings)
 
-        if not result.dkim:
-            result.warnings.append(
-                f"No DKIM records found for selectors: {', '.join(self.dkim_selectors)}"
-            )
+        # No need to add warning for missing DKIM - it's shown in output
+        # The selectors searched are stored in result.dkim_selectors_searched
 
         # Check DMARC
         result.dmarc = self._check_dmarc(domain)
@@ -235,10 +234,7 @@ class EmailSecurityAnalyzer:
                 logger.debug(f"No DKIM record found for {dkim_domain}")
                 return None
 
-            # Parse DKIM record
-            dkim = DKIMRecord(selector=selector, record=dkim_record)
-
-            # Parse DKIM tags
+            # Parse DKIM tags first to validate it's actually a DKIM record
             tags = {}
             for part in dkim_record.split(";"):
                 part = part.strip()
@@ -246,7 +242,22 @@ class EmailSecurityAnalyzer:
                     key, value = part.split("=", 1)
                     tags[key.strip()] = value.strip()
 
-            dkim.version = tags.get("v", "")
+            # Check if this is actually a DKIM record
+            # DKIM records should have a p= tag (public key) or at minimum not be SPF
+            version = tags.get("v", "")
+            if version.startswith("spf"):
+                logger.debug(f"TXT record at {dkim_domain} is SPF, not DKIM")
+                return None
+
+            # DKIM records must have a public key tag (p=)
+            # Empty p= is valid (revoked key), but tag must exist
+            if "p" not in tags:
+                logger.debug(f"TXT record at {dkim_domain} has no p= tag, not a valid DKIM record")
+                return None
+
+            # Parse DKIM record
+            dkim = DKIMRecord(selector=selector, record=dkim_record)
+            dkim.version = version
             dkim.key_type = tags.get("k", "rsa")
             dkim.public_key = tags.get("p", "")
 

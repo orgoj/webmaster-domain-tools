@@ -13,8 +13,8 @@ from ..analyzers.http_analyzer import HTTPAnalysisResult, HTTPResponse
 from ..analyzers.ssl_analyzer import (
     SSLAnalysisResult,
     CertificateInfo,
-    SSL_EXPIRY_CRITICAL_DAYS,
-    SSL_EXPIRY_WARNING_DAYS,
+    DEFAULT_SSL_EXPIRY_CRITICAL_DAYS,
+    DEFAULT_SSL_EXPIRY_WARNING_DAYS,
 )
 from ..analyzers.email_security import EmailSecurityResult
 from ..analyzers.security_headers import SecurityHeadersResult
@@ -81,50 +81,105 @@ class OutputFormatter:
                 self.console.print(f"  [red]✗ {error}[/red]")
             return
 
-        # Group records by type and show values
-        records_by_type = {}
+        # Group records by domain, then by type
+        records_by_domain = {}
         for key, records in result.records.items():
             domain, record_type = key.rsplit(":", 1)
-            if record_type not in records_by_type:
-                records_by_type[record_type] = []
+            if domain not in records_by_domain:
+                records_by_domain[domain] = {}
+            if record_type not in records_by_domain[domain]:
+                records_by_domain[domain][record_type] = []
             for record in records:
-                records_by_type[record_type].append(record.value)
+                records_by_domain[domain][record_type].append(record.value)
 
         # Important record types to always show
-        important_types = ["A", "AAAA", "MX", "TXT", "NS", "CNAME"]
+        # NS and SOA are domain-wide, so only show for main domain
+        important_types = ["A", "AAAA", "MX", "TXT", "CNAME"]
+        domain_wide_types = ["NS", "SOA", "CAA"]
 
-        # Print records (show important types first, then others)
-        shown_types = set()
-        for record_type in important_types:
-            if record_type in records_by_type:
-                values = records_by_type[record_type]
-                if len(values) == 1:
-                    self.console.print(f"  {record_type}: {values[0]}")
+        # Sort domains: main domain first (without www), then www subdomain, then others
+        sorted_domains = sorted(
+            records_by_domain.keys(),
+            key=lambda d: (
+                0 if d == result.domain else (1 if d == f"www.{result.domain}" else 2),
+                d
+            )
+        )
+
+        # Print records for each domain
+        for domain_idx, domain in enumerate(sorted_domains):
+            records_by_type = records_by_domain[domain]
+
+            # Print domain header only if it's different from main domain
+            # or if there are multiple domains
+            if len(sorted_domains) > 1:
+                if domain == result.domain:
+                    self.console.print(f"  [dim]{domain}:[/dim]")
+                elif domain == f"www.{result.domain}":
+                    self.console.print(f"  [dim]www.{result.domain}:[/dim]")
                 else:
-                    self.console.print(f"  {record_type}:")
-                    for value in values:
-                        self.console.print(f"    - {value}")
-                shown_types.add(record_type)
+                    self.console.print(f"  [dim]{domain}:[/dim]")
+                indent = "    "
             else:
-                # Show missing important records
-                self.console.print(f"  {record_type}: [dim]none[/dim]")
+                indent = "  "
 
-        # Show any other record types
-        for record_type in sorted(records_by_type.keys()):
-            if record_type not in shown_types:
-                values = records_by_type[record_type]
-                if len(values) == 1:
-                    self.console.print(f"  {record_type}: {values[0]}")
-                else:
-                    self.console.print(f"  {record_type}:")
-                    for value in values:
-                        self.console.print(f"    - {value}")
+            # Print records (show important types first, then others)
+            shown_types = set()
+            for record_type in important_types:
+                if record_type in records_by_type:
+                    values = records_by_type[record_type]
+                    if len(values) == 1:
+                        self.console.print(f"{indent}{record_type}: {values[0]}")
+                    elif record_type in ("A", "AAAA"):
+                        # A, AAAA records on single line, space-separated
+                        self.console.print(f"{indent}{record_type}: {' '.join(values)}")
+                    else:
+                        self.console.print(f"{indent}{record_type}:")
+                        for value in values:
+                            self.console.print(f"{indent}  - {value}")
+                    shown_types.add(record_type)
+
+                    # If CNAME, also show resolved A records
+                    if record_type == "CNAME" and "CNAME_A" in records_by_type:
+                        cname_a_values = records_by_type["CNAME_A"]
+                        self.console.print(f"{indent}└─> A (resolved): {' '.join(cname_a_values)}")
+                        shown_types.add("CNAME_A")
+                elif len(sorted_domains) == 1 or domain == result.domain:
+                    # Only show missing important records for main domain
+                    self.console.print(f"{indent}{record_type}: [dim]none[/dim]")
+
+            # Show domain-wide types only for main domain
+            if domain == result.domain:
+                for record_type in domain_wide_types:
+                    if record_type in records_by_type:
+                        values = records_by_type[record_type]
+                        shown_types.add(record_type)
+                        if len(values) == 1:
+                            self.console.print(f"{indent}{record_type}: {values[0]}")
+                        elif record_type == "NS":
+                            # NS records on single line, space-separated
+                            self.console.print(f"{indent}{record_type}: {' '.join(values)}")
+                        else:
+                            self.console.print(f"{indent}{record_type}:")
+                            for value in values:
+                                self.console.print(f"{indent}  - {value}")
+
+            # Show any other record types (excluding domain-wide types for non-main domains)
+            for record_type in sorted(records_by_type.keys()):
+                if record_type not in shown_types and record_type not in domain_wide_types:
+                    values = records_by_type[record_type]
+                    if len(values) == 1:
+                        self.console.print(f"{indent}{record_type}: {values[0]}")
+                    else:
+                        self.console.print(f"{indent}{record_type}:")
+                        for value in values:
+                            self.console.print(f"{indent}  - {value}")
 
         # Show PTR records
         if result.ptr_records:
-            self.console.print(f"  PTR:")
-            for ip, ptr in result.ptr_records.items():
-                self.console.print(f"    {ip} → {ptr}")
+            # Single line: IP → hostname
+            ptr_list = [f"{ip} → {ptr}" for ip, ptr in result.ptr_records.items()]
+            self.console.print(f"  PTR: {', '.join(ptr_list)}")
 
         # Show DNSSEC status
         if result.dnssec and result.dnssec.enabled:
@@ -238,7 +293,12 @@ class OutputFormatter:
         for chain in result.chains:
             if chain.responses:
                 last_response = chain.responses[-1]
-                if last_response.status_code == 200:
+
+                # Check if final URL is HTTP (insecure) - use warning color
+                if last_response.status_code == 200 and chain.final_url.startswith("http://"):
+                    status_color = "yellow"
+                    status_symbol = "⚠"
+                elif last_response.status_code == 200:
                     status_color = "green"
                     status_symbol = "✓"
                 elif last_response.error:
@@ -248,23 +308,23 @@ class OutputFormatter:
                     status_color = "yellow"
                     status_symbol = "⚠"
 
-                # Build redirect chain string with status codes
+                # Build redirect chain string: url (code) → url (code)
                 if len(chain.responses) > 1:
-                    redirect_chain = []
+                    parts = []
                     for i, resp in enumerate(chain.responses):
                         if resp.error:
-                            redirect_chain.append(f"ERROR")
-                        elif i < len(chain.responses) - 1:  # Not last
-                            redirect_chain.append(f"{resp.status_code}")
-                        else:  # Last
-                            redirect_chain.append(f"{resp.status_code}")
-                    redirect_info = f" → {' → '.join(redirect_chain)}"
+                            parts.append(f"{resp.url} (ERROR)")
+                        else:
+                            parts.append(f"{resp.url} ({resp.status_code})")
+                    redirect_info = " → ".join(parts)
+                    # Remove the start_url from redirect_info since we show it separately
+                    redirect_info = redirect_info.replace(f"{chain.start_url} ({chain.responses[0].status_code}) → ", "")
+                    self.console.print(f"  [{status_color}]{status_symbol}[/] {chain.start_url} ({chain.responses[0].status_code}) → {redirect_info}")
                 else:
-                    redirect_info = ""
+                    # No redirect, just show URL with status
+                    self.console.print(f"  [{status_color}]{status_symbol}[/] {chain.start_url} ({last_response.status_code})")
 
-                self.console.print(f"  [{status_color}]{status_symbol}[/] {chain.start_url}{redirect_info}")
-
-        # Show actual warnings
+        # Show warnings
         for warning in result.warnings:
             self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
@@ -346,10 +406,10 @@ class OutputFormatter:
             if cert.errors:
                 self.console.print(f"  [red]✗ {domain}: {cert.errors[0]}[/red]")
             else:
-                if cert.days_until_expiry < SSL_EXPIRY_CRITICAL_DAYS:
+                if cert.days_until_expiry < DEFAULT_SSL_EXPIRY_CRITICAL_DAYS:
                     color = "red"
                     symbol = "✗"
-                elif cert.days_until_expiry < SSL_EXPIRY_WARNING_DAYS:
+                elif cert.days_until_expiry < DEFAULT_SSL_EXPIRY_WARNING_DAYS:
                     color = "yellow"
                     symbol = "⚠"
                 else:
@@ -413,9 +473,9 @@ class OutputFormatter:
             # Expiry with color based on days left
             if cert.days_until_expiry < 0:
                 expiry_str = f"[red]{cert.not_after.strftime('%Y-%m-%d %H:%M:%S')} (EXPIRED)[/red]"
-            elif cert.days_until_expiry < SSL_EXPIRY_CRITICAL_DAYS:
+            elif cert.days_until_expiry < DEFAULT_SSL_EXPIRY_CRITICAL_DAYS:
                 expiry_str = f"[red]{cert.not_after.strftime('%Y-%m-%d %H:%M:%S')} ({cert.days_until_expiry} days)[/red]"
-            elif cert.days_until_expiry < SSL_EXPIRY_WARNING_DAYS:
+            elif cert.days_until_expiry < DEFAULT_SSL_EXPIRY_WARNING_DAYS:
                 expiry_str = f"[yellow]{cert.not_after.strftime('%Y-%m-%d %H:%M:%S')} ({cert.days_until_expiry} days)[/yellow]"
             else:
                 expiry_str = f"[green]{cert.not_after.strftime('%Y-%m-%d %H:%M:%S')} ({cert.days_until_expiry} days)[/green]"
@@ -507,7 +567,8 @@ class OutputFormatter:
         if result.spf:
             symbol = "✓" if result.spf.is_valid else "⚠"
             color = "green" if result.spf.is_valid else "yellow"
-            self.console.print(f"  [{color}]{symbol}[/] SPF: {result.spf.qualifier}")
+            # Show full SPF record
+            self.console.print(f"  [{color}]{symbol}[/] SPF: {result.spf.record}")
         else:
             self.console.print("  [red]✗ SPF: Not configured[/red]")
 
@@ -516,19 +577,28 @@ class OutputFormatter:
             selectors = ", ".join(result.dkim.keys())
             self.console.print(f"  [green]✓[/] DKIM: {selectors}")
         else:
-            self.console.print("  [yellow]⚠ DKIM: Not found[/yellow]")
+            # Show which selectors were searched
+            searched = ", ".join(result.dkim_selectors_searched)
+            self.console.print(f"  [yellow]⚠ DKIM: Not found (searched: {searched})[/yellow]")
 
         # DMARC
         if result.dmarc:
             symbol = "✓" if result.dmarc.is_valid else "⚠"
             color = "green" if result.dmarc.is_valid and result.dmarc.policy in ("quarantine", "reject") else "yellow"
-            self.console.print(f"  [{color}]{symbol}[/] DMARC: {result.dmarc.policy}")
+            # Show full DMARC record
+            self.console.print(f"  [{color}]{symbol}[/] DMARC: {result.dmarc.record}")
         else:
             self.console.print("  [red]✗ DMARC: Not configured[/red]")
 
-        # Show actual warnings
+        # Show actual warnings (deduplicated)
+        seen_warnings = set()
         for warning in result.warnings:
-            self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
+            # Skip "No DKIM records found for selectors" if we already showed "DKIM: Not found"
+            if "No DKIM records found for selectors" in warning and not result.dkim:
+                continue
+            if warning not in seen_warnings:
+                self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
+                seen_warnings.add(warning)
 
     def _print_email_verbose(self, result: EmailSecurityResult) -> None:
         """Print email security results in verbose mode."""
