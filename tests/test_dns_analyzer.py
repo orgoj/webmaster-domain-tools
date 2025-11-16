@@ -53,6 +53,7 @@ class TestDNSAnalysisResult:
         assert result.dnssec is None
         assert len(result.errors) == 0
         assert len(result.warnings) == 0
+        assert len(result.info_messages) == 0
 
 
 class TestDNSAnalyzer:

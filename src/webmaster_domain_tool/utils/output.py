@@ -195,6 +195,10 @@ class OutputFormatter:
             status = "✓" if result.dnssec.valid else "⚠"
             self.console.print(f"  DNSSEC: [{('green' if result.dnssec.valid else 'yellow')}]{status}[/]")
 
+        # Show info messages (not counted as warnings)
+        for info in result.info_messages:
+            self.console.print(f"  [dim]ℹ {info}[/dim]")
+
         # Show actual warnings
         for warning in result.warnings:
             self.all_warnings.append(("DNS", warning))
@@ -269,6 +273,12 @@ class OutputFormatter:
                 self.all_warnings.append(("DNS/DNSSEC", warning))
                 self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
+            self.console.print()
+
+        # Print info messages (not counted as warnings)
+        if result.info_messages:
+            for info in result.info_messages:
+                self.console.print(f"[dim]ℹ {info}[/dim]")
             self.console.print()
 
         # Print warnings
