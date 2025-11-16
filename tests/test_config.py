@@ -1,17 +1,12 @@
 """Tests for configuration management."""
 
-import tempfile
-from pathlib import Path
-
-import pytest
-
 from webmaster_domain_tool.config import (
+    AnalysisConfig,
     Config,
     DNSConfig,
-    HTTPConfig,
     EmailConfig,
+    HTTPConfig,
     OutputConfig,
-    AnalysisConfig,
     _merge_configs,
     load_config,
 )
@@ -37,7 +32,7 @@ def test_email_config_defaults():
     """Test Email config has correct defaults."""
     config = EmailConfig()
     assert len(config.dkim_selectors) > 0
-    assert config.check_rbl is True
+    assert config.check_rbl is False  # RBL check is disabled by default
     assert len(config.rbl_servers) > 0
 
 

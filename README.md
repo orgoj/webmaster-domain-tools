@@ -186,8 +186,14 @@ dkim_selectors = ["default", "google", "k1"]
 check_rbl = true
 rbl_servers = ["zen.spamhaus.org", "bl.spamcop.net"]
 
-[google]
-verification_ids = ["abc123def456", "ghi789jkl012"]
+# Site verification - predefined services (Google, Facebook, Pinterest, Bing, Yandex)
+[[site_verification.services]]
+name = "Google"
+ids = ["abc123def456"]  # Add your IDs here or use --verify CLI arg
+
+[[site_verification.services]]
+name = "Facebook"
+ids = []  # Use --verify Facebook:your-id or add here
 
 [output]
 color = true
@@ -196,7 +202,7 @@ verbosity = "normal"  # quiet, normal, verbose, debug
 [analysis]
 skip_dns = false
 skip_email = false
-skip_google = false
+skip_site_verification = false
 ```
 
 ### Options
@@ -228,7 +234,7 @@ wdt analyze -d example.com
 - ✅ SSL/TLS analysis - enabled
 - ✅ Email security (SPF, DKIM, DMARC) - enabled
 - ✅ Security headers - enabled
-- ✅ Google services - enabled (tracking codes detection always runs; verification only if IDs configured)
+- ✅ Site verification - enabled (auto-detects verification IDs from multiple services)
 - ❌ RBL check - disabled (enable with `--check-rbl`)
 
 ```bash
@@ -247,11 +253,11 @@ wdt analyze --skip-email example.com
 # Skip security headers
 wdt analyze --skip-headers example.com
 
-# Skip Google services analysis
-wdt analyze --skip-google example.com
+# Skip site verification analysis
+wdt analyze --skip-site-verification example.com
 
 # Combination - DNS and SSL only
-wdt analyze --skip-http --skip-email --skip-headers --skip-google example.com
+wdt analyze --skip-http --skip-email --skip-headers --skip-site-verification example.com
 ```
 
 #### DKIM Selectors
@@ -302,39 +308,51 @@ With CNAME:
 
 #### Google Services
 
-**Site Verification** - Check if your domain is verified for Google services:
+**Site Verification** - Verify your domain for multiple services (Google, Facebook, Pinterest, Bing, Yandex):
 
 ```bash
 # Check single verification ID
-wdt analyze --google-verification-ids "abc123def456" example.com
+wdt analyze --verify Google:abc123def456 example.com
 
-# Check multiple verification IDs
-wdt analyze --google-verification-ids "abc123,def456,ghi789" example.com
+# Check multiple services (comma-separated)
+wdt analyze --verify "Google:abc123,Facebook:fb-code" example.com
+
+# Or use --verify multiple times
+wdt analyze --verify Google:abc123 --verify Facebook:fb-code example.com
 ```
 
-The tool will check for verification via:
-- DNS TXT record: `google-site-verification=abc123def456`
-- HTML file: `https://example.com/googleabc123def456.html`
-- Meta tag: `<meta name="google-site-verification" content="abc123def456">`
+**Supported services (built-in):**
+- **Google**: DNS TXT, HTML file (`google{id}.html`), Meta tag
+- **Facebook**: DNS TXT, Meta tag
+- **Pinterest**: Meta tag
+- **Bing**: HTML file (`BingSiteAuth.xml`), Meta tag
+- **Yandex**: HTML file (`yandex_{id}.html`), Meta tag
 
-**Tracking Codes Detection** - Automatically detects Google tracking codes:
-- Runs automatically when Google services analysis is enabled
+All services have **auto-detection enabled** by default - the tool will find verification IDs even if you don't specify them!
+
+**Tracking Codes Detection** - Automatically detects Google tracking codes (GTM, GA4, GAds, UA, etc.):
+- Runs automatically when site verification analysis is enabled
 - No configuration needed - just run the analysis
 - Shows which tracking codes are found and where (HTML head vs body)
 
 ```bash
-# View tracking codes (runs by default)
+# View site verification and tracking codes (runs by default)
 wdt analyze example.com
 
-# Skip Google services entirely
-wdt analyze --skip-google example.com
+# Skip site verification entirely
+wdt analyze --skip-site-verification example.com
 ```
 
 You can also configure verification IDs in the config file:
 
 ```toml
-[google]
-verification_ids = ["abc123def456", "ghi789jkl012"]
+[[site_verification.services]]
+name = "Google"
+ids = ["abc123def456", "ghi789jkl012"]
+
+[[site_verification.services]]
+name = "Facebook"
+ids = ["your-facebook-id"]
 ```
 
 #### RBL (Blacklist) Check
@@ -499,7 +517,7 @@ webmaster-domain-tool/
 │       │   ├── ssl_analyzer.py        # SSL/TLS analysis
 │       │   ├── email_security.py      # SPF, DKIM, DMARC
 │       │   ├── security_headers.py    # Security headers
-│       │   ├── google_analyzer.py     # Google Site Verification + tracking codes
+│       │   ├── site_verification_analyzer.py  # Universal site verification (Google, Facebook, etc.) + tracking codes
 │       │   └── rbl_checker.py         # RBL blacklist check
 │       └── utils/
 │           ├── __init__.py
