@@ -1557,7 +1557,13 @@ class OutputFormatter:
         if found_favicons:
             for favicon in found_favicons:
                 # Source indicator
-                source_label = "Found in HTML" if favicon.source == "html" else "Default path"
+                source_labels = {
+                    "html": "Found in HTML",
+                    "default": "Default path",
+                    "manifest": "Web App Manifest",
+                    "meta": "Meta tag"
+                }
+                source_label = source_labels.get(favicon.source, favicon.source)
 
                 # Dimensions info (actual from image data)
                 dims_info = ""
@@ -1565,14 +1571,27 @@ class OutputFormatter:
                     dims_info = f" {favicon.actual_width}×{favicon.actual_height}"
                 elif favicon.sizes:
                     # Fallback to HTML sizes attribute if no actual dimensions
-                    dims_info = f" {favicon.sizes} (from HTML)"
+                    dims_info = f" {favicon.sizes}"
+                    if favicon.source == "html":
+                        dims_info += " (from HTML)"
 
                 # File size
                 size_info = f" ({favicon.size_bytes} bytes)" if favicon.size_bytes else ""
 
+                # Extra attributes (color for mask-icon, purpose for manifest)
+                extra_info = []
+                if favicon.color:
+                    extra_info.append(f"color={favicon.color}")
+                if favicon.purpose:
+                    extra_info.append(f"purpose={favicon.purpose}")
+                if favicon.rel and favicon.rel not in ["icon", "shortcut icon"]:
+                    extra_info.append(f"rel={favicon.rel}")
+
+                extra_str = f" [{', '.join(extra_info)}]" if extra_info else ""
+
                 # Full output
                 self.console.print(f"  [green]✓[/green] {favicon.url}")
-                self.console.print(f"    [dim]{source_label}{dims_info}{size_info}[/dim]")
+                self.console.print(f"    [dim]{source_label}{dims_info}{size_info}{extra_str}[/dim]")
 
         # Display warnings
         for warning in result.warnings:

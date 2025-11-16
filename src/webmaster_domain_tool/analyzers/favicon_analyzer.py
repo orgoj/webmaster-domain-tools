@@ -1,9 +1,11 @@
 """Favicon analyzer - detect all favicon versions."""
 
 import io
+import json
 import logging
 import re
 import struct
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse
 
@@ -16,7 +18,7 @@ def _get_image_dimensions(image_data: bytes) -> tuple[int | None, int | None]:
     """
     Extract image dimensions from image data.
 
-    Supports PNG, ICO, JPEG, GIF formats.
+    Supports PNG, ICO, JPEG, GIF, SVG formats.
 
     Args:
         image_data: Raw image bytes
@@ -24,7 +26,47 @@ def _get_image_dimensions(image_data: bytes) -> tuple[int | None, int | None]:
     Returns:
         Tuple of (width, height) or (None, None) if cannot determine
     """
-    if not image_data or len(image_data) < 24:
+    if not image_data:
+        return None, None
+
+    # SVG format (XML-based)
+    if image_data[:5] in (b'<?xml', b'<svg ') or b'<svg' in image_data[:200]:
+        try:
+            # Parse SVG as XML
+            svg_text = image_data.decode('utf-8', errors='ignore')
+
+            # Try to parse with ElementTree
+            root = ET.fromstring(svg_text)
+
+            # Check for width/height attributes
+            width_str = root.get('width')
+            height_str = root.get('height')
+
+            if width_str and height_str:
+                # Extract numeric value (strip 'px', 'pt', etc.)
+                width = int(re.search(r'\d+', width_str).group()) if re.search(r'\d+', width_str) else None
+                height = int(re.search(r'\d+', height_str).group()) if re.search(r'\d+', height_str) else None
+                if width and height:
+                    return width, height
+
+            # Fallback to viewBox if no width/height
+            viewbox = root.get('viewBox')
+            if viewbox:
+                # viewBox format: "x y width height"
+                parts = viewbox.split()
+                if len(parts) == 4:
+                    try:
+                        width = int(float(parts[2]))
+                        height = int(float(parts[3]))
+                        return width, height
+                    except ValueError:
+                        pass
+        except Exception as e:
+            logger.debug(f"Error parsing SVG dimensions: {e}")
+            pass
+
+    # Check minimum size for binary formats
+    if len(image_data) < 24:
         return None, None
 
     # PNG format
@@ -88,10 +130,12 @@ class FaviconInfo:
     """Information about a single favicon."""
 
     url: str
-    source: str  # "html" or "default"
-    rel: str | None = None  # icon, shortcut icon, apple-touch-icon, etc.
+    source: str  # "html", "default", "manifest", or "meta"
+    rel: str | None = None  # icon, shortcut icon, apple-touch-icon, mask-icon, etc.
     sizes: str | None = None  # e.g., "32x32", "180x180" (from HTML attribute)
-    type: str | None = None  # e.g., "image/png", "image/x-icon"
+    type: str | None = None  # e.g., "image/png", "image/x-icon", "image/svg+xml"
+    color: str | None = None  # For Safari mask-icon
+    purpose: str | None = None  # For Web App Manifest (e.g., "any", "maskable")
     exists: bool = False
     status_code: int | None = None
     size_bytes: int | None = None
@@ -114,11 +158,27 @@ class FaviconAnalysisResult:
 class FaviconAnalyzer:
     """Analyzes favicon presence and variants."""
 
-    # Common default favicon locations
+    # Common default favicon locations (ordered by priority/frequency)
     DEFAULT_PATHS = [
+        # Standard favicon
         "/favicon.ico",
-        "/apple-touch-icon.png",
+        "/favicon.svg",
+        "/icon.svg",
+
+        # Apple Touch Icons (modern sizes first)
+        "/apple-touch-icon.png",  # Default (usually 180x180)
+        "/apple-touch-icon-180x180.png",  # iPhone XS/XR/11/12/13/14/15
+        "/apple-touch-icon-167x167.png",  # iPad Pro
+        "/apple-touch-icon-152x152.png",  # iPad Retina
+        "/apple-touch-icon-120x120.png",  # iPhone Retina
+        "/apple-touch-icon-76x76.png",  # iPad
+        "/apple-touch-icon-60x60.png",  # iPhone (older)
+
+        # Apple Touch Icons (precomposed - legacy iOS)
         "/apple-touch-icon-precomposed.png",
+        "/apple-touch-icon-180x180-precomposed.png",
+        "/apple-touch-icon-152x152-precomposed.png",
+        "/apple-touch-icon-120x120-precomposed.png",
     ]
 
     def __init__(
@@ -204,7 +264,7 @@ class FaviconAnalyzer:
         return result
 
     def _parse_html_favicons(self, base_url: str) -> list[FaviconInfo]:
-        """Parse HTML to find favicon links."""
+        """Parse HTML to find favicon links, meta tags, and manifest."""
         favicons = []
 
         try:
@@ -217,7 +277,7 @@ class FaviconAnalyzer:
 
             html = response.text
 
-            # Find all link tags with icon-related rel attributes
+            # 1. Find all link tags with icon-related rel attributes
             # Pattern: <link rel="..." href="..." sizes="..." type="...">
             link_pattern = re.compile(
                 r'<link\s+[^>]*rel=["\']([^"\']*icon[^"\']*)["\'][^>]*>',
@@ -244,12 +304,17 @@ class FaviconAnalyzer:
                 type_match = re.search(r'type=["\']([^"\']+)["\']', link_tag, re.IGNORECASE)
                 fav_type = type_match.group(1) if type_match else None
 
+                # Extract color (for mask-icon)
+                color_match = re.search(r'color=["\']([^"\']+)["\']', link_tag, re.IGNORECASE)
+                color = color_match.group(1) if color_match else None
+
                 favicon = FaviconInfo(
                     url=full_url,
                     source="html",
                     rel=rel,
                     sizes=sizes,
-                    type=fav_type
+                    type=fav_type,
+                    color=color
                 )
 
                 # Check if favicon actually exists and get dimensions
@@ -258,10 +323,95 @@ class FaviconAnalyzer:
                 favicons.append(favicon)
                 logger.debug(f"Found favicon in HTML: {full_url} (rel={rel})")
 
+            # 2. Find Microsoft Tile meta tags
+            # <meta name="msapplication-TileImage" content="...">
+            ms_tile_pattern = re.compile(
+                r'<meta\s+name=["\']msapplication-TileImage["\']\s+content=["\']([^"\']+)["\']',
+                re.IGNORECASE
+            )
+            for match in ms_tile_pattern.finditer(html):
+                tile_url = urljoin(base_url, match.group(1))
+                favicon = FaviconInfo(
+                    url=tile_url,
+                    source="meta",
+                    rel="msapplication-TileImage",
+                    type="image/png"  # Usually PNG
+                )
+                self._check_favicon_exists(favicon)
+                favicons.append(favicon)
+                logger.debug(f"Found Microsoft Tile icon: {tile_url}")
+
+            # 3. Check for Web App Manifest
+            # <link rel="manifest" href="manifest.json">
+            manifest_pattern = re.compile(
+                r'<link\s+rel=["\']manifest["\']\s+href=["\']([^"\']+)["\']',
+                re.IGNORECASE
+            )
+            manifest_match = manifest_pattern.search(html)
+            if manifest_match:
+                manifest_url = urljoin(base_url, manifest_match.group(1))
+                manifest_favicons = self._parse_manifest(manifest_url, base_url)
+                favicons.extend(manifest_favicons)
+
         except httpx.TimeoutException:
             logger.error(f"Timeout fetching HTML for favicon detection: {base_url}")
         except Exception as e:
             logger.error(f"Error parsing HTML for favicons: {base_url} - {e}")
+
+        return favicons
+
+    def _parse_manifest(self, manifest_url: str, base_url: str) -> list[FaviconInfo]:
+        """Parse Web App Manifest (manifest.json) for icon definitions."""
+        favicons = []
+
+        try:
+            with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+                response = client.get(manifest_url, headers={"User-Agent": self.user_agent})
+
+            if response.status_code != 200:
+                logger.debug(f"Failed to fetch manifest: {manifest_url} - status {response.status_code}")
+                return favicons
+
+            try:
+                manifest = response.json()
+            except json.JSONDecodeError as e:
+                logger.warning(f"Invalid JSON in manifest {manifest_url}: {e}")
+                return favicons
+
+            # Parse icons array
+            icons = manifest.get('icons', [])
+            if not isinstance(icons, list):
+                logger.warning(f"Manifest icons is not an array: {manifest_url}")
+                return favicons
+
+            for icon in icons:
+                if not isinstance(icon, dict):
+                    continue
+
+                src = icon.get('src')
+                if not src:
+                    continue
+
+                # Build full URL
+                icon_url = urljoin(manifest_url, src)
+
+                favicon = FaviconInfo(
+                    url=icon_url,
+                    source="manifest",
+                    rel="manifest-icon",
+                    sizes=icon.get('sizes'),
+                    type=icon.get('type'),
+                    purpose=icon.get('purpose')
+                )
+
+                self._check_favicon_exists(favicon)
+                favicons.append(favicon)
+                logger.debug(f"Found manifest icon: {icon_url} (sizes={favicon.sizes})")
+
+        except httpx.TimeoutException:
+            logger.debug(f"Timeout fetching manifest: {manifest_url}")
+        except Exception as e:
+            logger.warning(f"Error parsing manifest {manifest_url}: {e}")
 
         return favicons
 
