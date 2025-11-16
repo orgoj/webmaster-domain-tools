@@ -278,7 +278,8 @@ class GoogleAnalyzer:
             for rdata in answers:
                 txt_value = str(rdata).strip('"')
                 # Google verification TXT format: google-site-verification=XXXXX
-                if f"google-site-verification={verification_id}" in txt_value:
+                # Must match exactly (not substring)
+                if txt_value == f"google-site-verification={verification_id}":
                     return True
 
         except dns.resolver.NXDOMAIN:
@@ -316,10 +317,11 @@ class GoogleAnalyzer:
                 )
 
                 # File should exist and return 200
+                # The existence of the file with correct name is the verification
                 if response.status_code == 200:
-                    # Optionally verify content contains verification string
                     content = response.text
-                    if verification_id in content or "google-site-verification" in content:
+                    # Verify it's a Google verification file (contains the marker)
+                    if "google-site-verification" in content.lower():
                         return True
 
         except Exception as e:
