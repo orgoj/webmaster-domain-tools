@@ -35,6 +35,10 @@ from .analyzers.site_verification_analyzer import (
     ServiceConfig,
 )
 from .analyzers.whois_analyzer import WhoisAnalyzer
+from .analyzers.seo_files_analyzer import SEOFilesAnalyzer
+from .analyzers.favicon_analyzer import FaviconAnalyzer
+from .analyzers.advanced_email_security import AdvancedEmailSecurityAnalyzer
+from .analyzers.cdn_detector import CDNDetector
 from .config import load_config, create_default_user_config, Config
 from .utils.logger import setup_logger, VerbosityLevel
 from .utils.output import OutputFormatter
@@ -560,6 +564,76 @@ def analyze(
             else:
                 logger.debug("No IP addresses found for RBL check")
 
+        # SEO Files Analysis (robots.txt, sitemap.xml, llms.txt)
+        seo_result = None
+        if not config.analysis.skip_seo and http_result and http_result.preferred_final_url:
+            logger.info("Running SEO files analysis...")
+            seo_analyzer = SEOFilesAnalyzer(
+                timeout=timeout if timeout else config.http.timeout,
+                check_robots=config.seo.check_robots,
+                check_llms_txt=config.seo.check_llms_txt,
+                check_sitemap=config.seo.check_sitemap,
+            )
+            seo_result = seo_analyzer.analyze(http_result.preferred_final_url)
+            formatter.print_seo_results(seo_result)
+
+        # Favicon Detection
+        favicon_result = None
+        if not config.analysis.skip_favicon and http_result and http_result.preferred_final_url:
+            logger.info("Running favicon detection...")
+            favicon_analyzer = FaviconAnalyzer(
+                timeout=timeout if timeout else config.http.timeout,
+                check_html=config.favicon.check_html,
+                check_defaults=config.favicon.check_defaults,
+            )
+            favicon_result = favicon_analyzer.analyze(http_result.preferred_final_url)
+            formatter.print_favicon_results(favicon_result)
+
+        # Advanced Email Security (BIMI, MTA-STS, TLS-RPT)
+        advanced_email_result = None
+        if not config.analysis.skip_advanced_email:
+            logger.info("Running advanced email security analysis...")
+            advanced_email_analyzer = AdvancedEmailSecurityAnalyzer(
+                nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
+                check_bimi=config.advanced_email.check_bimi,
+                check_mta_sts=config.advanced_email.check_mta_sts,
+                check_tls_rpt=config.advanced_email.check_tls_rpt,
+                timeout=timeout if timeout else config.http.timeout,
+            )
+            advanced_email_result = advanced_email_analyzer.analyze(domain)
+            formatter.print_advanced_email_results(advanced_email_result)
+
+        # CDN Detection
+        cdn_result = None
+        if not config.analysis.skip_cdn_detection and http_result:
+            logger.info("Detecting CDN...")
+            cdn_detector = CDNDetector()
+
+            # Detect from HTTP headers
+            if http_result.preferred_final_url and http_result.chains:
+                # Get headers from preferred final response
+                final_response = None
+                for chain in http_result.chains:
+                    if chain.responses and chain.final_url == http_result.preferred_final_url:
+                        final_response = chain.responses[-1]
+                        break
+
+                if final_response and final_response.headers:
+                    header_result = cdn_detector.detect_from_headers(final_response.headers)
+                    header_result.domain = domain
+
+                    # Detect from DNS CNAME if available
+                    cname_result = cdn_detector.detect_from_cname([])
+                    if dns_result:
+                        cname_key = f"{domain}:CNAME"
+                        if cname_key in dns_result.records:
+                            cname_values = [r.value for r in dns_result.records[cname_key]]
+                            cname_result = cdn_detector.detect_from_cname(cname_values)
+
+                    # Combine results
+                    cdn_result = cdn_detector.combine_results(domain, header_result, cname_result)
+                    formatter.print_cdn_results(cdn_result)
+
         # Print summary
         formatter.print_summary(
             whois_result=whois_result,
@@ -570,6 +644,10 @@ def analyze(
             security_headers=security_headers_results,
             rbl_result=rbl_result,
             site_verification_result=site_verification_result,
+            seo_result=seo_result,
+            favicon_result=favicon_result,
+            advanced_email_result=advanced_email_result,
+            cdn_result=cdn_result,
         )
 
         logger.info("Analysis complete")
