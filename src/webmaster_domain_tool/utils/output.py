@@ -93,7 +93,9 @@ class OutputFormatter:
                 records_by_domain[domain][record_type].append(record.value)
 
         # Important record types to always show
-        important_types = ["A", "AAAA", "MX", "TXT", "NS", "CNAME"]
+        # NS and SOA are domain-wide, so only show for main domain
+        important_types = ["A", "AAAA", "MX", "TXT", "CNAME"]
+        domain_wide_types = ["NS", "SOA", "CAA"]
 
         # Sort domains: main domain first (without www), then www subdomain, then others
         sorted_domains = sorted(
@@ -128,8 +130,8 @@ class OutputFormatter:
                     values = records_by_type[record_type]
                     if len(values) == 1:
                         self.console.print(f"{indent}{record_type}: {values[0]}")
-                    elif record_type in ("NS", "A", "AAAA"):
-                        # NS, A, AAAA records on single line, space-separated
+                    elif record_type in ("A", "AAAA"):
+                        # A, AAAA records on single line, space-separated
                         self.console.print(f"{indent}{record_type}: {' '.join(values)}")
                     else:
                         self.console.print(f"{indent}{record_type}:")
@@ -146,9 +148,25 @@ class OutputFormatter:
                     # Only show missing important records for main domain
                     self.console.print(f"{indent}{record_type}: [dim]none[/dim]")
 
-            # Show any other record types
+            # Show domain-wide types only for main domain
+            if domain == result.domain:
+                for record_type in domain_wide_types:
+                    if record_type in records_by_type:
+                        values = records_by_type[record_type]
+                        shown_types.add(record_type)
+                        if len(values) == 1:
+                            self.console.print(f"{indent}{record_type}: {values[0]}")
+                        elif record_type == "NS":
+                            # NS records on single line, space-separated
+                            self.console.print(f"{indent}{record_type}: {' '.join(values)}")
+                        else:
+                            self.console.print(f"{indent}{record_type}:")
+                            for value in values:
+                                self.console.print(f"{indent}  - {value}")
+
+            # Show any other record types (excluding domain-wide types for non-main domains)
             for record_type in sorted(records_by_type.keys()):
-                if record_type not in shown_types:
+                if record_type not in shown_types and record_type not in domain_wide_types:
                     values = records_by_type[record_type]
                     if len(values) == 1:
                         self.console.print(f"{indent}{record_type}: {values[0]}")
