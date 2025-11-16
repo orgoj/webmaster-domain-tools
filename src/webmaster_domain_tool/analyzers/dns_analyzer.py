@@ -165,6 +165,29 @@ class DNSAnalyzer:
                         result.records[key].append(record)
                         seen_values.add(record.value)
 
+                        # If CNAME, resolve the target A record
+                        if record_type == "CNAME":
+                            cname_target = str(rdata).rstrip(".")
+                            try:
+                                a_answers = self.resolver.resolve(cname_target, "A")
+                                a_key = f"{domain}:CNAME_A"
+                                if a_key not in result.records:
+                                    result.records[a_key] = []
+
+                                for a_rdata in a_answers:
+                                    a_record = DNSRecord(
+                                        record_type="A",
+                                        name=cname_target,
+                                        value=str(a_rdata),
+                                        ttl=a_answers.ttl,
+                                    )
+                                    # Check for duplicates in CNAME_A records
+                                    if not any(r.value == a_record.value for r in result.records[a_key]):
+                                        result.records[a_key].append(a_record)
+                                logger.debug(f"Resolved CNAME {cname_target} to A records")
+                            except Exception as e:
+                                logger.debug(f"Could not resolve CNAME target {cname_target}: {e}")
+
                 logger.debug(f"Found {len(result.records[key])} unique {record_type} records for {domain}")
 
             except dns.resolver.NXDOMAIN:
