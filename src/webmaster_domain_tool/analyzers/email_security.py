@@ -62,6 +62,7 @@ class EmailSecurityResult:
     spf: SPFRecord | None = None
     dkim: dict[str, DKIMRecord] = field(default_factory=dict)
     dmarc: DMARCRecord | None = None
+    dkim_selectors_searched: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -104,7 +105,7 @@ class EmailSecurityAnalyzer:
             EmailSecurityResult with SPF, DKIM, and DMARC information
         """
         logger.info(f"Starting email security analysis for {domain}")
-        result = EmailSecurityResult(domain=domain)
+        result = EmailSecurityResult(domain=domain, dkim_selectors_searched=self.dkim_selectors)
 
         # Normalize domain
         domain = domain.rstrip(".")

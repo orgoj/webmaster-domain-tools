@@ -539,7 +539,9 @@ class OutputFormatter:
             selectors = ", ".join(result.dkim.keys())
             self.console.print(f"  [green]✓[/] DKIM: {selectors}")
         else:
-            self.console.print("  [yellow]⚠ DKIM: Not found[/yellow]")
+            # Show which selectors were searched
+            searched = ", ".join(result.dkim_selectors_searched)
+            self.console.print(f"  [yellow]⚠ DKIM: Not found (searched: {searched})[/yellow]")
 
         # DMARC
         if result.dmarc:
