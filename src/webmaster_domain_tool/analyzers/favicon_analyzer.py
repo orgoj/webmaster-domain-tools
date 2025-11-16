@@ -125,6 +125,62 @@ def _get_image_dimensions(image_data: bytes) -> tuple[int | None, int | None]:
     return None, None
 
 
+def _get_ico_all_dimensions(image_data: bytes) -> list[tuple[int, int]]:
+    """
+    Extract all dimensions from multi-layer ICO file.
+
+    ICO files can contain multiple images at different resolutions.
+
+    Args:
+        image_data: Raw ICO file bytes
+
+    Returns:
+        List of (width, height) tuples for all layers, or empty list if not ICO
+    """
+    if not image_data or len(image_data) < 6:
+        return []
+
+    # Check ICO signature
+    if image_data[:4] != b'\x00\x00\x01\x00':
+        return []
+
+    try:
+        # ICO header structure:
+        # Bytes 0-1: Reserved (0)
+        # Bytes 2-3: Image type (1 for ICO)
+        # Bytes 4-5: Number of images
+
+        num_images = struct.unpack('<H', image_data[4:6])[0]
+
+        if num_images == 0 or num_images > 256:  # Sanity check
+            return []
+
+        dimensions = []
+
+        # Each directory entry is 16 bytes, starting at offset 6
+        for i in range(num_images):
+            offset = 6 + (i * 16)
+
+            if offset + 16 > len(image_data):
+                break
+
+            # Directory entry structure:
+            # Byte 0: Width (0 means 256)
+            # Byte 1: Height (0 means 256)
+            # Bytes 2-15: Other data (color count, planes, bit count, size, offset)
+
+            width = image_data[offset] or 256
+            height = image_data[offset + 1] or 256
+
+            dimensions.append((width, height))
+
+        return dimensions
+
+    except (struct.error, IndexError) as e:
+        logger.debug(f"Error parsing ICO dimensions: {e}")
+        return []
+
+
 @dataclass
 class FaviconInfo:
     """Information about a single favicon."""
@@ -139,8 +195,9 @@ class FaviconInfo:
     exists: bool = False
     status_code: int | None = None
     size_bytes: int | None = None
-    actual_width: int | None = None  # Real width from image data
-    actual_height: int | None = None  # Real height from image data
+    actual_width: int | None = None  # Real width from image data (primary/first layer)
+    actual_height: int | None = None  # Real height from image data (primary/first layer)
+    all_dimensions: list[str] | None = None  # All dimensions for multi-layer ICO (e.g., ["16x16", "32x32", "48x48"])
 
 
 @dataclass
@@ -479,12 +536,34 @@ class FaviconAnalyzer:
                             if not favicon.size_bytes:
                                 favicon.size_bytes = len(image_data)
 
-                            # Get dimensions from image data
-                            width, height = _get_image_dimensions(image_data)
-                            if width and height:
-                                favicon.actual_width = width
-                                favicon.actual_height = height
-                                logger.debug(f"Favicon dimensions: {width}x{height} - {favicon.url}")
+                            # Check if this is a multi-layer ICO file
+                            if image_data[:4] == b'\x00\x00\x01\x00':
+                                # Get all dimensions from ICO file
+                                ico_dimensions = _get_ico_all_dimensions(image_data)
+                                if ico_dimensions:
+                                    # Store all dimensions as strings
+                                    favicon.all_dimensions = [f"{w}×{h}" for w, h in ico_dimensions]
+
+                                    # Set primary dimensions to largest or first
+                                    largest = max(ico_dimensions, key=lambda d: d[0] * d[1])
+                                    favicon.actual_width = largest[0]
+                                    favicon.actual_height = largest[1]
+
+                                    logger.debug(f"Multi-layer ICO favicon: {', '.join(favicon.all_dimensions)} - {favicon.url}")
+                                else:
+                                    # Fallback to single dimension detection
+                                    width, height = _get_image_dimensions(image_data)
+                                    if width and height:
+                                        favicon.actual_width = width
+                                        favicon.actual_height = height
+                                        logger.debug(f"Favicon dimensions: {width}×{height} - {favicon.url}")
+                            else:
+                                # Get dimensions from image data (PNG, SVG, JPEG, GIF)
+                                width, height = _get_image_dimensions(image_data)
+                                if width and height:
+                                    favicon.actual_width = width
+                                    favicon.actual_height = height
+                                    logger.debug(f"Favicon dimensions: {width}×{height} - {favicon.url}")
                     except httpx.TimeoutException:
                         logger.debug(f"Timeout downloading favicon for dimension check: {favicon.url}")
                     except Exception as e:

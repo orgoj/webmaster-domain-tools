@@ -1567,7 +1567,10 @@ class OutputFormatter:
 
                 # Dimensions info (actual from image data)
                 dims_info = ""
-                if favicon.actual_width and favicon.actual_height:
+                if favicon.all_dimensions:
+                    # Multi-layer ICO - show all dimensions
+                    dims_info = f" {', '.join(favicon.all_dimensions)}"
+                elif favicon.actual_width and favicon.actual_height:
                     dims_info = f" {favicon.actual_width}×{favicon.actual_height}"
                 elif favicon.sizes:
                     # Fallback to HTML sizes attribute if no actual dimensions
