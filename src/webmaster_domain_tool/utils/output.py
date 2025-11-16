@@ -49,6 +49,31 @@ class OutputFormatter:
         self.all_errors: list[tuple[str, str]] = []  # (category, message)
         self.all_warnings: list[tuple[str, str]] = []  # (category, message)
 
+    @staticmethod
+    def _get_issuer_name(cert: CertificateInfo) -> str:
+        """
+        Extract a human-readable issuer name from certificate.
+
+        Args:
+            cert: Certificate information
+
+        Returns:
+            Issuer name (organization or common name)
+        """
+        if not cert.issuer:
+            return "Unknown"
+
+        # Try organization first (most common for CAs)
+        if "O" in cert.issuer:
+            return cert.issuer["O"]
+
+        # Fallback to common name
+        if "CN" in cert.issuer:
+            return cert.issuer["CN"]
+
+        # Last resort: concatenate all available fields
+        return ", ".join(f"{k}={v}" for k, v in cert.issuer.items())
+
     def print_header(self, domain: str) -> None:
         """Print analysis header."""
         # Reset error/warning collections for new analysis
@@ -673,8 +698,12 @@ class OutputFormatter:
                 status_text = "ok"
                 days_text = f" ({cert.days_until_expiry}d)"
 
+            # Get issuer name
+            issuer_name = self._get_issuer_name(cert)
+            issuer_text = f" [{issuer_name}]" if cert.status == "ok" else ""
+
             self.console.print(
-                f"  [{color}]{symbol}[/] {domain}: {status_text}{days_text}"
+                f"  [{color}]{symbol}[/] {domain}: {status_text}{days_text}{issuer_text}"
             )
 
         if result.protocols:
