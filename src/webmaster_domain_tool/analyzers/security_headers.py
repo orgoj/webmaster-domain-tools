@@ -83,6 +83,18 @@ class SecurityHeadersAnalyzer:
             "weight": 5,
             "config_key": "check_content_type",
         },
+        "Access-Control-Allow-Origin": {
+            "description": "CORS - Controls which origins can access resources",
+            "recommendation": "Specific origin or 'null' (avoid '*' for sensitive data)",
+            "weight": 10,
+            "config_key": "check_cors",
+        },
+        "Access-Control-Allow-Credentials": {
+            "description": "CORS - Allows credentials in cross-origin requests",
+            "recommendation": "true (only if needed)",
+            "weight": 5,
+            "config_key": "check_cors",
+        },
     }
 
     def __init__(self, enabled_checks: dict[str, bool] | None = None):
