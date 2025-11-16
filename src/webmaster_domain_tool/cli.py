@@ -357,28 +357,63 @@ def analyze(
                 "check_content_type": config.security_headers.check_content_type,
             }
 
-            # Collect unique final URLs from redirect chains
-            # Normalize URLs to avoid duplicates (remove trailing slash, lowercase)
-            seen_urls = set()
-            unique_responses = []
+            # Analyze final destinations from all redirect chains
+            # Check if all chains lead to the same final URL
+            final_urls = {}  # normalized_url -> (original_url, response)
 
             for chain in http_result.chains:
                 if chain.responses:
                     last_response = chain.responses[-1]
                     if last_response.status_code == 200:
-                        # Normalize URL for comparison
+                        # Normalize URL for comparison (remove trailing slash, lowercase)
                         normalized_url = last_response.url.rstrip('/').lower()
 
-                        if normalized_url not in seen_urls:
-                            seen_urls.add(normalized_url)
-                            unique_responses.append(last_response)
+                        if normalized_url not in final_urls:
+                            final_urls[normalized_url] = (last_response.url, last_response)
 
-            # Analyze headers for unique final URLs only
-            for response in unique_responses:
+            # Check consistency: all chains should lead to the same final URL
+            if len(final_urls) > 1:
+                # Multiple different final URLs - this is a configuration issue
+                urls_list = [url for url, _ in final_urls.values()]
+                warning_msg = f"Redirect chains lead to different final URLs: {', '.join(urls_list)}"
+                http_result.warnings.append(warning_msg)
+                logger.warning(warning_msg)
+
+                # Choose preferred URL (priority: https with www > https without www > http)
+                def url_priority(url: str) -> tuple[int, int, str]:
+                    """Return priority tuple (https=0/http=1, has_www=0/no_www=1, url)."""
+                    is_https = 0 if url.startswith('https://') else 1
+                    has_www = 0 if '://www.' in url else 1
+                    return (is_https, has_www, url)
+
+                # Sort by priority and take the best one
+                preferred_normalized = min(final_urls.keys(),
+                                          key=lambda k: url_priority(final_urls[k][0]))
+                preferred_url, preferred_response = final_urls[preferred_normalized]
+
+                logger.info(f"Using preferred final URL for analysis: {preferred_url}")
+
+                # Analyze only the preferred URL
                 headers_analyzer = SecurityHeadersAnalyzer(enabled_checks=enabled_checks)
                 headers_result = headers_analyzer.analyze(
-                    response.url,
-                    response.headers,
+                    preferred_response.url,
+                    preferred_response.headers,
+                )
+                security_headers_results.append(headers_result)
+                formatter.print_security_headers_results(headers_result)
+
+            elif len(final_urls) == 1:
+                # All chains lead to the same final URL - perfect!
+                normalized_url = list(final_urls.keys())[0]
+                final_url, final_response = final_urls[normalized_url]
+
+                logger.debug(f"All redirect chains lead to the same final URL: {final_url}")
+
+                # Analyze the single final URL
+                headers_analyzer = SecurityHeadersAnalyzer(enabled_checks=enabled_checks)
+                headers_result = headers_analyzer.analyze(
+                    final_response.url,
+                    final_response.headers,
                 )
                 security_headers_results.append(headers_result)
                 formatter.print_security_headers_results(headers_result)
