@@ -81,53 +81,81 @@ class OutputFormatter:
                 self.console.print(f"  [red]✗ {error}[/red]")
             return
 
-        # Group records by type and show values
-        records_by_type = {}
+        # Group records by domain, then by type
+        records_by_domain = {}
         for key, records in result.records.items():
             domain, record_type = key.rsplit(":", 1)
-            if record_type not in records_by_type:
-                records_by_type[record_type] = []
+            if domain not in records_by_domain:
+                records_by_domain[domain] = {}
+            if record_type not in records_by_domain[domain]:
+                records_by_domain[domain][record_type] = []
             for record in records:
-                records_by_type[record_type].append(record.value)
+                records_by_domain[domain][record_type].append(record.value)
 
         # Important record types to always show
         important_types = ["A", "AAAA", "MX", "TXT", "NS", "CNAME"]
 
-        # Print records (show important types first, then others)
-        shown_types = set()
-        for record_type in important_types:
-            if record_type in records_by_type:
-                values = records_by_type[record_type]
-                if len(values) == 1:
-                    self.console.print(f"  {record_type}: {values[0]}")
-                elif record_type in ("NS", "A", "AAAA"):
-                    # NS, A, AAAA records on single line, space-separated
-                    self.console.print(f"  {record_type}: {' '.join(values)}")
-                else:
-                    self.console.print(f"  {record_type}:")
-                    for value in values:
-                        self.console.print(f"    - {value}")
-                shown_types.add(record_type)
+        # Sort domains: main domain first (without www), then www subdomain, then others
+        sorted_domains = sorted(
+            records_by_domain.keys(),
+            key=lambda d: (
+                0 if d == result.domain else (1 if d == f"www.{result.domain}" else 2),
+                d
+            )
+        )
 
-                # If CNAME, also show resolved A records
-                if record_type == "CNAME" and "CNAME_A" in records_by_type:
-                    cname_a_values = records_by_type["CNAME_A"]
-                    self.console.print(f"  └─> A (resolved): {' '.join(cname_a_values)}")
-                    shown_types.add("CNAME_A")
+        # Print records for each domain
+        for domain_idx, domain in enumerate(sorted_domains):
+            records_by_type = records_by_domain[domain]
+
+            # Print domain header only if it's different from main domain
+            # or if there are multiple domains
+            if len(sorted_domains) > 1:
+                if domain == result.domain:
+                    self.console.print(f"  [dim]{domain}:[/dim]")
+                elif domain == f"www.{result.domain}":
+                    self.console.print(f"  [dim]www.{result.domain}:[/dim]")
+                else:
+                    self.console.print(f"  [dim]{domain}:[/dim]")
+                indent = "    "
             else:
-                # Show missing important records
-                self.console.print(f"  {record_type}: [dim]none[/dim]")
+                indent = "  "
 
-        # Show any other record types
-        for record_type in sorted(records_by_type.keys()):
-            if record_type not in shown_types:
-                values = records_by_type[record_type]
-                if len(values) == 1:
-                    self.console.print(f"  {record_type}: {values[0]}")
-                else:
-                    self.console.print(f"  {record_type}:")
-                    for value in values:
-                        self.console.print(f"    - {value}")
+            # Print records (show important types first, then others)
+            shown_types = set()
+            for record_type in important_types:
+                if record_type in records_by_type:
+                    values = records_by_type[record_type]
+                    if len(values) == 1:
+                        self.console.print(f"{indent}{record_type}: {values[0]}")
+                    elif record_type in ("NS", "A", "AAAA"):
+                        # NS, A, AAAA records on single line, space-separated
+                        self.console.print(f"{indent}{record_type}: {' '.join(values)}")
+                    else:
+                        self.console.print(f"{indent}{record_type}:")
+                        for value in values:
+                            self.console.print(f"{indent}  - {value}")
+                    shown_types.add(record_type)
+
+                    # If CNAME, also show resolved A records
+                    if record_type == "CNAME" and "CNAME_A" in records_by_type:
+                        cname_a_values = records_by_type["CNAME_A"]
+                        self.console.print(f"{indent}└─> A (resolved): {' '.join(cname_a_values)}")
+                        shown_types.add("CNAME_A")
+                elif len(sorted_domains) == 1 or domain == result.domain:
+                    # Only show missing important records for main domain
+                    self.console.print(f"{indent}{record_type}: [dim]none[/dim]")
+
+            # Show any other record types
+            for record_type in sorted(records_by_type.keys()):
+                if record_type not in shown_types:
+                    values = records_by_type[record_type]
+                    if len(values) == 1:
+                        self.console.print(f"{indent}{record_type}: {values[0]}")
+                    else:
+                        self.console.print(f"{indent}{record_type}:")
+                        for value in values:
+                            self.console.print(f"{indent}  - {value}")
 
         # Show PTR records
         if result.ptr_records:
