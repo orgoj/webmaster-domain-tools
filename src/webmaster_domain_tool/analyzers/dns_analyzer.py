@@ -66,6 +66,7 @@ class DNSAnalysisResult:
     dnssec: DNSSECInfo | None = None
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    info_messages: list[str] = field(default_factory=list)  # Informational messages (not warnings)
 
 
 class DNSAnalyzer:
@@ -346,7 +347,7 @@ class DNSAnalyzer:
                             )
                 except dns.resolver.NXDOMAIN:
                     logger.debug(f"No PTR record for {ip_address}")
-                    result.warnings.append(f"No PTR record found for {ip_address}")
+                    result.info_messages.append(f"No PTR record found for {ip_address}")
                 except dns.resolver.NoAnswer:
                     logger.debug(f"No PTR record for {ip_address}")
                 except Exception as e:
