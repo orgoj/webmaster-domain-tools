@@ -73,15 +73,22 @@ class DNSAnalyzer:
 
     RECORD_TYPES = ["A", "AAAA", "MX", "TXT", "NS", "SOA", "CAA", "CNAME"]
 
-    def __init__(self, nameservers: list[str] | None = None, check_dnssec: bool = True):
+    def __init__(
+        self,
+        nameservers: list[str] | None = None,
+        check_dnssec: bool = True,
+        warn_www_not_cname: bool = False,
+    ):
         """
         Initialize DNS analyzer.
 
         Args:
             nameservers: Optional list of nameservers to use for queries
             check_dnssec: Whether to check DNSSEC validation
+            warn_www_not_cname: Warn if www subdomain is not a CNAME record
         """
         self.check_dnssec = check_dnssec
+        self.warn_www_not_cname = warn_www_not_cname
 
         # Try to create resolver with system config, fallback to manual config
         try:
@@ -125,6 +132,10 @@ class DNSAnalyzer:
         if not domain.startswith("www."):
             www_domain = f"www.{domain}"
             self._check_domain_records(www_domain, result)
+
+            # Check if www subdomain should be CNAME
+            if self.warn_www_not_cname:
+                self._check_www_cname(www_domain, result)
 
         # Validate MX records
         self._validate_mx_records(result)
@@ -219,6 +230,30 @@ class DNSAnalyzer:
             if aaaa_key in result.records:
                 logger.debug(f"Removing AAAA records for {domain} (has CNAME)")
                 del result.records[aaaa_key]
+
+    def _check_www_cname(self, www_domain: str, result: DNSAnalysisResult) -> None:
+        """
+        Check if www subdomain is a CNAME record (best practice).
+
+        Args:
+            www_domain: The www subdomain to check (e.g., "www.example.com")
+            result: DNS analysis result to update
+        """
+        cname_key = f"{www_domain}:CNAME"
+        a_key = f"{www_domain}:A"
+        aaaa_key = f"{www_domain}:AAAA"
+
+        # Check if www has CNAME
+        has_cname = cname_key in result.records and result.records[cname_key]
+        has_a_or_aaaa = (a_key in result.records and result.records[a_key]) or (
+            aaaa_key in result.records and result.records[aaaa_key]
+        )
+
+        # If www has A/AAAA but not CNAME, add warning
+        if has_a_or_aaaa and not has_cname:
+            warning = f"{www_domain} uses direct A/AAAA records instead of CNAME (consider using CNAME for easier management)"
+            result.warnings.append(warning)
+            logger.debug(f"www subdomain not using CNAME: {www_domain}")
 
     def _create_dns_record(
         self, record_type: str, name: str, rdata: Any, ttl: int | None

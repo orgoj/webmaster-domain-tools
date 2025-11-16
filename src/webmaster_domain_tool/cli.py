@@ -187,6 +187,11 @@ def analyze(
         help="Comma-separated list of nameservers to use (e.g., '8.8.8.8,1.1.1.1')",
         callback=validate_nameservers,
     ),
+    warn_www_not_cname: Optional[bool] = typer.Option(
+        None,
+        "--warn-www-not-cname/--no-warn-www-not-cname",
+        help="Warn if www subdomain is not a CNAME record (best practice)",
+    ),
     # Output options
     no_color: bool = typer.Option(
         False,
@@ -260,6 +265,7 @@ def analyze(
             dns_analyzer = DNSAnalyzer(
                 nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
                 check_dnssec=config.dns.check_dnssec,
+                warn_www_not_cname=warn_www_not_cname if warn_www_not_cname is not None else config.dns.warn_www_not_cname,
             )
             dns_result = dns_analyzer.analyze(domain)
             formatter.print_dns_results(dns_result)

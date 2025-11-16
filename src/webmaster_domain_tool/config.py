@@ -24,6 +24,10 @@ class DNSConfig(BaseModel):
     )
     timeout: float = Field(default=5.0, description="DNS query timeout in seconds")
     check_dnssec: bool = Field(default=True, description="Check DNSSEC validation")
+    warn_www_not_cname: bool = Field(
+        default=False,
+        description="Warn if www subdomain is not a CNAME record",
+    )
 
 
 class HTTPConfig(BaseModel):
@@ -285,6 +289,8 @@ def create_default_user_config() -> Path:
 nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1"]
 timeout = 5.0
 check_dnssec = true
+# Warn if www subdomain is not a CNAME record (best practice)
+warn_www_not_cname = false
 
 [http]
 timeout = 10.0
