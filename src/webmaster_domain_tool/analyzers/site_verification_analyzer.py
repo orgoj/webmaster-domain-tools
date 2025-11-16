@@ -75,12 +75,12 @@ class SiteVerificationAnalyzer:
 
     # Common tracking code patterns (Google specific - legacy)
     TRACKING_PATTERNS = {
-        "GTM": (r"GTM-[A-Z0-9]+", "Google Tag Manager"),
-        "GA4": (r"G-[A-Z0-9]+", "Google Analytics 4"),
-        "GAds": (r"AW-[0-9]+", "Google Ads Conversion"),
+        "GTM": (r"GTM-[A-Z0-9]{7,}", "Google Tag Manager"),
+        "GA4": (r"G-[A-Z0-9]{8,12}", "Google Analytics 4"),
+        "GAds": (r"AW-[0-9]{9,12}", "Google Ads Conversion"),
         "UA": (r"UA-[0-9]+-[0-9]+", "Universal Analytics"),
-        "Google Optimize": (r"OPT-[A-Z0-9]+", "Google Optimize"),
-        "Google AdSense": (r"ca-pub-[0-9]+", "Google AdSense"),
+        "Google Optimize": (r"OPT-[A-Z0-9]{7,}", "Google Optimize"),
+        "Google AdSense": (r"ca-pub-[0-9]{16}", "Google AdSense"),
     }
 
     def __init__(
