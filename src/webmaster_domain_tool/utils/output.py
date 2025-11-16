@@ -1399,10 +1399,12 @@ class OutputFormatter:
         # robots.txt
         if result.robots:
             if result.robots.exists:
-                self.console.print(f"  [green]✓ robots.txt[/green] ({result.robots.size} bytes)")
+                size_info = f" ({result.robots.size} bytes)" if result.robots.size else ""
+                self.console.print(f"  [green]✓ robots.txt[/green]{size_info}")
+                # Show sitemap count in robots.txt
                 if result.robots.sitemaps:
-                    for sitemap in result.robots.sitemaps:
-                        self.console.print(f"    Sitemap: {sitemap}")
+                    sitemap_count = len(result.robots.sitemaps)
+                    self.console.print(f"    [dim]{sitemap_count} sitemap(s) referenced[/dim]")
             else:
                 for error in result.robots.errors:
                     self.all_errors.append(("SEO", error))
@@ -1414,21 +1416,29 @@ class OutputFormatter:
         # llms.txt
         if result.llms_txt:
             if result.llms_txt.exists:
-                self.console.print(f"  [green]✓ llms.txt[/green] ({result.llms_txt.size} bytes)")
+                size_info = f" ({result.llms_txt.size} bytes)" if result.llms_txt.size else ""
+                self.console.print(f"  [green]✓ llms.txt[/green]{size_info}")
 
-        # sitemaps
+        # sitemaps - show URL + count/error on same line
         for sitemap in result.sitemaps:
             if sitemap.exists:
                 if sitemap.is_index:
-                    self.console.print(f"  [green]✓ Sitemap index[/green]: {sitemap.sitemap_count} sitemaps")
+                    self.console.print(f"  [green]✓ Sitemap[/green]: {sitemap.url} - {sitemap.sitemap_count} sitemap(s)")
                 else:
-                    self.console.print(f"  [green]✓ Sitemap[/green]: {sitemap.url_count} URLs")
-            for error in sitemap.errors:
-                self.all_errors.append(("SEO", error))
-                self.console.print(f"  [red]✗ Sitemap: {error}[/red]")
+                    self.console.print(f"  [green]✓ Sitemap[/green]: {sitemap.url} - {sitemap.url_count} URL(s)")
+            elif sitemap.errors:
+                # Sitemap referenced but has errors
+                error_msg = sitemap.errors[0] if sitemap.errors else "Unknown error"
+                self.all_errors.append(("SEO/Sitemap", f"{sitemap.url}: {error_msg}"))
+                self.console.print(f"  [red]✗ Sitemap[/red]: {sitemap.url} - {error_msg}")
+                # Log remaining errors
+                for error in sitemap.errors[1:]:
+                    self.all_errors.append(("SEO/Sitemap", f"{sitemap.url}: {error}"))
+
+            # Warnings for this sitemap
             for warning in sitemap.warnings:
-                self.all_warnings.append(("SEO", warning))
-                self.console.print(f"  [yellow]⚠ Sitemap: {warning}[/yellow]")
+                self.all_warnings.append(("SEO/Sitemap", f"{sitemap.url}: {warning}"))
+                self.console.print(f"  [yellow]⚠ Sitemap[/yellow]: {sitemap.url} - {warning}")
 
     def print_favicon_results(self, result: FaviconAnalysisResult) -> None:
         """Print favicon detection results."""
