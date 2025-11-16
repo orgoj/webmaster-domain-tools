@@ -100,6 +100,9 @@ class OutputFormatter:
                 values = records_by_type[record_type]
                 if len(values) == 1:
                     self.console.print(f"  {record_type}: {values[0]}")
+                elif record_type == "NS":
+                    # NS records on single line, space-separated
+                    self.console.print(f"  {record_type}: {' '.join(values)}")
                 else:
                     self.console.print(f"  {record_type}:")
                     for value in values:
