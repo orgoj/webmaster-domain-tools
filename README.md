@@ -32,11 +32,12 @@ Comprehensive tool for webmasters that analyzes and clearly displays all importa
 ### SSL/TLS Certificates
 - ✅ Certificate validation
 - ✅ Validity and expiration checking
-- ✅ Issuer information
+- ✅ **Issuer information** (Certificate Authority name displayed in output)
 - ✅ Subject Alternative Names (SAN)
-- ✅ Days until expiration
+- ✅ Days until expiration with color-coded warnings
 - ✅ TLS protocol support (1.0, 1.1, 1.2, 1.3)
 - ✅ Deprecated protocol warnings
+- ✅ Certificate chain validation
 
 ### Email Security
 - ✅ **SPF** (Sender Policy Framework)
@@ -51,6 +52,68 @@ Comprehensive tool for webmasters that analyzes and clearly displays all importa
   - DMARC policy validation
   - Reporting address checking
   - Subdomain policy analysis
+- ✅ **BIMI** (Brand Indicators for Message Identification)
+  - BIMI record detection
+  - VMC (Verified Mark Certificate) validation
+- ✅ **MTA-STS** (Mail Transfer Agent Strict Transport Security)
+  - Policy file validation
+  - Mode checking (testing/enforce/none)
+  - MX host validation
+- ✅ **TLS-RPT** (TLS Reporting)
+  - Reporting endpoint validation
+  - Email address verification
+
+### WHOIS Information
+- ✅ Domain registration details
+- ✅ Registrar information
+- ✅ Creation and expiration dates
+- ✅ Days until expiration
+- ✅ Name server listing
+- ✅ Registrant organization (when available)
+- ✅ Expiration warnings (30/60 day thresholds)
+
+### CDN Detection
+- ✅ Automatic CDN provider detection
+- ✅ Header-based identification (Cloudflare, Fastly, Akamai, CloudFront, etc.)
+- ✅ CNAME-based detection
+- ✅ Confidence scoring (high/medium/low)
+- ✅ Support for 12+ major CDN providers
+
+### SEO Files Analysis
+- ✅ **robots.txt** analysis
+  - User-Agent directive parsing
+  - Disallow/Allow rule detection
+  - Sitemap URL extraction
+  - Crawl-delay checking
+- ✅ **llms.txt** detection
+  - AI crawler configuration standard
+- ✅ **sitemap.xml** analysis
+  - XML validation
+  - URL counting
+  - Sitemap index support
+  - Size warnings (>50,000 URLs)
+
+### Favicon Analysis
+- ✅ **Comprehensive format support**
+  - PNG, ICO, JPEG, GIF, SVG
+  - Multi-layer ICO detection (shows all embedded resolutions)
+  - Real dimension extraction from image data
+- ✅ **All standard locations**
+  - HTML link tags (all rel types)
+  - Apple Touch Icons (all sizes: 180x180, 167x167, 152x152, 120x120, 76x76, 60x60)
+  - Safari mask-icon with color attribute
+  - Microsoft Tile meta tags
+  - Web App Manifest (manifest.json) parsing
+  - Default paths (/favicon.ico, /favicon.svg, etc.)
+- ✅ **Detailed information**
+  - Source tracking (HTML vs default path vs manifest)
+  - Actual dimensions (not just HTML sizes attribute)
+  - File size in bytes
+  - Purpose attribute for PWA icons
+  - Deduplication (HTML sources take precedence)
+- ✅ **Best practice warnings**
+  - Missing favicon.ico
+  - Favicon conflicts (default path vs HTML)
 
 ### RBL (Realtime Blacklist) Check
 - ✅ IP address blacklist checking
@@ -74,21 +137,26 @@ Comprehensive tool for webmasters that analyzes and clearly displays all importa
 - ✅ Security score (0-100)
 - ✅ Detailed recommendations for each header
 
-### Google Services
-- ✅ **Google Site Verification**
-  - DNS TXT record verification
-  - HTML file verification (`google{id}.html`)
-  - Meta tag verification
-  - Multiple verification ID support
-  - Shows all verification methods found
-- ✅ **Tracking Codes Detection**
-  - Google Tag Manager (GTM)
-  - Google Analytics 4 (GA4)
-  - Google Ads Conversion Tracking (GAds)
-  - Universal Analytics (UA)
-  - Google Optimize
-  - Google AdSense
+### Site Verification
+- ✅ **Multi-platform verification support**
+  - Google (DNS TXT, HTML file, meta tag)
+  - Facebook (DNS TXT, meta tag)
+  - Pinterest (DNS TXT, meta tag, HTML file)
+  - Bing (meta tag)
+  - Yandex (meta tag)
+- ✅ **Auto-detection**
+  - Automatically detects verification IDs from DNS and HTML
+  - Shows all verification methods found for each service
+  - Only displays services with actual results
+- ✅ **Tracking Codes Detection** (Google-specific)
+  - Google Tag Manager (GTM-XXXXXXX)
+  - Google Analytics 4 (G-XXXXXXXXXX)
+  - Google Ads Conversion (AW-XXXXXXXXX)
+  - Universal Analytics (UA-XXXXXXX-X)
+  - Google Optimize (OPT-XXXXXXX)
+  - Google AdSense (ca-pub-XXXXXXXXXXXXXXXX)
   - Location tracking (HTML head vs body)
+  - Minimum length validation to prevent false positives
 
 ## Installation
 

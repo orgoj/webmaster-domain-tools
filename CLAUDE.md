@@ -297,6 +297,59 @@ def analyze_domain(
     pass
 ```
 
+## Documentation and Version Management
+
+**CRITICAL: These rules MUST be followed for every feature addition or significant change.**
+
+### When Adding/Modifying Features
+
+1. **ALWAYS Update README.md**
+   - Add new features to the Features section
+   - Update usage examples if needed
+   - Add configuration options to the Configuration section
+   - Update command-line options if CLI changed
+
+2. **ALWAYS Update CHANGELOG.md**
+   - Add entry under `## [Unreleased]` section
+   - Use categories: `Added`, `Changed`, `Fixed`, `Removed`
+   - Be specific about what changed and why
+   - Include references to issues/PRs if applicable
+
+3. **Bump Version in pyproject.toml**
+   - Follow Semantic Versioning (MAJOR.MINOR.PATCH)
+   - MAJOR: Breaking changes (incompatible API changes)
+   - MINOR: New features (backward-compatible)
+   - PATCH: Bug fixes (backward-compatible)
+   - Update version in `pyproject.toml` `[project]` section
+
+### Documentation Workflow
+
+After implementing a feature:
+1. Update CHANGELOG.md with specific changes
+2. Update README.md with new functionality
+3. Bump version appropriately
+4. Commit all changes together
+
+Example commit message:
+```
+Add multi-layer ICO favicon detection
+
+- Implement _get_ico_all_dimensions() for parsing ICO headers
+- Display all embedded dimensions in output
+- Update README.md with new capability
+- Update CHANGELOG.md
+- Bump version to 0.2.0
+```
+
+### Never Skip Documentation
+
+If you find yourself committing code changes without updating:
+- README.md
+- CHANGELOG.md
+- Version number
+
+**STOP and update these files first!** The user depends on accurate documentation.
+
 ## Important Files
 
 - `cli.py` - Main CLI coordination
@@ -304,6 +357,8 @@ def analyze_domain(
 - `dns_analyzer.py` - DNS queries and DNSSEC validation
 - `config.py` - Configuration schema and loading
 - `pyproject.toml` - Project metadata and dependencies
+- `README.md` - User-facing documentation (ALWAYS keep updated)
+- `CHANGELOG.md` - Version history (ALWAYS keep updated)
 
 ## Common Pitfalls
 
