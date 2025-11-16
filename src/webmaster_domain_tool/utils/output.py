@@ -977,7 +977,7 @@ class OutputFormatter:
             for verification in result.detected_verification_ids:
                 methods_str = ", ".join(verification.methods)
                 self.console.print(
-                    f"    [cyan]ℹ {verification.verification_id}[/cyan] "
+                    f"    [cyan]• {verification.verification_id}[/cyan] "
                     f"[dim]({methods_str})[/dim]"
                 )
 
