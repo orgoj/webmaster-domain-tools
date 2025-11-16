@@ -51,8 +51,8 @@ Repository = "https://github.com/orgoj/webmaster-domain-tool"
 Issues = "https://github.com/orgoj/webmaster-domain-tool/issues"
 
 [project.scripts]
-webmaster-domain-tool = "webmaster_domain_tool.cli:app"
-wdt = "webmaster_domain_tool.cli:app"
+webmaster-domain-tool = "webmaster_domain_tool.cli:main"
+wdt = "webmaster_domain_tool.cli:main"
 
 [build-system]
 requires = ["hatchling"]

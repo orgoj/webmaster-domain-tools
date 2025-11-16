@@ -505,5 +505,23 @@ def version() -> None:
     console.print(f"webmaster-domain-tool version {__version__}")
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Main entry point with automatic 'analyze' command insertion."""
+    import sys
+
+    # If first argument doesn't look like a known command or option,
+    # assume it's a domain and insert 'analyze' command
+    if len(sys.argv) > 1:
+        first_arg = sys.argv[1]
+        known_commands = ["analyze", "create-config", "version"]
+
+        # If it's not a known command and not an option (doesn't start with -)
+        # then it's probably a domain, so insert 'analyze' before it
+        if first_arg not in known_commands and not first_arg.startswith("-"):
+            sys.argv.insert(1, "analyze")
+
     app()
+
+
+if __name__ == "__main__":
+    main()
