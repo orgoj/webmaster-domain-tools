@@ -173,7 +173,7 @@ class HTTPAnalyzer:
 
             except httpx.ConnectError as e:
                 # ConnectError includes SSL errors, connection refused, etc.
-                logger.warning(f"Connection error for {current_url}: {e}")
+                logger.debug(f"Connection error for {current_url}: {e}")
 
                 # Check if it's SSL-related error by looking at the error message
                 error_msg = str(e).lower()

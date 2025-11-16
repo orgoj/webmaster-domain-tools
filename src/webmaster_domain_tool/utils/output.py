@@ -422,13 +422,13 @@ class OutputFormatter:
         for domain, cert in result.certificates.items():
             # Determine status and color
             if cert.status == "none":
-                color = "red"
-                symbol = "✗"
+                color = "yellow"
+                symbol = "⚠"
                 status_text = "none"
                 days_text = ""  # No days for none status
             elif cert.status == "mismatch":
-                color = "red"
-                symbol = "✗"
+                color = "yellow"
+                symbol = "⚠"
                 status_text = "mismatch"
                 days_text = f" ({cert.days_until_expiry}d)" if cert.days_until_expiry > 0 else ""
             else:  # ok
