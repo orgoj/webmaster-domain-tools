@@ -6,11 +6,14 @@ from dataclasses import dataclass, field
 import dns.resolver
 import dns.exception
 
-logger = logging.getLogger(__name__)
+from ..constants import (
+    DEFAULT_DKIM_SELECTORS,
+    DEFAULT_EMAIL_TIMEOUT,
+    SPF_MAX_INCLUDES_LIMIT,
+    SPF_MAX_INCLUDES_WARNING,
+)
 
-# SPF validation thresholds
-SPF_MAX_INCLUDES_WARNING = 8
-SPF_MAX_INCLUDES_LIMIT = 10
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -70,29 +73,22 @@ class EmailSecurityResult:
 class EmailSecurityAnalyzer:
     """Analyzes email security records (SPF, DKIM, DMARC)."""
 
-    # Common DKIM selectors to try if not specified
-    DEFAULT_DKIM_SELECTORS = [
-        "default",
-        "google",
-        "k1",
-        "k2",
-        "selector1",
-        "selector2",
-        "dkim",
-        "mail",
-        "s1",
-        "s2",
-    ]
-
-    def __init__(self, dkim_selectors: list[str] | None = None):
+    def __init__(
+        self,
+        dkim_selectors: list[str] | None = None,
+        timeout: float = DEFAULT_EMAIL_TIMEOUT,
+    ):
         """
         Initialize email security analyzer.
 
         Args:
             dkim_selectors: List of DKIM selectors to check
+            timeout: DNS query timeout in seconds
         """
-        self.dkim_selectors = dkim_selectors or self.DEFAULT_DKIM_SELECTORS
+        self.dkim_selectors = dkim_selectors or DEFAULT_DKIM_SELECTORS
         self.resolver = dns.resolver.Resolver()
+        self.resolver.timeout = timeout
+        self.resolver.lifetime = timeout
 
     def analyze(self, domain: str) -> EmailSecurityResult:
         """

@@ -8,10 +8,14 @@ from urllib.parse import urlparse
 
 import httpx
 
-logger = logging.getLogger(__name__)
+from ..constants import (
+    DEFAULT_HTTP_MAX_REDIRECTS,
+    DEFAULT_HTTP_TIMEOUT,
+    DEFAULT_USER_AGENT,
+    MAX_REDIRECT_WARNING,
+)
 
-# HTTP redirect thresholds
-MAX_REDIRECT_WARNING = 3
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -52,8 +56,8 @@ class HTTPAnalyzer:
 
     def __init__(
         self,
-        timeout: float = 10.0,
-        max_redirects: int = 10,
+        timeout: float = DEFAULT_HTTP_TIMEOUT,
+        max_redirects: int = DEFAULT_HTTP_MAX_REDIRECTS,
         user_agent: str | None = None,
     ):
         """
@@ -66,9 +70,7 @@ class HTTPAnalyzer:
         """
         self.timeout = timeout
         self.max_redirects = max_redirects
-        self.user_agent = user_agent or (
-            "Mozilla/5.0 (compatible; WebmasterDomainTool/0.1; +https://github.com/orgoj/webmaster-domain-tool)"
-        )
+        self.user_agent = user_agent or DEFAULT_USER_AGENT
 
     def analyze(self, domain: str) -> HTTPAnalysisResult:
         """
