@@ -46,14 +46,8 @@ class OutputFormatter:
             self.console.print(f"[bold]{domain}[/bold]")
         else:
             self.console.print()
-            self.console.print(
-                Panel(
-                    f"[bold cyan]Webmaster Domain Analysis[/bold cyan]\n"
-                    f"[white]Domain:[/white] [yellow]{domain}[/yellow]",
-                    box=box.DOUBLE,
-                    expand=False,
-                )
-            )
+            self.console.print(f"[bold cyan]Webmaster Domain Analysis[/bold cyan]")
+            self.console.print(f"Domain: [yellow]{domain}[/yellow]")
             self.console.print()
 
     def print_dns_results(self, result: DNSAnalysisResult) -> None:
@@ -87,28 +81,59 @@ class OutputFormatter:
                 self.console.print(f"  [red]✗ {error}[/red]")
             return
 
-        # Show only record counts by type
-        record_counts = {}
-        for key in result.records.keys():
+        # Group records by type and show values
+        records_by_type = {}
+        for key, records in result.records.items():
             domain, record_type = key.rsplit(":", 1)
-            if record_type not in record_counts:
-                record_counts[record_type] = 0
-            record_counts[record_type] += len(result.records[key])
+            if record_type not in records_by_type:
+                records_by_type[record_type] = []
+            for record in records:
+                records_by_type[record_type].append(record.value)
 
-        for record_type, count in sorted(record_counts.items()):
-            self.console.print(f"  {record_type}: {count} record(s)")
+        # Important record types to always show
+        important_types = ["A", "AAAA", "MX", "TXT", "NS", "CNAME"]
 
-        # Show PTR count
+        # Print records (show important types first, then others)
+        shown_types = set()
+        for record_type in important_types:
+            if record_type in records_by_type:
+                values = records_by_type[record_type]
+                if len(values) == 1:
+                    self.console.print(f"  {record_type}: {values[0]}")
+                else:
+                    self.console.print(f"  {record_type}:")
+                    for value in values:
+                        self.console.print(f"    - {value}")
+                shown_types.add(record_type)
+            else:
+                # Show missing important records
+                self.console.print(f"  {record_type}: [dim]none[/dim]")
+
+        # Show any other record types
+        for record_type in sorted(records_by_type.keys()):
+            if record_type not in shown_types:
+                values = records_by_type[record_type]
+                if len(values) == 1:
+                    self.console.print(f"  {record_type}: {values[0]}")
+                else:
+                    self.console.print(f"  {record_type}:")
+                    for value in values:
+                        self.console.print(f"    - {value}")
+
+        # Show PTR records
         if result.ptr_records:
-            self.console.print(f"  PTR: {len(result.ptr_records)} record(s)")
+            self.console.print(f"  PTR:")
+            for ip, ptr in result.ptr_records.items():
+                self.console.print(f"    {ip} → {ptr}")
 
         # Show DNSSEC status
         if result.dnssec and result.dnssec.enabled:
             status = "✓" if result.dnssec.valid else "⚠"
             self.console.print(f"  DNSSEC: [{('green' if result.dnssec.valid else 'yellow')}]{status}[/]")
 
-        if result.warnings:
-            self.console.print(f"  [yellow]⚠ {len(result.warnings)} warning(s)[/yellow]")
+        # Show actual warnings
+        for warning in result.warnings:
+            self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
     def _print_dns_verbose(self, result: DNSAnalysisResult) -> None:
         """Print DNS results in verbose mode (full detail)."""
@@ -223,11 +248,25 @@ class OutputFormatter:
                     status_color = "yellow"
                     status_symbol = "⚠"
 
-                redirect_info = f" ({len(chain.responses)-1} redirects)" if len(chain.responses) > 1 else ""
+                # Build redirect chain string with status codes
+                if len(chain.responses) > 1:
+                    redirect_chain = []
+                    for i, resp in enumerate(chain.responses):
+                        if resp.error:
+                            redirect_chain.append(f"ERROR")
+                        elif i < len(chain.responses) - 1:  # Not last
+                            redirect_chain.append(f"{resp.status_code}")
+                        else:  # Last
+                            redirect_chain.append(f"{resp.status_code}")
+                    redirect_info = f" → {' → '.join(redirect_chain)}"
+                else:
+                    redirect_info = ""
+
                 self.console.print(f"  [{status_color}]{status_symbol}[/] {chain.start_url}{redirect_info}")
 
-        if result.warnings and self.verbosity != "quiet":
-            self.console.print(f"  [yellow]⚠ {len(result.warnings)} warning(s)[/yellow]")
+        # Show actual warnings
+        for warning in result.warnings:
+            self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
     def _print_http_verbose(self, result: HTTPAnalysisResult) -> None:
         """Print HTTP results in verbose mode."""
@@ -325,8 +364,9 @@ class OutputFormatter:
         if result.protocols:
             self.console.print(f"  TLS: {', '.join(result.protocols)}")
 
-        if result.warnings:
-            self.console.print(f"  [yellow]⚠ {len(result.warnings)} warning(s)[/yellow]")
+        # Show actual warnings
+        for warning in result.warnings:
+            self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
     def _print_ssl_verbose(self, result: SSLAnalysisResult) -> None:
         """Print SSL results in verbose mode."""
@@ -473,9 +513,10 @@ class OutputFormatter:
 
         # DKIM
         if result.dkim:
-            self.console.print(f"  [green]✓[/] DKIM: {len(result.dkim)} selector(s)")
+            selectors = ", ".join(result.dkim.keys())
+            self.console.print(f"  [green]✓[/] DKIM: {selectors}")
         else:
-            self.console.print("  [yellow]⚠ DKIM: None found[/yellow]")
+            self.console.print("  [yellow]⚠ DKIM: Not found[/yellow]")
 
         # DMARC
         if result.dmarc:
@@ -485,8 +526,9 @@ class OutputFormatter:
         else:
             self.console.print("  [red]✗ DMARC: Not configured[/red]")
 
-        if result.warnings:
-            self.console.print(f"  [yellow]⚠ {len(result.warnings)} warning(s)[/yellow]")
+        # Show actual warnings
+        for warning in result.warnings:
+            self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
     def _print_email_verbose(self, result: EmailSecurityResult) -> None:
         """Print email security results in verbose mode."""
@@ -595,10 +637,14 @@ class OutputFormatter:
         total_count = len(result.headers)
         self.console.print(f"  {present_count}/{total_count} headers present")
 
-        # Show only missing critical headers
+        # Show missing critical headers
         missing_headers = [name for name, check in result.headers.items() if not check.present]
         if missing_headers:
-            self.console.print(f"  [yellow]Missing: {', '.join(missing_headers[:3])}{'...' if len(missing_headers) > 3 else ''}[/yellow]")
+            self.console.print(f"  [yellow]Missing: {', '.join(missing_headers)}[/yellow]")
+
+        # Show actual warnings
+        for warning in result.warnings:
+            self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
     def _print_security_headers_verbose(self, result: SecurityHeadersResult) -> None:
         """Print security headers results in verbose mode."""
@@ -682,9 +728,11 @@ class OutputFormatter:
             self.console.print(f"  [red]✗ {listed_count}/{len(result.checks)} IP(s) blacklisted[/red]")
             for check in result.checks:
                 if check.listed:
-                    self.console.print(f"    {check.ip}: {', '.join(check.blacklists[:2])}")
+                    self.console.print(f"    {check.ip}: {', '.join(check.blacklists)}")
         else:
-            self.console.print(f"  [green]✓ All {len(result.checks)} IP(s) clean[/green]")
+            # Show which IPs were checked
+            ips_checked = ", ".join(c.ip for c in result.checks)
+            self.console.print(f"  [green]✓ All clean: {ips_checked}[/green]")
 
     def _print_rbl_verbose(self, result: RBLAnalysisResult) -> None:
         """Print RBL results in verbose mode."""

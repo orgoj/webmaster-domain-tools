@@ -94,7 +94,6 @@ class Config(BaseSettings):
     """Main configuration for webmaster-domain-tool."""
 
     model_config = SettingsConfigDict(
-        toml_file="config.toml",
         extra="ignore",
     )
 
