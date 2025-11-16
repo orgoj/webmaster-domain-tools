@@ -388,9 +388,10 @@ def analyze(
             http_result = http_analyzer.analyze(domain)
 
             # Analyze redirect chains and add any errors/warnings BEFORE printing
-            _, _, url_warnings, url_errors = get_preferred_final_url(http_result)
+            preferred_url, _, url_warnings, url_errors = get_preferred_final_url(http_result)
             http_result.errors.extend(url_errors)
             http_result.warnings.extend(url_warnings)
+            http_result.preferred_final_url = preferred_url
 
             formatter.print_http_results(http_result)
 

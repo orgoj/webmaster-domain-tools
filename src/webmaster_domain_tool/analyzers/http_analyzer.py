@@ -45,6 +45,7 @@ class HTTPAnalysisResult:
     chains: list[RedirectChain] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    preferred_final_url: str | None = None  # URL used for further analysis (headers, verification)
 
 
 class HTTPAnalyzer:

@@ -537,6 +537,10 @@ class OutputFormatter:
             self.all_warnings.append(("HTTP", warning))
             self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
+        # Show which URL is used for further analysis
+        if result.preferred_final_url:
+            self.console.print(f"  [dim]→ Using {result.preferred_final_url} for security headers and site verification analysis[/dim]")
+
     def _print_http_verbose(self, result: HTTPAnalysisResult) -> None:
         """Print HTTP results in verbose mode."""
         self.console.print("[bold blue]═══ HTTP/HTTPS Analysis ═══[/bold blue]")
@@ -578,6 +582,11 @@ class OutputFormatter:
                 self.console.print(f"[yellow]⚠ {warning}[/yellow]")
 
         if result.errors or result.warnings:
+            self.console.print()
+
+        # Show which URL is used for further analysis
+        if result.preferred_final_url:
+            self.console.print(f"[dim]→ Using {result.preferred_final_url} for security headers and site verification analysis[/dim]")
             self.console.print()
 
     def print_ssl_results(self, result: SSLAnalysisResult) -> None:
