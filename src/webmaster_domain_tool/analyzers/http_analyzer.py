@@ -236,13 +236,15 @@ class HTTPAnalyzer:
             result.errors.append(f"{chain.start_url}: {last_response.error}")
 
         # Check for HTTP on final URL (should use HTTPS)
-        if chain.final_url.startswith("http://") and last_response.status_code == 200:
+        ends_on_http = chain.final_url.startswith("http://") and last_response.status_code == 200
+        if ends_on_http:
             result.warnings.append(
                 f"{chain.start_url} ends on HTTP (insecure): {chain.final_url}"
             )
 
         # Check for mixed HTTP->HTTPS redirects
-        if chain.start_url.startswith("http://"):
+        # Skip if already warned about ending on HTTP
+        if chain.start_url.startswith("http://") and not ends_on_http:
             https_redirected = any(
                 r.redirect_to and r.redirect_to.startswith("https://")
                 for r in chain.responses

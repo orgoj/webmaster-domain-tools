@@ -278,17 +278,9 @@ class OutputFormatter:
                     # No redirect, just show URL with status
                     self.console.print(f"  [{status_color}]{status_symbol}[/] {chain.start_url} ({last_response.status_code})")
 
-        # Show actual warnings (deduplicated)
-        seen_warnings = set()
+        # Show warnings
         for warning in result.warnings:
-            # Skip generic "does not redirect to HTTPS" if we have detailed "ends on HTTP" warning
-            if "does not redirect to HTTPS" in warning:
-                # Check if there's a more detailed "ends on HTTP" warning
-                if any("ends on HTTP" in w for w in result.warnings):
-                    continue
-            if warning not in seen_warnings:
-                self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
-                seen_warnings.add(warning)
+            self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
     def _print_http_verbose(self, result: HTTPAnalysisResult) -> None:
         """Print HTTP results in verbose mode."""
