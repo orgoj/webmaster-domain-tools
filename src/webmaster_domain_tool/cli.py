@@ -117,7 +117,7 @@ def validate_config_file(value: Optional[str]) -> Optional[str]:
 
 def get_preferred_final_url(
     http_result: HTTPAnalysisResult,
-) -> tuple[str | None, HTTPResponse | None, list[str]]:
+) -> tuple[str | None, HTTPResponse | None, list[str], list[str]]:
     """
     Analyze redirect chains and return the preferred final URL.
 
@@ -129,12 +129,14 @@ def get_preferred_final_url(
         http_result: HTTP analysis result with redirect chains
 
     Returns:
-        Tuple of (preferred_url, preferred_response, warnings):
+        Tuple of (preferred_url, preferred_response, warnings, errors):
         - preferred_url: The selected final URL (or None if no successful chains)
         - preferred_response: The HTTP response for that URL (or None)
-        - warnings: List of warning messages if chains are inconsistent
+        - warnings: List of warning messages
+        - errors: List of error messages (e.g., inconsistent redirect chains)
     """
     warnings = []
+    errors = []
 
     # Collect unique final URLs from all successful redirect chains
     final_urls = {}  # normalized_url -> (original_url, response)
@@ -151,20 +153,23 @@ def get_preferred_final_url(
 
     # No successful final URLs found
     if not final_urls:
-        return None, None, warnings
+        return None, None, warnings, errors
 
     # All chains lead to the same final URL - perfect!
     if len(final_urls) == 1:
         normalized_url = list(final_urls.keys())[0]
         final_url, final_response = final_urls[normalized_url]
         logger.debug(f"All redirect chains lead to the same final URL: {final_url}")
-        return final_url, final_response, warnings
+        return final_url, final_response, warnings, errors
 
-    # Multiple different final URLs - this is a configuration issue
+    # Multiple different final URLs - this is a CONFIGURATION ERROR
     urls_list = [url for url, _ in final_urls.values()]
-    warning_msg = f"Redirect chains lead to different final URLs: {', '.join(urls_list)}"
-    warnings.append(warning_msg)
-    logger.warning(warning_msg)
+    error_msg = f"Redirect chains lead to different final URLs: {', '.join(urls_list)}"
+    errors.append(error_msg)
+    logger.error(error_msg)
+
+    # Also add as warning for backward compatibility
+    warnings.append(error_msg)
 
     # Choose preferred URL (priority: https with www > https without www > http)
     def url_priority(url: str) -> tuple[int, int, str]:
@@ -179,7 +184,7 @@ def get_preferred_final_url(
     preferred_url, preferred_response = final_urls[preferred_normalized]
 
     logger.info(f"Using preferred final URL for analysis: {preferred_url}")
-    return preferred_url, preferred_response, warnings
+    return preferred_url, preferred_response, warnings, errors
 
 
 @app.command()
@@ -415,9 +420,10 @@ def analyze(
             logger.info("Running security headers analysis...")
 
             # Get the preferred final URL from all redirect chains
-            final_url, final_response, url_warnings = get_preferred_final_url(http_result)
+            final_url, final_response, url_warnings, url_errors = get_preferred_final_url(http_result)
 
-            # Add any warnings about inconsistent redirect chains
+            # Add any errors/warnings about inconsistent redirect chains
+            http_result.errors.extend(url_errors)
             http_result.warnings.extend(url_warnings)
 
             # Only analyze if we have a successful final URL
@@ -512,7 +518,7 @@ def analyze(
                 # Use preferred final URL from HTTP analysis if available
                 verification_url = None
                 if http_result:
-                    final_url, final_response, _ = get_preferred_final_url(http_result)
+                    final_url, final_response, _, _ = get_preferred_final_url(http_result)
                     verification_url = final_url
 
                 site_verification_result = site_verification_analyzer.analyze(

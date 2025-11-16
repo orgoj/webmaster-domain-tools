@@ -156,12 +156,13 @@ class TestGetPreferredFinalUrl:
             ]
         ))
 
-        final_url, final_response, warnings = get_preferred_final_url(http_result)
+        final_url, final_response, warnings, errors = get_preferred_final_url(http_result)
 
         assert final_url == "https://www.example.com/"
         assert final_response is not None
         assert final_response.status_code == 200
         assert len(warnings) == 0  # No warnings when all chains match
+        assert len(errors) == 0  # No errors when all chains match
 
     def test_different_final_urls_prefers_https_www(self):
         """Test when chains lead to different URLs, prefer HTTPS with www."""
@@ -185,10 +186,12 @@ class TestGetPreferredFinalUrl:
             ]
         ))
 
-        final_url, final_response, warnings = get_preferred_final_url(http_result)
+        final_url, final_response, warnings, errors = get_preferred_final_url(http_result)
 
         assert final_url == "https://www.example.com/"
-        assert len(warnings) == 1  # Should warn about inconsistent chains
+        assert len(errors) == 1  # Should ERROR about inconsistent chains
+        assert "different final URLs" in errors[0]
+        assert len(warnings) == 1  # Also added as warning
         assert "different final URLs" in warnings[0]
 
     def test_different_final_urls_prefers_https_no_www(self):
@@ -213,10 +216,11 @@ class TestGetPreferredFinalUrl:
             ]
         ))
 
-        final_url, final_response, warnings = get_preferred_final_url(http_result)
+        final_url, final_response, warnings, errors = get_preferred_final_url(http_result)
 
         assert final_url == "https://example.com/"
-        assert len(warnings) == 1
+        assert len(errors) == 1  # Should ERROR about inconsistent chains
+        assert len(warnings) == 1  # Also added as warning
 
     def test_url_normalization_trailing_slash(self):
         """Test URLs with/without trailing slash are treated as same."""
@@ -240,11 +244,12 @@ class TestGetPreferredFinalUrl:
             ]
         ))
 
-        final_url, final_response, warnings = get_preferred_final_url(http_result)
+        final_url, final_response, warnings, errors = get_preferred_final_url(http_result)
 
         # Should recognize both as same URL
         assert final_url in ["https://www.example.com/", "https://www.example.com"]
         assert len(warnings) == 0  # No warning since URLs are same after normalization
+        assert len(errors) == 0  # No errors since URLs are same after normalization
 
     def test_no_successful_chains(self):
         """Test when no chains have successful (200) responses."""
@@ -259,18 +264,20 @@ class TestGetPreferredFinalUrl:
             ]
         ))
 
-        final_url, final_response, warnings = get_preferred_final_url(http_result)
+        final_url, final_response, warnings, errors = get_preferred_final_url(http_result)
 
         assert final_url is None
         assert final_response is None
         assert len(warnings) == 0
+        assert len(errors) == 0
 
     def test_empty_chains(self):
         """Test when HTTP result has no chains."""
         http_result = HTTPAnalysisResult(domain="example.com")
 
-        final_url, final_response, warnings = get_preferred_final_url(http_result)
+        final_url, final_response, warnings, errors = get_preferred_final_url(http_result)
 
         assert final_url is None
         assert final_response is None
         assert len(warnings) == 0
+        assert len(errors) == 0
