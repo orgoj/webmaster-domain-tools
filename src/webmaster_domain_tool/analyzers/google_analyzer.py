@@ -138,13 +138,15 @@ class GoogleAnalyzer:
 
     def _fetch_html_content(self, domain: str, result: GoogleAnalysisResult) -> None:
         """
-        Fetch HTML content from the domain's HTTPS endpoint.
+        Fetch HTML content from the domain (tries HTTPS first, falls back to HTTP).
 
         Args:
             domain: Domain to fetch
             result: Result object to store HTML content
         """
-        url = f"https://{domain}"
+        # Try HTTPS first
+        https_url = f"https://{domain}"
+        https_error = None
 
         try:
             with httpx.Client(
@@ -153,31 +155,64 @@ class GoogleAnalyzer:
                 verify=True,
             ) as client:
                 response = client.get(
-                    url,
+                    https_url,
                     headers={"User-Agent": self.user_agent},
                 )
 
                 if response.status_code == 200:
                     result.html_content = response.text
-                    logger.debug(f"Successfully fetched HTML content from {url}")
+                    logger.debug(f"Successfully fetched HTML content from {https_url}")
+                    return  # Success, no need to try HTTP
                 else:
-                    error_msg = f"HTTP {response.status_code} when fetching {url}"
+                    https_error = f"HTTP {response.status_code}"
+                    logger.debug(f"HTTPS returned {response.status_code}, will try HTTP")
+
+        except httpx.ConnectError as e:
+            # ConnectError includes SSL errors, connection refused, etc.
+            https_error = f"Connection error: {str(e)}"
+            logger.debug(f"HTTPS connection failed, will try HTTP: {e}")
+
+        except httpx.TimeoutException:
+            https_error = "Timeout"
+            logger.debug(f"HTTPS timeout, will try HTTP")
+
+        except Exception as e:
+            https_error = f"Error: {str(e)}"
+            logger.debug(f"HTTPS failed, will try HTTP: {e}")
+
+        # HTTPS failed, try HTTP
+        http_url = f"http://{domain}"
+        try:
+            with httpx.Client(
+                timeout=self.timeout,
+                follow_redirects=True,
+            ) as client:
+                response = client.get(
+                    http_url,
+                    headers={"User-Agent": self.user_agent},
+                )
+
+                if response.status_code == 200:
+                    result.html_content = response.text
+                    logger.debug(f"Successfully fetched HTML content from {http_url}")
+                    return  # Success
+                else:
+                    error_msg = f"HTTP {response.status_code} (HTTPS: {https_error})"
                     result.html_fetch_error = error_msg
                     logger.warning(error_msg)
 
         except httpx.ConnectError as e:
-            # ConnectError includes SSL errors, connection refused, etc.
-            error_msg = f"Connection error fetching HTML: {str(e)}"
+            error_msg = f"Connection error on both HTTPS and HTTP: {str(e)}"
             result.html_fetch_error = error_msg
             logger.warning(error_msg)
 
         except httpx.TimeoutException:
-            error_msg = f"Timeout fetching HTML from {url}"
+            error_msg = f"Timeout on both HTTPS and HTTP"
             result.html_fetch_error = error_msg
             logger.warning(error_msg)
 
         except Exception as e:
-            error_msg = f"Error fetching HTML: {str(e)}"
+            error_msg = f"Error fetching HTML (HTTPS: {https_error}, HTTP: {str(e)})"
             result.html_fetch_error = error_msg
             logger.error(error_msg)
 
