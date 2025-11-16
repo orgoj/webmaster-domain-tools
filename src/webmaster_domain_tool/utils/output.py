@@ -1,22 +1,21 @@
 """Output formatting using rich library."""
 
-
 from rich import box
 from rich.console import Console
 from rich.table import Table
 from rich.tree import Tree
 
+from ..analyzers.advanced_email_security import AdvancedEmailSecurityResult
+from ..analyzers.cdn_detector import CDNDetectionResult
 from ..analyzers.dns_analyzer import DNSAnalysisResult
 from ..analyzers.email_security import EmailSecurityResult
+from ..analyzers.favicon_analyzer import FaviconAnalysisResult
 from ..analyzers.http_analyzer import HTTPAnalysisResult
 from ..analyzers.rbl_checker import RBLAnalysisResult
 from ..analyzers.security_headers import SecurityHeadersResult
-from ..analyzers.site_verification_analyzer import SiteVerificationAnalysisResult
-from ..analyzers.ssl_analyzer import SSLAnalysisResult
-from ..analyzers.advanced_email_security import AdvancedEmailSecurityResult
-from ..analyzers.cdn_detector import CDNDetectionResult
-from ..analyzers.favicon_analyzer import FaviconAnalysisResult
 from ..analyzers.seo_files_analyzer import SEOFilesAnalysisResult
+from ..analyzers.site_verification_analyzer import SiteVerificationAnalysisResult
+from ..analyzers.ssl_analyzer import CertificateInfo, SSLAnalysisResult
 from ..analyzers.whois_analyzer import WhoisAnalysisResult
 from ..constants import (
     DEFAULT_SSL_EXPIRY_CRITICAL_DAYS,
@@ -220,7 +219,9 @@ class OutputFormatter:
             exp_str = result.expiration_date.strftime("%Y-%m-%d %H:%M:%S")
             if result.days_until_expiry is not None:
                 if result.days_until_expiry < 0:
-                    exp_display = f"[red]{exp_str} (EXPIRED {abs(result.days_until_expiry)} days ago)[/red]"
+                    exp_display = (
+                        f"[red]{exp_str} (EXPIRED {abs(result.days_until_expiry)} days ago)[/red]"
+                    )
                 elif result.days_until_expiry <= 7:
                     exp_display = f"[red]{exp_str} ({result.days_until_expiry} days)[/red]"
                 elif result.days_until_expiry <= 30:
@@ -321,8 +322,8 @@ class OutputFormatter:
             records_by_domain.keys(),
             key=lambda d: (
                 0 if d == result.domain else (1 if d == f"www.{result.domain}" else 2),
-                d
-            )
+                d,
+            ),
         )
 
         # Print records for each domain
@@ -403,7 +404,9 @@ class OutputFormatter:
         # Show DNSSEC status
         if result.dnssec and result.dnssec.enabled:
             status = "✓" if result.dnssec.valid else "⚠"
-            self.console.print(f"  DNSSEC: [{('green' if result.dnssec.valid else 'yellow')}]{status}[/]")
+            self.console.print(
+                f"  DNSSEC: [{('green' if result.dnssec.valid else 'yellow')}]{status}[/]"
+            )
 
         # Show info messages (not counted as warnings)
         for info in result.info_messages:
@@ -516,7 +519,9 @@ class OutputFormatter:
         elif result.warnings:
             status = f"[yellow]⚠ HTTP: OK, {len(result.warnings)} warnings[/yellow]"
         else:
-            ok_chains = sum(1 for c in result.chains if c.responses and c.responses[-1].status_code == 200)
+            ok_chains = sum(
+                1 for c in result.chains if c.responses and c.responses[-1].status_code == 200
+            )
             status = f"[green]✓ HTTP: {ok_chains}/{len(result.chains)} OK[/green]"
         self.console.print(status)
 
@@ -552,11 +557,17 @@ class OutputFormatter:
                             parts.append(f"{resp.url} ({resp.status_code})")
                     redirect_info = " → ".join(parts)
                     # Remove the start_url from redirect_info since we show it separately
-                    redirect_info = redirect_info.replace(f"{chain.start_url} ({chain.responses[0].status_code}) → ", "")
-                    self.console.print(f"  [{status_color}]{status_symbol}[/] {chain.start_url} ({chain.responses[0].status_code}) → {redirect_info}")
+                    redirect_info = redirect_info.replace(
+                        f"{chain.start_url} ({chain.responses[0].status_code}) → ", ""
+                    )
+                    self.console.print(
+                        f"  [{status_color}]{status_symbol}[/] {chain.start_url} ({chain.responses[0].status_code}) → {redirect_info}"
+                    )
                 else:
                     # No redirect, just show URL with status
-                    self.console.print(f"  [{status_color}]{status_symbol}[/] {chain.start_url} ({last_response.status_code})")
+                    self.console.print(
+                        f"  [{status_color}]{status_symbol}[/] {chain.start_url} ({last_response.status_code})"
+                    )
 
         # Show errors
         for error in result.errors:
@@ -570,13 +581,17 @@ class OutputFormatter:
 
         # Show which URL is used for further analysis
         if result.preferred_final_url:
-            self.console.print(f"  [dim]→ Using {result.preferred_final_url} for security headers and site verification analysis[/dim]")
+            self.console.print(
+                f"  [dim]→ Using {result.preferred_final_url} for security headers and site verification analysis[/dim]"
+            )
 
         # Show path check result if available
         if result.path_check_result:
             path_check = result.path_check_result
             if path_check.success:
-                self.console.print(f"  [green]✓ Path check: {path_check.path} exists ({path_check.content_length} bytes, {path_check.response_time:.2f}s)[/green]")
+                self.console.print(
+                    f"  [green]✓ Path check: {path_check.path} exists ({path_check.content_length} bytes, {path_check.response_time:.2f}s)[/green]"
+                )
             else:
                 error_msg = f"Path check failed: {path_check.path} - {path_check.error}"
                 self.all_errors.append(("HTTP", error_msg))
@@ -627,14 +642,18 @@ class OutputFormatter:
 
         # Show which URL is used for further analysis
         if result.preferred_final_url:
-            self.console.print(f"[dim]→ Using {result.preferred_final_url} for security headers and site verification analysis[/dim]")
+            self.console.print(
+                f"[dim]→ Using {result.preferred_final_url} for security headers and site verification analysis[/dim]"
+            )
             self.console.print()
 
         # Show path check result if available
         if result.path_check_result:
             path_check = result.path_check_result
             if path_check.success:
-                self.console.print(f"[green]✓ Path check: {path_check.path} exists ({path_check.content_length} bytes, {path_check.response_time:.2f}s)[/green]")
+                self.console.print(
+                    f"[green]✓ Path check: {path_check.path} exists ({path_check.content_length} bytes, {path_check.response_time:.2f}s)[/green]"
+                )
             else:
                 error_msg = f"Path check failed: {path_check.path} - {path_check.error}"
                 self.all_errors.append(("HTTP", error_msg))
@@ -659,7 +678,10 @@ class OutputFormatter:
         elif result.errors:
             status = f"[red]✗ SSL: {len(result.errors)} errors[/red]"
         elif result.warnings:
-            min_days = min((c.days_until_expiry for c in result.certificates.values() if not c.errors), default=999)
+            min_days = min(
+                (c.days_until_expiry for c in result.certificates.values() if not c.errors),
+                default=999,
+            )
             status = f"[yellow]⚠ SSL: Valid ({min_days}d), {len(result.warnings)} warnings[/yellow]"
         else:
             min_days = min((c.days_until_expiry for c in result.certificates.values()), default=999)
@@ -825,7 +847,7 @@ class OutputFormatter:
     def print_email_security_results(
         self,
         result: EmailSecurityResult,
-        advanced_result: "AdvancedEmailSecurityResult | None" = None
+        advanced_result: "AdvancedEmailSecurityResult | None" = None,
     ) -> None:
         """Print email security analysis results (SPF/DKIM/DMARC + advanced)."""
         if self.verbosity == "quiet":
@@ -840,7 +862,7 @@ class OutputFormatter:
     def _print_email_quiet(
         self,
         result: EmailSecurityResult,
-        advanced_result: "AdvancedEmailSecurityResult | None" = None
+        advanced_result: "AdvancedEmailSecurityResult | None" = None,
     ) -> None:
         """Print email security results in quiet mode."""
         spf_ok = result.spf and result.spf.is_valid
@@ -878,7 +900,7 @@ class OutputFormatter:
     def _print_email_compact(
         self,
         result: EmailSecurityResult,
-        advanced_result: "AdvancedEmailSecurityResult | None" = None
+        advanced_result: "AdvancedEmailSecurityResult | None" = None,
     ) -> None:
         """Print email security results in compact mode."""
         self.console.print("[bold blue]Email Security[/bold blue]")
@@ -907,7 +929,11 @@ class OutputFormatter:
         # DMARC
         if result.dmarc:
             symbol = "✓" if result.dmarc.is_valid else "⚠"
-            color = "green" if result.dmarc.is_valid and result.dmarc.policy in ("quarantine", "reject") else "yellow"
+            color = (
+                "green"
+                if result.dmarc.is_valid and result.dmarc.policy in ("quarantine", "reject")
+                else "yellow"
+            )
             # Show full DMARC record
             self.console.print(f"  [{color}]{symbol}[/] DMARC: {result.dmarc.record}")
         else:
@@ -919,33 +945,40 @@ class OutputFormatter:
             # BIMI
             if advanced_result.bimi:
                 if advanced_result.bimi.record_found:
-                    self.console.print(f"  [green]✓[/] BIMI configured")
+                    self.console.print("  [green]✓[/] BIMI configured")
                     if advanced_result.bimi.logo_url and self.verbosity in ["verbose", "debug"]:
                         self.console.print(f"    [dim]Logo: {advanced_result.bimi.logo_url}[/dim]")
                 else:
-                    self.console.print(f"  [dim]BIMI not configured[/dim]")
+                    self.console.print("  [dim]BIMI not configured[/dim]")
 
             # MTA-STS
             if advanced_result.mta_sts:
                 if advanced_result.mta_sts.policy_found:
-                    mode_color = "green" if advanced_result.mta_sts.policy_mode == "enforce" else "yellow"
-                    self.console.print(f"  [{mode_color}]✓[/] MTA-STS (mode: {advanced_result.mta_sts.policy_mode})")
+                    mode_color = (
+                        "green" if advanced_result.mta_sts.policy_mode == "enforce" else "yellow"
+                    )
+                    self.console.print(
+                        f"  [{mode_color}]✓[/] MTA-STS (mode: {advanced_result.mta_sts.policy_mode})"
+                    )
                 elif advanced_result.mta_sts.record_found:
                     for error in advanced_result.mta_sts.errors:
                         self.all_errors.append(("Email/MTA-STS", error))
                         self.console.print(f"  [red]✗ MTA-STS: {error}[/red]")
                 else:
-                    self.console.print(f"  [dim]MTA-STS not configured[/dim]")
+                    self.console.print("  [dim]MTA-STS not configured[/dim]")
 
             # TLS-RPT
             if advanced_result.tls_rpt:
                 if advanced_result.tls_rpt.record_found:
-                    self.console.print(f"  [green]✓[/] TLS-RPT configured")
-                    if advanced_result.tls_rpt.reporting_addresses and self.verbosity in ["verbose", "debug"]:
+                    self.console.print("  [green]✓[/] TLS-RPT configured")
+                    if advanced_result.tls_rpt.reporting_addresses and self.verbosity in [
+                        "verbose",
+                        "debug",
+                    ]:
                         for addr in advanced_result.tls_rpt.reporting_addresses:
                             self.console.print(f"    [dim]Reporting: {addr}[/dim]")
                 else:
-                    self.console.print(f"  [dim]TLS-RPT not configured[/dim]")
+                    self.console.print("  [dim]TLS-RPT not configured[/dim]")
 
         # Show actual warnings (deduplicated)
         seen_warnings = set()
@@ -961,7 +994,7 @@ class OutputFormatter:
     def _print_email_verbose(
         self,
         result: EmailSecurityResult,
-        advanced_result: "AdvancedEmailSecurityResult | None" = None
+        advanced_result: "AdvancedEmailSecurityResult | None" = None,
     ) -> None:
         """Print email security results in verbose mode."""
         self.console.print("[bold blue]═══ Email Security ═══[/bold blue]")
@@ -991,7 +1024,9 @@ class OutputFormatter:
 
         # DKIM
         if result.dkim:
-            self.console.print(f"[green]✓[/green] [cyan]DKIM Records ({len(result.dkim)} found)[/cyan]")
+            self.console.print(
+                f"[green]✓[/green] [cyan]DKIM Records ({len(result.dkim)} found)[/cyan]"
+            )
             for selector, dkim in result.dkim.items():
                 dkim_status = "[green]✓[/green]" if dkim.is_valid else "[red]✗[/red]"
                 self.console.print(f"  {dkim_status} Selector: [yellow]{selector}[/yellow]")
@@ -1049,7 +1084,7 @@ class OutputFormatter:
             # BIMI
             if advanced_result.bimi:
                 if advanced_result.bimi.record_found:
-                    self.console.print(f"[green]✓[/green] [cyan]BIMI configured[/cyan]")
+                    self.console.print("[green]✓[/green] [cyan]BIMI configured[/cyan]")
                     if advanced_result.bimi.logo_url:
                         self.console.print(f"  Logo URL: {advanced_result.bimi.logo_url}")
                     if advanced_result.bimi.vmc_url:
@@ -1060,13 +1095,17 @@ class OutputFormatter:
             # MTA-STS
             if advanced_result.mta_sts:
                 if advanced_result.mta_sts.policy_found:
-                    mode_color = "green" if advanced_result.mta_sts.policy_mode == "enforce" else "yellow"
+                    mode_color = (
+                        "green" if advanced_result.mta_sts.policy_mode == "enforce" else "yellow"
+                    )
                     self.console.print(f"[{mode_color}]✓[/{mode_color}] [cyan]MTA-STS[/cyan]")
                     self.console.print(f"  Mode: {advanced_result.mta_sts.policy_mode}")
                     if advanced_result.mta_sts.max_age:
                         self.console.print(f"  Max Age: {advanced_result.mta_sts.max_age} seconds")
                     if advanced_result.mta_sts.mx_patterns:
-                        self.console.print(f"  MX patterns: {', '.join(advanced_result.mta_sts.mx_patterns)}")
+                        self.console.print(
+                            f"  MX patterns: {', '.join(advanced_result.mta_sts.mx_patterns)}"
+                        )
                 elif advanced_result.mta_sts.record_found:
                     for error in advanced_result.mta_sts.errors:
                         self.all_errors.append(("Email/MTA-STS", error))
@@ -1077,7 +1116,7 @@ class OutputFormatter:
             # TLS-RPT
             if advanced_result.tls_rpt:
                 if advanced_result.tls_rpt.record_found:
-                    self.console.print(f"[green]✓[/green] [cyan]TLS-RPT configured[/cyan]")
+                    self.console.print("[green]✓[/green] [cyan]TLS-RPT configured[/cyan]")
                     for addr in advanced_result.tls_rpt.reporting_addresses:
                         self.console.print(f"  Reporting: {addr}")
                 else:
@@ -1111,11 +1150,11 @@ class OutputFormatter:
         score_color = (
             "green"
             if result.score >= SECURITY_SCORE_GOOD
-            else "yellow"
-            if result.score >= SECURITY_SCORE_WARNING
-            else "red"
+            else "yellow" if result.score >= SECURITY_SCORE_WARNING else "red"
         )
-        self.console.print(f"[bold blue]Security Headers[/bold blue] [{score_color}]({result.score}/100)[/]")
+        self.console.print(
+            f"[bold blue]Security Headers[/bold blue] [{score_color}]({result.score}/100)[/]"
+        )
 
         present_count = sum(1 for h in result.headers.values() if h.present)
         total_count = len(result.headers)
@@ -1140,13 +1179,9 @@ class OutputFormatter:
         score_color = (
             "green"
             if result.score >= SECURITY_SCORE_GOOD
-            else "yellow"
-            if result.score >= SECURITY_SCORE_WARNING
-            else "red"
+            else "yellow" if result.score >= SECURITY_SCORE_WARNING else "red"
         )
-        self.console.print(
-            f"[{score_color}]Security Score: {result.score}/100[/{score_color}]"
-        )
+        self.console.print(f"[{score_color}]Security Score: {result.score}/100[/{score_color}]")
         self.console.print()
 
         # Create headers table
@@ -1211,7 +1246,9 @@ class OutputFormatter:
 
         listed_count = sum(1 for c in result.checks if c.listed)
         if listed_count > 0:
-            self.console.print(f"  [red]✗ {listed_count}/{len(result.checks)} IP(s) blacklisted[/red]")
+            self.console.print(
+                f"  [red]✗ {listed_count}/{len(result.checks)} IP(s) blacklisted[/red]"
+            )
             for check in result.checks:
                 if check.listed:
                     self.console.print(f"    {check.ip}: {', '.join(check.blacklists)}")
@@ -1284,7 +1321,10 @@ class OutputFormatter:
         # Print status for each service
         for service_result in result.service_results:
             # Skip services with no results
-            if not service_result.verification_results and not service_result.detected_verification_ids:
+            if (
+                not service_result.verification_results
+                and not service_result.detected_verification_ids
+            ):
                 continue
 
             # Count verification results
@@ -1321,13 +1361,20 @@ class OutputFormatter:
 
         # Print HTML fetch error if any
         if result.html_fetch_error:
-            self.all_warnings.append(("Site Verification", f"Could not fetch HTML: {result.html_fetch_error}"))
-            self.console.print(f"  [yellow]⚠ Could not fetch HTML: {result.html_fetch_error}[/yellow]")
+            self.all_warnings.append(
+                ("Site Verification", f"Could not fetch HTML: {result.html_fetch_error}")
+            )
+            self.console.print(
+                f"  [yellow]⚠ Could not fetch HTML: {result.html_fetch_error}[/yellow]"
+            )
 
         # Print results for each service
         for service_result in result.service_results:
             # Skip services with no results
-            if not service_result.verification_results and not service_result.detected_verification_ids:
+            if (
+                not service_result.verification_results
+                and not service_result.detected_verification_ids
+            ):
                 continue
 
             self.console.print(f"  [bold cyan]{service_result.service}[/bold cyan]")
@@ -1344,7 +1391,10 @@ class OutputFormatter:
                         )
                     else:
                         self.all_errors.append(
-                            (f"{service_result.service}/Verification", f"ID {verification.verification_id} not found")
+                            (
+                                f"{service_result.service}/Verification",
+                                f"ID {verification.verification_id} not found",
+                            )
                         )
                         self.console.print(
                             f"      [red]✗ {verification.verification_id}[/red] "
@@ -1366,8 +1416,7 @@ class OutputFormatter:
             self.console.print("  [dim]Tracking Codes:[/dim]")
             for code in result.tracking_codes:
                 self.console.print(
-                    f"    [cyan]• {code.name}:[/cyan] {code.code} "
-                    f"[dim]({code.location})[/dim]"
+                    f"    [cyan]• {code.name}:[/cyan] {code.code} " f"[dim]({code.location})[/dim]"
                 )
         elif not result.html_fetch_error and result.service_results:
             # Only show "no tracking codes" if we successfully fetched HTML
@@ -1394,7 +1443,9 @@ class OutputFormatter:
 
         # Print HTML fetch status
         if result.html_fetch_error:
-            self.all_warnings.append(("Site Verification", f"Could not fetch HTML: {result.html_fetch_error}"))
+            self.all_warnings.append(
+                ("Site Verification", f"Could not fetch HTML: {result.html_fetch_error}")
+            )
             self.console.print(f"[yellow]⚠ HTML Fetch Error: {result.html_fetch_error}[/yellow]")
             self.console.print()
         else:
@@ -1404,7 +1455,10 @@ class OutputFormatter:
         # Print verification tables for each service
         for service_result in result.service_results:
             # Skip services with no results
-            if not service_result.verification_results and not service_result.detected_verification_ids:
+            if (
+                not service_result.verification_results
+                and not service_result.detected_verification_ids
+            ):
                 continue
 
             self.console.print(f"[bold cyan]═══ {service_result.service} ═══[/bold cyan]")
@@ -1412,7 +1466,9 @@ class OutputFormatter:
 
             # Site Verification Table (configured)
             if service_result.verification_results:
-                self.console.print(f"[bold]{service_result.service} Verification (Configured)[/bold]")
+                self.console.print(
+                    f"[bold]{service_result.service} Verification (Configured)[/bold]"
+                )
                 table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
                 table.add_column("Verification ID")
                 table.add_column("Status")
@@ -1426,7 +1482,10 @@ class OutputFormatter:
                         status = "[red]✗ NOT FOUND[/red]"
                         methods = "[dim]—[/dim]"
                         self.all_errors.append(
-                            (f"{service_result.service}/Verification", f"ID {verification.verification_id} not found")
+                            (
+                                f"{service_result.service}/Verification",
+                                f"ID {verification.verification_id} not found",
+                            )
                         )
 
                     table.add_row(verification.verification_id, status, methods)
@@ -1436,17 +1495,16 @@ class OutputFormatter:
 
             # Auto-detected Verification IDs Table
             if service_result.detected_verification_ids:
-                self.console.print(f"[bold]{service_result.service} Verification (Auto-detected)[/bold]")
+                self.console.print(
+                    f"[bold]{service_result.service} Verification (Auto-detected)[/bold]"
+                )
                 table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
                 table.add_column("Verification ID")
                 table.add_column("Methods Found")
 
                 for verification in service_result.detected_verification_ids:
                     methods = ", ".join(verification.methods)
-                    table.add_row(
-                        f"[cyan]{verification.verification_id}[/cyan]",
-                        methods
-                    )
+                    table.add_row(f"[cyan]{verification.verification_id}[/cyan]", methods)
 
                 self.console.print(table)
                 self.console.print()
@@ -1460,11 +1518,7 @@ class OutputFormatter:
             table.add_column("Location")
 
             for code in result.tracking_codes:
-                table.add_row(
-                    code.name,
-                    f"[cyan]{code.code}[/cyan]",
-                    f"[dim]{code.location}[/dim]"
-                )
+                table.add_row(code.name, f"[cyan]{code.code}[/cyan]", f"[dim]{code.location}[/dim]")
 
             self.console.print(table)
             self.console.print()
@@ -1570,9 +1624,13 @@ class OutputFormatter:
         for sitemap in result.sitemaps:
             if sitemap.exists:
                 if sitemap.is_index:
-                    self.console.print(f"  [green]✓ Sitemap[/green]: {sitemap.url} - {sitemap.sitemap_count} sitemap(s)")
+                    self.console.print(
+                        f"  [green]✓ Sitemap[/green]: {sitemap.url} - {sitemap.sitemap_count} sitemap(s)"
+                    )
                 else:
-                    self.console.print(f"  [green]✓ Sitemap[/green]: {sitemap.url} - {sitemap.url_count} URL(s)")
+                    self.console.print(
+                        f"  [green]✓ Sitemap[/green]: {sitemap.url} - {sitemap.url_count} URL(s)"
+                    )
             elif sitemap.errors:
                 # Sitemap referenced but has errors
                 error_msg = sitemap.errors[0] if sitemap.errors else "Unknown error"
@@ -1603,7 +1661,7 @@ class OutputFormatter:
                     "html": "Found in HTML",
                     "default": "Default path",
                     "manifest": "Web App Manifest",
-                    "meta": "Meta tag"
+                    "meta": "Meta tag",
                 }
                 source_label = source_labels.get(favicon.source, favicon.source)
 
@@ -1636,7 +1694,9 @@ class OutputFormatter:
 
                 # Full output
                 self.console.print(f"  [green]✓[/green] {favicon.url}")
-                self.console.print(f"    [dim]{source_label}{dims_info}{size_info}{extra_str}[/dim]")
+                self.console.print(
+                    f"    [dim]{source_label}{dims_info}{size_info}{extra_str}[/dim]"
+                )
 
         # Display warnings
         for warning in result.warnings:
@@ -1644,7 +1704,7 @@ class OutputFormatter:
             self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
         if not found_favicons and not result.warnings:
-            self.console.print(f"  [dim]No favicons found[/dim]")
+            self.console.print("  [dim]No favicons found[/dim]")
 
     def print_cdn_results(self, result: CDNDetectionResult) -> None:
         """Print CDN detection results."""
@@ -1654,16 +1714,21 @@ class OutputFormatter:
         self.console.print("[bold blue]CDN Detection[/bold blue]")
 
         if result.cdn_detected:
-            confidence_color = {"high": "green", "medium": "yellow", "low": "dim"}.get(result.confidence, "dim")
-            self.console.print(f"  [{confidence_color}]✓ CDN detected: {result.cdn_provider}[/{confidence_color}]")
-            self.console.print(f"    Method: {result.detection_method}, Confidence: {result.confidence}")
+            confidence_color = {"high": "green", "medium": "yellow", "low": "dim"}.get(
+                result.confidence, "dim"
+            )
+            self.console.print(
+                f"  [{confidence_color}]✓ CDN detected: {result.cdn_provider}[/{confidence_color}]"
+            )
+            self.console.print(
+                f"    Method: {result.detection_method}, Confidence: {result.confidence}"
+            )
             if self.verbosity in ["verbose", "debug"]:
                 for evidence in result.evidence:
                     self.console.print(f"    [dim]• {evidence}[/dim]")
         else:
-            self.console.print(f"  [dim]No CDN detected[/dim]")
+            self.console.print("  [dim]No CDN detected[/dim]")
 
         for warning in result.warnings:
             self.all_warnings.append(("CDN", warning))
             self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
-

@@ -1,0 +1,52 @@
+#!/bin/bash
+#
+# SessionStart hook for webmaster-domain-tools
+# This script runs automatically when starting a new Claude Code session
+# to ensure the development environment is properly configured.
+#
+
+set -e  # Exit on error
+
+echo "🔧 Setting up development environment..."
+
+# Change to project root
+cd "$(dirname "$0")/../.." || exit 1
+
+# 1. Sync dependencies (including dev dependencies)
+echo "📦 Syncing dependencies..."
+if ! uv sync --dev --quiet; then
+    echo "❌ Failed to sync dependencies"
+    exit 1
+fi
+
+# 2. Install pre-commit hooks
+echo "🪝 Installing pre-commit hooks..."
+if ! uv pip install pre-commit --quiet 2>/dev/null; then
+    echo "❌ Failed to install pre-commit"
+    exit 1
+fi
+
+if ! uv run pre-commit install; then
+    echo "❌ Failed to install pre-commit hooks"
+    exit 1
+fi
+
+# 3. Verify pre-commit is working
+if [ -f .git/hooks/pre-commit ]; then
+    echo "✅ Pre-commit hooks installed successfully"
+else
+    echo "⚠️  Warning: Pre-commit hooks may not be installed properly"
+fi
+
+# 4. Run a quick format check (optional - only in verbose mode)
+# Uncomment if you want to auto-format on session start:
+# echo "🎨 Running code formatters..."
+# uv run pre-commit run --all-files || true
+
+echo "✅ Development environment ready!"
+echo ""
+echo "💡 Quick commands:"
+echo "   uv run wdt analyze example.com  - Run analysis"
+echo "   uv run pytest                   - Run tests"
+echo "   uv run pre-commit run --all-files - Run linters"
+echo ""
