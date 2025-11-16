@@ -166,7 +166,7 @@ def get_preferred_final_url(
     urls_list = [url for url, _ in final_urls.values()]
     error_msg = f"Redirect chains lead to different final URLs: {', '.join(urls_list)}"
     errors.append(error_msg)
-    logger.error(error_msg)
+    logger.debug(f"Configuration error detected: {error_msg}")
 
     # Also add as warning for backward compatibility
     warnings.append(error_msg)
@@ -389,6 +389,12 @@ def analyze(
                 max_redirects=max_redirects if max_redirects else config.http.max_redirects,
             )
             http_result = http_analyzer.analyze(domain)
+
+            # Analyze redirect chains and add any errors/warnings BEFORE printing
+            _, _, url_warnings, url_errors = get_preferred_final_url(http_result)
+            http_result.errors.extend(url_errors)
+            http_result.warnings.extend(url_warnings)
+
             formatter.print_http_results(http_result)
 
         # SSL/TLS Analysis
@@ -420,11 +426,8 @@ def analyze(
             logger.info("Running security headers analysis...")
 
             # Get the preferred final URL from all redirect chains
-            final_url, final_response, url_warnings, url_errors = get_preferred_final_url(http_result)
-
-            # Add any errors/warnings about inconsistent redirect chains
-            http_result.errors.extend(url_errors)
-            http_result.warnings.extend(url_warnings)
+            # (errors/warnings already added to http_result in HTTP analysis section)
+            final_url, final_response, _, _ = get_preferred_final_url(http_result)
 
             # Only analyze if we have a successful final URL
             if final_url and final_response:
