@@ -451,6 +451,7 @@ class OutputFormatter:
         self.console.print()
 
         if not result.certificates:
+            self.all_errors.append(("SSL", "No SSL certificates found"))
             self.console.print("[red]✗ No SSL certificates found[/red]")
             self.console.print()
             return
@@ -591,6 +592,7 @@ class OutputFormatter:
             # Show full SPF record
             self.console.print(f"  [{color}]{symbol}[/] SPF: {result.spf.record}")
         else:
+            self.all_errors.append(("Email/SPF", "SPF: Not configured"))
             self.console.print("  [red]✗ SPF: Not configured[/red]")
 
         # DKIM
@@ -600,7 +602,9 @@ class OutputFormatter:
         else:
             # Show which selectors were searched
             searched = ", ".join(result.dkim_selectors_searched)
-            self.console.print(f"  [yellow]⚠ DKIM: Not found (searched: {searched})[/yellow]")
+            warning_msg = f"DKIM: Not found (searched: {searched})"
+            self.all_warnings.append(("Email/DKIM", warning_msg))
+            self.console.print(f"  [yellow]⚠ {warning_msg}[/yellow]")
 
         # DMARC
         if result.dmarc:
@@ -609,6 +613,7 @@ class OutputFormatter:
             # Show full DMARC record
             self.console.print(f"  [{color}]{symbol}[/] DMARC: {result.dmarc.record}")
         else:
+            self.all_errors.append(("Email/DMARC", "DMARC: Not configured"))
             self.console.print("  [red]✗ DMARC: Not configured[/red]")
 
         # Show actual warnings (deduplicated)
@@ -644,6 +649,7 @@ class OutputFormatter:
                 self.all_errors.append(("Email/SPF", error))
                 self.console.print(f"  [red]✗ {error}[/red]")
         else:
+            self.all_errors.append(("Email/SPF", "No SPF record found"))
             self.console.print("[red]✗ No SPF record found[/red]")
 
         self.console.print()
@@ -663,6 +669,7 @@ class OutputFormatter:
                     self.all_errors.append(("Email/DKIM", error))
                     self.console.print(f"     [red]✗ {error}[/red]")
         else:
+            self.all_warnings.append(("Email/DKIM", "No DKIM records found"))
             self.console.print("[yellow]⚠ No DKIM records found[/yellow]")
 
         self.console.print()
@@ -695,6 +702,7 @@ class OutputFormatter:
                 self.all_errors.append(("Email/DMARC", error))
                 self.console.print(f"  [red]✗ {error}[/red]")
         else:
+            self.all_errors.append(("Email/DMARC", "No DMARC record found"))
             self.console.print("[red]✗ No DMARC record found[/red]")
 
         self.console.print()
