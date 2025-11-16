@@ -74,6 +74,22 @@ Comprehensive tool for webmasters that analyzes and clearly displays all importa
 - ✅ Security score (0-100)
 - ✅ Detailed recommendations for each header
 
+### Google Services
+- ✅ **Google Site Verification**
+  - DNS TXT record verification
+  - HTML file verification (`google{id}.html`)
+  - Meta tag verification
+  - Multiple verification ID support
+  - Shows all verification methods found
+- ✅ **Tracking Codes Detection**
+  - Google Tag Manager (GTM)
+  - Google Analytics 4 (GA4)
+  - Google Ads Conversion Tracking (GAds)
+  - Universal Analytics (UA)
+  - Google Optimize
+  - Google AdSense
+  - Location tracking (HTML head vs body)
+
 ## Installation
 
 ### Via uvx (recommended)
@@ -170,6 +186,15 @@ dkim_selectors = ["default", "google", "k1"]
 check_rbl = true
 rbl_servers = ["zen.spamhaus.org", "bl.spamcop.net"]
 
+# Site verification - predefined services (Google, Facebook, Pinterest, Bing, Yandex)
+[[site_verification.services]]
+name = "Google"
+ids = ["abc123def456"]  # Add your IDs here or use --verify CLI arg
+
+[[site_verification.services]]
+name = "Facebook"
+ids = []  # Use --verify Facebook:your-id or add here
+
 [output]
 color = true
 verbosity = "normal"  # quiet, normal, verbose, debug
@@ -177,6 +202,7 @@ verbosity = "normal"  # quiet, normal, verbose, debug
 [analysis]
 skip_dns = false
 skip_email = false
+skip_site_verification = false
 ```
 
 ### Options
@@ -208,6 +234,7 @@ wdt analyze -d example.com
 - ✅ SSL/TLS analysis - enabled
 - ✅ Email security (SPF, DKIM, DMARC) - enabled
 - ✅ Security headers - enabled
+- ✅ Site verification - enabled (auto-detects verification IDs from multiple services)
 - ❌ RBL check - disabled (enable with `--check-rbl`)
 
 ```bash
@@ -226,8 +253,11 @@ wdt analyze --skip-email example.com
 # Skip security headers
 wdt analyze --skip-headers example.com
 
+# Skip site verification analysis
+wdt analyze --skip-site-verification example.com
+
 # Combination - DNS and SSL only
-wdt analyze --skip-http --skip-email --skip-headers example.com
+wdt analyze --skip-http --skip-email --skip-headers --skip-site-verification example.com
 ```
 
 #### DKIM Selectors
@@ -275,6 +305,55 @@ With CNAME:
 - ✅ Only need to change CNAME target in one place
 - ✅ Automatic IP address updates
 - ✅ Easier migration between providers
+
+#### Google Services
+
+**Site Verification** - Verify your domain for multiple services (Google, Facebook, Pinterest, Bing, Yandex):
+
+```bash
+# Check single verification ID
+wdt analyze --verify Google:abc123def456 example.com
+
+# Check multiple services (comma-separated)
+wdt analyze --verify "Google:abc123,Facebook:fb-code" example.com
+
+# Or use --verify multiple times
+wdt analyze --verify Google:abc123 --verify Facebook:fb-code example.com
+```
+
+**Supported services (built-in):**
+- **Google**: DNS TXT, HTML file (`google{id}.html`), Meta tag
+- **Facebook**: DNS TXT, Meta tag
+- **Pinterest**: Meta tag
+- **Bing**: HTML file (`BingSiteAuth.xml`), Meta tag
+- **Yandex**: HTML file (`yandex_{id}.html`), Meta tag
+
+All services have **auto-detection enabled** by default - the tool will find verification IDs even if you don't specify them!
+
+**Tracking Codes Detection** - Automatically detects Google tracking codes (GTM, GA4, GAds, UA, etc.):
+- Runs automatically when site verification analysis is enabled
+- No configuration needed - just run the analysis
+- Shows which tracking codes are found and where (HTML head vs body)
+
+```bash
+# View site verification and tracking codes (runs by default)
+wdt analyze example.com
+
+# Skip site verification entirely
+wdt analyze --skip-site-verification example.com
+```
+
+You can also configure verification IDs in the config file:
+
+```toml
+[[site_verification.services]]
+name = "Google"
+ids = ["abc123def456", "ghi789jkl012"]
+
+[[site_verification.services]]
+name = "Facebook"
+ids = ["your-facebook-id"]
+```
 
 #### RBL (Blacklist) Check
 
@@ -358,16 +437,26 @@ The tool displays a clear colored output divided into sections:
 - Recommendations for missing headers
 - Detailed warnings for each header
 
-### 6. RBL (Blacklist) Check
+### 6. Google Services
+- **Site Verification status** for each configured ID
+  - ✅/✗ status
+  - List of verification methods found (DNS, file, meta tag)
+- **Tracking Codes table**
+  - Type (GTM, GA4, GAds, etc.)
+  - Code ID
+  - Location (HTML head or body)
+- Warnings for HTML fetch errors
+
+### 7. RBL (Blacklist) Check
 - Table of checked IP addresses
 - Status of each IP (CLEAN / LISTED)
 - List of blacklists where IP is found
 - Warnings for found blacklists
 
-### 7. Summary
+### 8. Summary
 - Total count of errors and warnings
 - **Detailed list of all errors/warnings with categories**
-- Each error/warning shown with precise description and category (DNS, HTTP, SSL, Email, etc.)
+- Each error/warning shown with precise description and category (DNS, HTTP, SSL, Email, Google, etc.)
 - 100% accurate counting - count always matches displayed messages
 
 ## Requirements
@@ -428,6 +517,7 @@ webmaster-domain-tool/
 │       │   ├── ssl_analyzer.py        # SSL/TLS analysis
 │       │   ├── email_security.py      # SPF, DKIM, DMARC
 │       │   ├── security_headers.py    # Security headers
+│       │   ├── site_verification_analyzer.py  # Universal site verification (Google, Facebook, etc.) + tracking codes
 │       │   └── rbl_checker.py         # RBL blacklist check
 │       └── utils/
 │           ├── __init__.py

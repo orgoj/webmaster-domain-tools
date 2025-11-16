@@ -31,6 +31,7 @@ class CertificateInfo:
     san: list[str] = field(default_factory=list)  # Subject Alternative Names
     is_valid: bool = True
     days_until_expiry: int = 0
+    status: str = "ok"  # "ok", "mismatch", "none"
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -163,7 +164,15 @@ class SSLAnalyzer:
                     return cert_info
 
         except ssl.SSLError as e:
-            logger.error(f"SSL error for {domain}:{port}: {e}")
+            logger.debug(f"SSL error for {domain}:{port}: {e}")
+
+            # Determine status based on error message
+            error_str = str(e).lower()
+            if "hostname mismatch" in error_str or "not valid for" in error_str:
+                status = "mismatch"
+            else:
+                status = "none"
+
             cert_info = CertificateInfo(
                 subject={},
                 issuer={},
@@ -172,8 +181,8 @@ class SSLAnalyzer:
                 not_before=datetime.now(),
                 not_after=datetime.now(),
                 is_valid=False,
+                status=status,
             )
-            cert_info.errors.append(f"SSL error: {str(e)}")
             return cert_info
 
         except socket.timeout:

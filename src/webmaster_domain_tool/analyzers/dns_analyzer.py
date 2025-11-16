@@ -4,10 +4,10 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-import dns.resolver
-import dns.exception
 import dns.dnssec
+import dns.exception
 import dns.name
+import dns.resolver
 import dns.reversename
 
 logger = logging.getLogger(__name__)
@@ -120,10 +120,11 @@ class DNSAnalyzer:
             DNSAnalysisResult with all DNS information
         """
         logger.info(f"Starting DNS analysis for {domain}")
-        result = DNSAnalysisResult(domain=domain)
 
         # Normalize domain (remove trailing dot if present)
         domain = domain.rstrip(".")
+
+        result = DNSAnalysisResult(domain=domain)
 
         # Check main domain
         self._check_domain_records(domain, result)
@@ -193,13 +194,17 @@ class DNSAnalyzer:
                                         ttl=a_answers.ttl,
                                     )
                                     # Check for duplicates in CNAME_A records
-                                    if not any(r.value == a_record.value for r in result.records[a_key]):
+                                    if not any(
+                                        r.value == a_record.value for r in result.records[a_key]
+                                    ):
                                         result.records[a_key].append(a_record)
                                 logger.debug(f"Resolved CNAME {cname_target} to A records")
                             except Exception as e:
                                 logger.debug(f"Could not resolve CNAME target {cname_target}: {e}")
 
-                logger.debug(f"Found {len(result.records[key])} unique {record_type} records for {domain}")
+                logger.debug(
+                    f"Found {len(result.records[key])} unique {record_type} records for {domain}"
+                )
 
             except dns.resolver.NXDOMAIN:
                 logger.debug(f"Domain {domain} does not exist")
@@ -303,9 +308,7 @@ class DNSAnalyzer:
                         self.resolver.resolve(mx_host, "A")
                         logger.debug(f"MX host {mx_host} resolves correctly")
                     except Exception as e:
-                        result.warnings.append(
-                            f"MX host {mx_host} does not resolve: {str(e)}"
-                        )
+                        result.warnings.append(f"MX host {mx_host} does not resolve: {str(e)}")
 
     def _check_ptr_records(self, result: DNSAnalysisResult) -> None:
         """Check PTR (reverse DNS) records for all A records."""
@@ -380,7 +383,6 @@ class DNSAnalyzer:
             # We need to query parent zone for DS records
             if len(domain_name.labels) > 2:  # Has parent zone
                 try:
-                    parent_domain = ".".join(domain.split(".")[1:])
                     ds_answers = self.resolver.resolve(domain, "DS")
                     if ds_answers:
                         dnssec_info.has_ds = True

@@ -28,6 +28,10 @@ from .analyzers.ssl_analyzer import SSLAnalyzer
 from .analyzers.email_security import EmailSecurityAnalyzer
 from .analyzers.security_headers import SecurityHeadersAnalyzer
 from .analyzers.rbl_checker import RBLChecker, extract_ips_from_dns_result
+from .analyzers.site_verification_analyzer import (
+    SiteVerificationAnalyzer,
+    ServiceConfig,
+)
 from .config import load_config, create_default_user_config, Config
 from .utils.logger import setup_logger, VerbosityLevel
 from .utils.output import OutputFormatter
@@ -160,11 +164,22 @@ def analyze(
         "--skip-headers",
         help="Skip security headers analysis",
     ),
+    skip_site_verification: bool = typer.Option(
+        False,
+        "--skip-site-verification",
+        help="Skip site verification analysis (Google, Facebook, Pinterest, etc.)",
+    ),
     # Email security options
     dkim_selectors: Optional[str] = typer.Option(
         None,
         "--dkim-selectors",
         help="Comma-separated list of DKIM selectors to check (e.g., 'default,google,k1')",
+    ),
+    # Site verification options
+    verify: Optional[list[str]] = typer.Option(
+        None,
+        "--verify",
+        help="Add verification IDs (format: 'Service:ID' or 'Service1:ID1,Service2:ID2'). Can be used multiple times.",
     ),
     # HTTP options
     timeout: float = typer.Option(
@@ -253,6 +268,7 @@ def analyze(
     skip_ssl = skip_ssl or config.analysis.skip_ssl
     skip_email = skip_email or config.analysis.skip_email
     skip_headers = skip_headers or config.analysis.skip_headers
+    skip_site_verification = skip_site_verification or config.analysis.skip_site_verification
 
     # Determine RBL check
     do_rbl_check = check_rbl if check_rbl is not None else config.email.check_rbl
@@ -342,6 +358,74 @@ def analyze(
                     formatter.print_security_headers_results(headers_result)
                     seen_urls.add(headers_result.url)
 
+        # Site Verification Analysis (Google, Facebook, Pinterest, etc.)
+        site_verification_result = None
+        if not skip_site_verification:
+            # Build list of service configurations from config
+            services = []
+            for service_cfg in config.site_verification.services:
+                services.append(ServiceConfig(
+                    name=service_cfg.name,
+                    ids=list(service_cfg.ids),  # Copy to avoid modifying config
+                    dns_pattern=service_cfg.dns_pattern,
+                    file_pattern=service_cfg.file_pattern,
+                    meta_name=service_cfg.meta_name,
+                    auto_detect=service_cfg.auto_detect,
+                ))
+
+            # Parse and add CLI-provided verification IDs
+            if verify:
+                for verify_arg in verify:
+                    # Support comma-separated values in single --verify
+                    # e.g., --verify "Google:ABC,Facebook:XYZ"
+                    verify_items = [item.strip() for item in verify_arg.split(",")]
+
+                    for verify_item in verify_items:
+                        # Parse format: Service:ID
+                        if ":" not in verify_item:
+                            logger.error(
+                                f"Invalid --verify format: '{verify_item}'. "
+                                f"Expected format: 'Service:ID' (e.g., 'Google:ABC123')"
+                            )
+                            continue
+
+                        service_name, verification_id = verify_item.split(":", 1)
+                        service_name = service_name.strip()
+                        verification_id = verification_id.strip()
+
+                        if not service_name or not verification_id:
+                            logger.error(
+                                f"Invalid --verify format: '{verify_item}'. "
+                                f"Both service name and ID are required."
+                            )
+                            continue
+
+                        # Find service in list
+                        service = next((s for s in services if s.name == service_name), None)
+                        if service:
+                            # Add CLI ID to existing service (if not already there)
+                            if verification_id not in service.ids:
+                                service.ids.append(verification_id)
+                                logger.debug(f"Added verification ID for {service_name}: {verification_id}")
+                        else:
+                            # Service not in config, log warning
+                            logger.warning(
+                                f"Service '{service_name}' not found in predefined services. "
+                                f"Available services: {', '.join(s.name for s in services)}. "
+                                f"Add custom service to config.site_verification.services if needed."
+                            )
+
+            # Only run if there are services configured
+            if services:
+                logger.info("Running site verification analysis...")
+                site_verification_analyzer = SiteVerificationAnalyzer(
+                    services=services,
+                    timeout=timeout if timeout else config.http.timeout,
+                    nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
+                )
+                site_verification_result = site_verification_analyzer.analyze(domain)
+                formatter.print_site_verification_results(site_verification_result)
+
         # RBL (Blacklist) Check
         rbl_result = None
         if do_rbl_check and dns_result:
@@ -365,6 +449,7 @@ def analyze(
             email_result=email_result,
             security_headers=security_headers_results,
             rbl_result=rbl_result,
+            site_verification_result=site_verification_result,
         )
 
         logger.info("Analysis complete")
