@@ -21,6 +21,10 @@ from ..analyzers.security_headers import SecurityHeadersResult
 from ..analyzers.rbl_checker import RBLAnalysisResult
 from ..analyzers.site_verification_analyzer import SiteVerificationAnalysisResult
 from ..analyzers.whois_analyzer import WhoisAnalysisResult
+from ..analyzers.seo_files_analyzer import SEOFilesAnalysisResult
+from ..analyzers.favicon_analyzer import FaviconAnalysisResult
+from ..analyzers.advanced_email_security import AdvancedEmailSecurityResult
+from ..analyzers.cdn_detector import CDNDetectionResult
 
 # Output formatting constants
 MAX_SAN_DISPLAY = 5
@@ -1345,6 +1349,10 @@ class OutputFormatter:
         security_headers: list[SecurityHeadersResult] | None = None,
         rbl_result: RBLAnalysisResult | None = None,
         site_verification_result: SiteVerificationAnalysisResult | None = None,
+        seo_result: SEOFilesAnalysisResult | None = None,
+        favicon_result: FaviconAnalysisResult | None = None,
+        advanced_email_result: AdvancedEmailSecurityResult | None = None,
+        cdn_result: CDNDetectionResult | None = None,
     ) -> None:
         """Print summary of all results."""
         if self.verbosity == "quiet":
@@ -1380,3 +1388,122 @@ class OutputFormatter:
                     self.console.print(f"  [yellow]• [{category}] {warning}[/yellow]")
 
         self.console.print()
+
+    def print_seo_results(self, result: SEOFilesAnalysisResult) -> None:
+        """Print SEO files analysis results."""
+        if self.verbosity == "quiet":
+            return
+
+        self.console.print("[bold blue]SEO Files[/bold blue]")
+
+        # robots.txt
+        if result.robots:
+            if result.robots.exists:
+                self.console.print(f"  [green]✓ robots.txt[/green] ({result.robots.size} bytes)")
+                if result.robots.sitemaps:
+                    for sitemap in result.robots.sitemaps:
+                        self.console.print(f"    Sitemap: {sitemap}")
+            else:
+                for error in result.robots.errors:
+                    self.all_errors.append(("SEO", error))
+                    self.console.print(f"  [red]✗ robots.txt: {error}[/red]")
+                for warning in result.robots.warnings:
+                    self.all_warnings.append(("SEO", warning))
+                    self.console.print(f"  [yellow]⚠ robots.txt: {warning}[/yellow]")
+
+        # llms.txt
+        if result.llms_txt:
+            if result.llms_txt.exists:
+                self.console.print(f"  [green]✓ llms.txt[/green] ({result.llms_txt.size} bytes)")
+
+        # sitemaps
+        for sitemap in result.sitemaps:
+            if sitemap.exists:
+                if sitemap.is_index:
+                    self.console.print(f"  [green]✓ Sitemap index[/green]: {sitemap.sitemap_count} sitemaps")
+                else:
+                    self.console.print(f"  [green]✓ Sitemap[/green]: {sitemap.url_count} URLs")
+            for error in sitemap.errors:
+                self.all_errors.append(("SEO", error))
+                self.console.print(f"  [red]✗ Sitemap: {error}[/red]")
+            for warning in sitemap.warnings:
+                self.all_warnings.append(("SEO", warning))
+                self.console.print(f"  [yellow]⚠ Sitemap: {warning}[/yellow]")
+
+    def print_favicon_results(self, result: FaviconAnalysisResult) -> None:
+        """Print favicon detection results."""
+        if self.verbosity == "quiet":
+            return
+
+        self.console.print("[bold blue]Favicons[/bold blue]")
+
+        found_favicons = [f for f in result.favicons if f.exists]
+
+        if found_favicons:
+            for favicon in found_favicons:
+                size_info = f" ({favicon.size_bytes} bytes)" if favicon.size_bytes else ""
+                rel_info = f" [{favicon.rel}]" if favicon.rel else ""
+                sizes_info = f" {favicon.sizes}" if favicon.sizes else ""
+                self.console.print(f"  [green]✓ {favicon.url}{size_info}{rel_info}{sizes_info}[/green]")
+        else:
+            for warning in result.warnings:
+                self.all_warnings.append(("Favicon", warning))
+                self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
+
+    def print_advanced_email_results(self, result: AdvancedEmailSecurityResult) -> None:
+        """Print advanced email security results."""
+        if self.verbosity == "quiet":
+            return
+
+        self.console.print("[bold blue]Advanced Email Security[/bold blue]")
+
+        # BIMI
+        if result.bimi:
+            if result.bimi.record_found:
+                self.console.print(f"  [green]✓ BIMI configured[/green]")
+                if result.bimi.logo_url:
+                    self.console.print(f"    Logo: {result.bimi.logo_url}")
+            else:
+                self.console.print(f"  [dim]BIMI not configured[/dim]")
+
+        # MTA-STS
+        if result.mta_sts:
+            if result.mta_sts.policy_found:
+                self.console.print(f"  [green]✓ MTA-STS[/green] (mode: {result.mta_sts.policy_mode})")
+            elif result.mta_sts.record_found:
+                for error in result.mta_sts.errors:
+                    self.all_errors.append(("Email/MTA-STS", error))
+                    self.console.print(f"  [red]✗ MTA-STS: {error}[/red]")
+            else:
+                self.console.print(f"  [dim]MTA-STS not configured[/dim]")
+
+        # TLS-RPT
+        if result.tls_rpt:
+            if result.tls_rpt.record_found:
+                self.console.print(f"  [green]✓ TLS-RPT configured[/green]")
+                for addr in result.tls_rpt.reporting_addresses:
+                    self.console.print(f"    Reporting: {addr}")
+            else:
+                self.console.print(f"  [dim]TLS-RPT not configured[/dim]")
+
+    def print_cdn_results(self, result: CDNDetectionResult) -> None:
+        """Print CDN detection results."""
+        if self.verbosity == "quiet":
+            return
+
+        self.console.print("[bold blue]CDN Detection[/bold blue]")
+
+        if result.cdn_detected:
+            confidence_color = {"high": "green", "medium": "yellow", "low": "dim"}.get(result.confidence, "dim")
+            self.console.print(f"  [{confidence_color}]✓ CDN detected: {result.cdn_provider}[/{confidence_color}]")
+            self.console.print(f"    Method: {result.detection_method}, Confidence: {result.confidence}")
+            if self.verbosity in ["verbose", "debug"]:
+                for evidence in result.evidence:
+                    self.console.print(f"    [dim]• {evidence}[/dim]")
+        else:
+            self.console.print(f"  [dim]No CDN detected[/dim]")
+
+        for warning in result.warnings:
+            self.all_warnings.append(("CDN", warning))
+            self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
+
