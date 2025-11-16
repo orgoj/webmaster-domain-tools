@@ -56,6 +56,7 @@ class HTTPAnalyzer:
         timeout: float = 10.0,
         max_redirects: int = 10,
         user_agent: str | None = None,
+        skip_www: bool = False,
     ):
         """
         Initialize HTTP analyzer.
@@ -64,12 +65,14 @@ class HTTPAnalyzer:
             timeout: Request timeout in seconds
             max_redirects: Maximum number of redirects to follow
             user_agent: Custom user agent string
+            skip_www: Skip testing www subdomain (useful for subdomains or domains without www)
         """
         self.timeout = timeout
         self.max_redirects = max_redirects
         self.user_agent = user_agent or (
             "Mozilla/5.0 (compatible; WebmasterDomainTool/0.1; +https://github.com/orgoj/webmaster-domain-tool)"
         )
+        self.skip_www = skip_www
 
     def analyze(self, domain: str) -> HTTPAnalysisResult:
         """
@@ -91,9 +94,14 @@ class HTTPAnalyzer:
         urls_to_test = [
             f"http://{domain}",
             f"https://{domain}",
-            f"http://www.{domain}",
-            f"https://www.{domain}",
         ]
+
+        # Add www variants unless skip_www is enabled
+        if not self.skip_www:
+            urls_to_test.extend([
+                f"http://www.{domain}",
+                f"https://www.{domain}",
+            ])
 
         for url in urls_to_test:
             logger.debug(f"Testing URL: {url}")

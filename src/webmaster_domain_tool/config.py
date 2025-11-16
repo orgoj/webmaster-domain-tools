@@ -237,6 +237,10 @@ class AnalysisConfig(BaseModel):
         default=False, description="Skip site verification analysis"
     )
     skip_whois: bool = Field(default=False, description="Skip WHOIS analysis")
+    skip_www: bool = Field(
+        default=False,
+        description="Skip testing www subdomain (useful for subdomains or domains without www)",
+    )
 
 
 class Config(BaseSettings):
@@ -470,6 +474,7 @@ skip_email = false
 skip_headers = false
 skip_site_verification = false
 skip_whois = false
+skip_www = false  # Skip testing www subdomain (useful for subdomains or domains without www)
 """
         )
         logger.info(f"Created default config file: {config_path}")

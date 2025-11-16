@@ -79,6 +79,7 @@ class DNSAnalyzer:
         nameservers: list[str] | None = None,
         check_dnssec: bool = True,
         warn_www_not_cname: bool = False,
+        skip_www: bool = False,
     ):
         """
         Initialize DNS analyzer.
@@ -87,9 +88,11 @@ class DNSAnalyzer:
             nameservers: Optional list of nameservers to use for queries
             check_dnssec: Whether to check DNSSEC validation
             warn_www_not_cname: Warn if www subdomain is not a CNAME record
+            skip_www: Skip checking www subdomain (useful for subdomains or domains without www)
         """
         self.check_dnssec = check_dnssec
         self.warn_www_not_cname = warn_www_not_cname
+        self.skip_www = skip_www
 
         # Try to create resolver with system config, fallback to manual config
         try:
@@ -130,8 +133,8 @@ class DNSAnalyzer:
         # Check main domain
         self._check_domain_records(domain, result)
 
-        # Check www subdomain if not already a subdomain
-        if not domain.startswith("www."):
+        # Check www subdomain if not already a subdomain and not skipping www
+        if not self.skip_www and not domain.startswith("www."):
             www_domain = f"www.{domain}"
             self._check_domain_records(www_domain, result)
 

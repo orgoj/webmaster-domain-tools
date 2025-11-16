@@ -246,6 +246,11 @@ def analyze(
         "--skip-whois",
         help="Skip WHOIS registration analysis",
     ),
+    skip_www: bool = typer.Option(
+        False,
+        "--skip-www",
+        help="Skip testing www subdomain (useful for subdomains or domains without www)",
+    ),
     # Email security options
     dkim_selectors: Optional[str] = typer.Option(
         None,
@@ -371,6 +376,7 @@ def analyze(
                 nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
                 check_dnssec=config.dns.check_dnssec,
                 warn_www_not_cname=warn_www_not_cname if warn_www_not_cname is not None else config.dns.warn_www_not_cname,
+                skip_www=skip_www if skip_www else config.analysis.skip_www,
             )
             dns_result = dns_analyzer.analyze(domain)
             formatter.print_dns_results(dns_result)
@@ -384,6 +390,7 @@ def analyze(
             http_analyzer = HTTPAnalyzer(
                 timeout=timeout if timeout else config.http.timeout,
                 max_redirects=max_redirects if max_redirects else config.http.max_redirects,
+                skip_www=skip_www if skip_www else config.analysis.skip_www,
             )
             http_result = http_analyzer.analyze(domain)
 
