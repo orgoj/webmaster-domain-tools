@@ -30,8 +30,8 @@ dkim_selectors = [
     "s1",
     "s2",
 ]
-# Check realtime blacklists (RBL) for mail servers
-check_rbl = true
+# Check realtime blacklists (RBL) for mail servers (default: false, enable with --check-rbl)
+check_rbl = false
 # RBL servers to query
 rbl_servers = [
     "zen.spamhaus.org",        # Spamhaus ZEN (combined list)

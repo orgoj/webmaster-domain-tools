@@ -197,6 +197,14 @@ wdt analyze -d example.com
 
 #### Přeskočení určitých kontrol
 
+**Defaultní stav:**
+- ✅ DNS analýza - zapnuto
+- ✅ HTTP/HTTPS analýza - zapnuto
+- ✅ SSL/TLS analýza - zapnuto
+- ✅ Email security (SPF, DKIM, DMARC) - zapnuto
+- ✅ Security headers - zapnuto
+- ❌ RBL kontrola - vypnuto (zapnout pomocí `--check-rbl`)
+
 ```bash
 # Přeskočit DNS analýzu
 wdt analyze --skip-dns example.com
@@ -247,15 +255,17 @@ wdt analyze --nameservers "8.8.8.8,1.1.1.1" example.com
 
 #### RBL (Blacklist) kontrola
 
-```bash
-# Vypnout RBL kontrolu
-wdt analyze --no-check-rbl example.com
+**Defaultně vypnuto** - RBL kontrola je výchozím nastavením vypnutá, protože může zpomalit analýzu.
 
-# Zapnout RBL kontrolu (pokud je vypnutá v configu)
+```bash
+# Zapnout RBL kontrolu
 wdt analyze --check-rbl example.com
+
+# Vypnout RBL kontrolu (pokud je zapnutá v configu)
+wdt analyze --no-check-rbl example.com
 ```
 
-Standardně se kontrolují:
+Pokud zapnuto, kontrolují se tyto RBL servery:
 - Spamhaus ZEN (`zen.spamhaus.org`)
 - SpamCop (`bl.spamcop.net`)
 - Barracuda Central (`b.barracudacentral.org`)
