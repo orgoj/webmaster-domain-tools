@@ -7,6 +7,8 @@ from typing import Any
 
 import whois
 
+from .base import BaseAnalysisResult, BaseAnalyzer
+
 logger = logging.getLogger(__name__)
 
 # Default expiry warning threshold (in days)
@@ -15,10 +17,9 @@ DEFAULT_WHOIS_EXPIRY_CRITICAL_DAYS = 7
 
 
 @dataclass
-class WhoisAnalysisResult:
+class WhoisAnalysisResult(BaseAnalysisResult):
     """Results from WHOIS analysis."""
 
-    domain: str
     registrar: str | None = None
     creation_date: datetime | None = None
     expiration_date: datetime | None = None
@@ -30,11 +31,9 @@ class WhoisAnalysisResult:
     nameservers: list[str] = field(default_factory=list)
     status: list[str] = field(default_factory=list)
     days_until_expiry: int | None = None
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
 
 
-class WhoisAnalyzer:
+class WhoisAnalyzer(BaseAnalyzer[WhoisAnalysisResult]):
     """Analyzes WHOIS registration information for a domain."""
 
     def __init__(

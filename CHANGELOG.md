@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Major Code Refactoring: Improved Architecture and Reduced Duplication**
+  - Introduced `BaseAnalyzer` abstract class for all analyzers, ensuring consistent interface
+  - Introduced `BaseAnalysisResult` dataclass for all analysis results
+  - Centralized DNS resolver creation in `analyzers/dns_utils.py` (eliminates ~50 lines of duplicated code)
+  - Centralized HTTP utilities in `analyzers/http_utils.py` for consistent error handling
+  - All 13 analyzers now inherit from `BaseAnalyzer[TResult]` with proper type safety
+  - Refactored analyzer results to inherit from `BaseAnalysisResult`, removing duplicate `domain`, `errors`, and `warnings` fields
+  - Improved code maintainability and consistency across all analyzers
+  - No functional changes - all features work identically
+
 ### Added
 - **WHOIS Information Analyzer**
   - Domain registration details (registrar, creation/expiration dates)

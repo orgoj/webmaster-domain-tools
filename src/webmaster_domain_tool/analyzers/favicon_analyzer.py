@@ -11,6 +11,8 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from .base import BaseAnalysisResult, BaseAnalyzer
+
 logger = logging.getLogger(__name__)
 
 
@@ -201,18 +203,15 @@ class FaviconInfo:
 
 
 @dataclass
-class FaviconAnalysisResult:
+class FaviconAnalysisResult(BaseAnalysisResult):
     """Results from favicon analysis."""
 
-    domain: str
-    base_url: str
+    base_url: str = ""
     favicons: list[FaviconInfo] = field(default_factory=list)
     has_default_favicon: bool = False  # /favicon.ico exists
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
 
 
-class FaviconAnalyzer:
+class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
     """Analyzes favicon presence and variants."""
 
     # Common default favicon locations (ordered by priority/frequency)

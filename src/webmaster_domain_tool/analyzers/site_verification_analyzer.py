@@ -9,11 +9,12 @@ import dns.resolver
 import httpx
 
 from ..constants import (
-    DEFAULT_DNS_PUBLIC_SERVERS,
     DEFAULT_SITE_VERIFICATION_TIMEOUT,
     DEFAULT_USER_AGENT,
     TRACKING_PATTERNS,
 )
+from .dns_utils import create_resolver
+from .base import BaseAnalysisResult, BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +61,9 @@ class ServiceResult:
 
 
 @dataclass
-class SiteVerificationAnalysisResult:
+class SiteVerificationAnalysisResult(BaseAnalysisResult):
     """Results from site verification analysis."""
 
-    domain: str
     html_content: str | None = None  # Cached HTML content
     html_fetch_error: str | None = None
 
@@ -73,11 +73,8 @@ class SiteVerificationAnalysisResult:
     # Tracking codes (legacy - Google specific)
     tracking_codes: list[TrackingCode] = field(default_factory=list)
 
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
 
-
-class SiteVerificationAnalyzer:
+class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
     """Universal site verification analyzer supporting multiple services (Google, Facebook, Pinterest, etc)."""
 
     def __init__(
@@ -106,20 +103,8 @@ class SiteVerificationAnalyzer:
             for name, (pattern, description) in TRACKING_PATTERNS.items()
         }
 
-        # Setup DNS resolver
-        try:
-            self.resolver = dns.resolver.Resolver()
-            if not self.resolver.nameservers:
-                raise dns.resolver.NoResolverConfiguration("no nameservers")
-        except (dns.resolver.NoResolverConfiguration, OSError):
-            self.resolver = dns.resolver.Resolver(configure=False)
-            logger.debug("System DNS not available, using public DNS servers")
-
-        if nameservers:
-            self.resolver.nameservers = nameservers
-        elif not self.resolver.nameservers:
-            self.resolver.nameservers = DEFAULT_DNS_PUBLIC_SERVERS
-            logger.debug("Using fallback public DNS servers")
+        # Create DNS resolver using centralized utility
+        self.resolver = create_resolver(nameservers=nameservers, timeout=timeout)
 
     def analyze(
         self, domain: str, url: str | None = None

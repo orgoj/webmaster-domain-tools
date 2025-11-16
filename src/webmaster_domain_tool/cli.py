@@ -606,7 +606,7 @@ def analyze(
                     rbl_servers=config.email.rbl_servers,
                     timeout=config.dns.timeout,
                 )
-                rbl_result = rbl_checker.check_ips(ips)
+                rbl_result = rbl_checker.check_ips(domain, ips)
                 formatter.print_rbl_results(rbl_result)
             else:
                 logger.debug("No IP addresses found for RBL check")
