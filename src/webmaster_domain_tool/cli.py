@@ -176,30 +176,10 @@ def analyze(
         help="Comma-separated list of DKIM selectors to check (e.g., 'default,google,k1')",
     ),
     # Site verification options
-    google_id: Optional[str] = typer.Option(
+    verify: Optional[list[str]] = typer.Option(
         None,
-        "--google-id",
-        help="Google Site Verification ID to check",
-    ),
-    facebook_id: Optional[str] = typer.Option(
-        None,
-        "--facebook-id",
-        help="Facebook Domain Verification ID to check",
-    ),
-    pinterest_id: Optional[str] = typer.Option(
-        None,
-        "--pinterest-id",
-        help="Pinterest Domain Verification ID to check",
-    ),
-    bing_id: Optional[str] = typer.Option(
-        None,
-        "--bing-id",
-        help="Bing Site Verification ID to check",
-    ),
-    yandex_id: Optional[str] = typer.Option(
-        None,
-        "--yandex-id",
-        help="Yandex Webmaster Verification ID to check",
+        "--verify",
+        help="Add verification ID for a service (format: Service:ID, e.g., 'Google:ABC123'). Can be used multiple times.",
     ),
     # HTTP options
     timeout: float = typer.Option(
@@ -393,28 +373,41 @@ def analyze(
                     auto_detect=service_cfg.auto_detect,
                 ))
 
-            # Add CLI-provided IDs to corresponding services
-            cli_ids = {
-                "Google": google_id,
-                "Facebook": facebook_id,
-                "Pinterest": pinterest_id,
-                "Bing": bing_id,
-                "Yandex": yandex_id,
-            }
+            # Parse and add CLI-provided verification IDs
+            if verify:
+                for verify_arg in verify:
+                    # Parse format: Service:ID
+                    if ":" not in verify_arg:
+                        logger.error(
+                            f"Invalid --verify format: '{verify_arg}'. "
+                            f"Expected format: 'Service:ID' (e.g., 'Google:ABC123')"
+                        )
+                        continue
 
-            for service_name, cli_id in cli_ids.items():
-                if cli_id:
+                    service_name, verification_id = verify_arg.split(":", 1)
+                    service_name = service_name.strip()
+                    verification_id = verification_id.strip()
+
+                    if not service_name or not verification_id:
+                        logger.error(
+                            f"Invalid --verify format: '{verify_arg}'. "
+                            f"Both service name and ID are required."
+                        )
+                        continue
+
                     # Find service in list
                     service = next((s for s in services if s.name == service_name), None)
                     if service:
                         # Add CLI ID to existing service (if not already there)
-                        if cli_id not in service.ids:
-                            service.ids.append(cli_id)
+                        if verification_id not in service.ids:
+                            service.ids.append(verification_id)
+                            logger.debug(f"Added verification ID for {service_name}: {verification_id}")
                     else:
                         # Service not in config, log warning
                         logger.warning(
-                            f"Service '{service_name}' not found in config. "
-                            f"Add it to config.site_verification.services to use --{service_name.lower()}-id"
+                            f"Service '{service_name}' not found in predefined services. "
+                            f"Available services: {', '.join(s.name for s in services)}. "
+                            f"Add custom service to config.site_verification.services if needed."
                         )
 
             # Only run if there are services configured
