@@ -89,6 +89,33 @@ class SecurityHeadersConfig(BaseModel):
         default=True,
         description="Check Content-Type header",
     )
+    check_cors: bool = Field(
+        default=True,
+        description="Check CORS headers (Access-Control-Allow-Origin)",
+    )
+
+
+class SEOConfig(BaseModel):
+    """SEO files configuration."""
+
+    check_robots: bool = Field(default=True, description="Check robots.txt")
+    check_llms_txt: bool = Field(default=True, description="Check /llms.txt for AI crawlers")
+    check_sitemap: bool = Field(default=True, description="Check sitemap.xml")
+
+
+class FaviconConfig(BaseModel):
+    """Favicon detection configuration."""
+
+    check_html: bool = Field(default=True, description="Parse HTML for favicon links")
+    check_defaults: bool = Field(default=True, description="Check default favicon paths")
+
+
+class AdvancedEmailConfig(BaseModel):
+    """Advanced email security configuration."""
+
+    check_bimi: bool = Field(default=True, description="Check BIMI records")
+    check_mta_sts: bool = Field(default=True, description="Check MTA-STS")
+    check_tls_rpt: bool = Field(default=True, description="Check TLS-RPT")
 
 
 class EmailConfig(BaseModel):
@@ -241,6 +268,10 @@ class AnalysisConfig(BaseModel):
         default=False,
         description="Skip testing www subdomain (useful for subdomains or domains without www)",
     )
+    skip_seo: bool = Field(default=False, description="Skip SEO files analysis (robots.txt, sitemap.xml)")
+    skip_favicon: bool = Field(default=False, description="Skip favicon detection")
+    skip_advanced_email: bool = Field(default=False, description="Skip advanced email security (BIMI, MTA-STS, TLS-RPT)")
+    skip_cdn_detection: bool = Field(default=False, description="Skip CDN detection")
 
 
 class Config(BaseSettings):
@@ -257,6 +288,9 @@ class Config(BaseSettings):
     email: EmailConfig = Field(default_factory=EmailConfig)
     whois: WhoisConfig = Field(default_factory=WhoisConfig)
     site_verification: SiteVerificationConfig = Field(default_factory=SiteVerificationConfig)
+    seo: SEOConfig = Field(default_factory=SEOConfig)
+    favicon: FaviconConfig = Field(default_factory=FaviconConfig)
+    advanced_email: AdvancedEmailConfig = Field(default_factory=AdvancedEmailConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
 
@@ -466,6 +500,20 @@ auto_detect = true
 color = true
 verbosity = "normal"  # quiet, normal, verbose, debug
 
+[seo]
+check_robots = true
+check_llms_txt = true
+check_sitemap = true
+
+[favicon]
+check_html = true
+check_defaults = true
+
+[advanced_email]
+check_bimi = true
+check_mta_sts = true
+check_tls_rpt = true
+
 [analysis]
 skip_dns = false
 skip_http = false
@@ -475,6 +523,10 @@ skip_headers = false
 skip_site_verification = false
 skip_whois = false
 skip_www = false  # Skip testing www subdomain (useful for subdomains or domains without www)
+skip_seo = false
+skip_favicon = false
+skip_advanced_email = false
+skip_cdn_detection = false
 """
         )
         logger.info(f"Created default config file: {config_path}")
