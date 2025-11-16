@@ -191,8 +191,7 @@ class TestGetPreferredFinalUrl:
         assert final_url == "https://www.example.com/"
         assert len(errors) == 1  # Should ERROR about inconsistent chains
         assert "different final URLs" in errors[0]
-        assert len(warnings) == 1  # Also added as warning
-        assert "different final URLs" in warnings[0]
+        assert len(warnings) == 0  # No warnings, only error
 
     def test_different_final_urls_prefers_https_no_www(self):
         """Test HTTPS without www is preferred over HTTP."""
@@ -220,7 +219,7 @@ class TestGetPreferredFinalUrl:
 
         assert final_url == "https://example.com/"
         assert len(errors) == 1  # Should ERROR about inconsistent chains
-        assert len(warnings) == 1  # Also added as warning
+        assert len(warnings) == 0  # No warnings, only error
 
     def test_url_normalization_trailing_slash(self):
         """Test URLs with/without trailing slash are treated as same."""

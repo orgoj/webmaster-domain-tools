@@ -168,9 +168,6 @@ def get_preferred_final_url(
     errors.append(error_msg)
     logger.debug(f"Configuration error detected: {error_msg}")
 
-    # Also add as warning for backward compatibility
-    warnings.append(error_msg)
-
     # Choose preferred URL (priority: https with www > https without www > http)
     def url_priority(url: str) -> tuple[int, int, str]:
         """Return priority tuple (https=0/http=1, has_www=0/no_www=1, url)."""
