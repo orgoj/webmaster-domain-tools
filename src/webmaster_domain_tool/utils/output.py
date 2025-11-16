@@ -281,9 +281,10 @@ class OutputFormatter:
         # Show actual warnings (deduplicated)
         seen_warnings = set()
         for warning in result.warnings:
-            # Skip duplicate warnings about HTTP ending
-            if "ends on HTTP" in warning and "does not redirect to HTTPS" in result.warnings:
-                if "ends on HTTP" in warning:
+            # Skip generic "does not redirect to HTTPS" if we have detailed "ends on HTTP" warning
+            if "does not redirect to HTTPS" in warning:
+                # Check if there's a more detailed "ends on HTTP" warning
+                if any("ends on HTTP" in w for w in result.warnings):
                     continue
             if warning not in seen_warnings:
                 self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
