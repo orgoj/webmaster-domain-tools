@@ -39,9 +39,16 @@ class OutputFormatter:
         """
         self.console = console or Console()
         self.verbosity = verbosity
+        # Central error/warning collection
+        self.all_errors: list[tuple[str, str]] = []  # (category, message)
+        self.all_warnings: list[tuple[str, str]] = []  # (category, message)
 
     def print_header(self, domain: str) -> None:
         """Print analysis header."""
+        # Reset error/warning collections for new analysis
+        self.all_errors = []
+        self.all_warnings = []
+
         if self.verbosity == "quiet":
             self.console.print(f"[bold]{domain}[/bold]")
         else:
@@ -78,6 +85,7 @@ class OutputFormatter:
 
         if result.errors:
             for error in result.errors:
+                self.all_errors.append(("DNS", error))
                 self.console.print(f"  [red]✗ {error}[/red]")
             return
 
@@ -188,6 +196,7 @@ class OutputFormatter:
 
         # Show actual warnings
         for warning in result.warnings:
+            self.all_warnings.append(("DNS", warning))
             self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
     def _print_dns_verbose(self, result: DNSAnalysisResult) -> None:
@@ -197,6 +206,7 @@ class OutputFormatter:
 
         if result.errors:
             for error in result.errors:
+                self.all_errors.append(("DNS", error))
                 self.console.print(f"[red]✗ {error}[/red]")
             self.console.print()
             return
@@ -252,8 +262,10 @@ class OutputFormatter:
                 self.console.print("  [dim]DS: ✓[/dim]")
 
             for error in dnssec.errors:
+                self.all_errors.append(("DNS/DNSSEC", error))
                 self.console.print(f"  [red]✗ {error}[/red]")
             for warning in dnssec.warnings:
+                self.all_warnings.append(("DNS/DNSSEC", warning))
                 self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
             self.console.print()
@@ -261,6 +273,7 @@ class OutputFormatter:
         # Print warnings
         if result.warnings:
             for warning in result.warnings:
+                self.all_warnings.append(("DNS", warning))
                 self.console.print(f"[yellow]⚠ {warning}[/yellow]")
             self.console.print()
 
@@ -326,6 +339,7 @@ class OutputFormatter:
 
         # Show warnings
         for warning in result.warnings:
+            self.all_warnings.append(("HTTP", warning))
             self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
     def _print_http_verbose(self, result: HTTPAnalysisResult) -> None:
@@ -361,9 +375,11 @@ class OutputFormatter:
         # Print errors and warnings
         if result.errors:
             for error in result.errors:
+                self.all_errors.append(("HTTP", error))
                 self.console.print(f"[red]✗ {error}[/red]")
         if result.warnings:
             for warning in result.warnings:
+                self.all_warnings.append(("HTTP", warning))
                 self.console.print(f"[yellow]⚠ {warning}[/yellow]")
 
         if result.errors or result.warnings:
@@ -426,6 +442,7 @@ class OutputFormatter:
 
         # Show actual warnings
         for warning in result.warnings:
+            self.all_warnings.append(("SSL", warning))
             self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
     def _print_ssl_verbose(self, result: SSLAnalysisResult) -> None:
@@ -443,6 +460,7 @@ class OutputFormatter:
                 # Certificate has errors
                 self.console.print(f"[red]✗ {domain}[/red]")
                 for error in cert.errors:
+                    self.all_errors.append(("SSL", error))
                     self.console.print(f"  [red]{error}[/red]")
                 self.console.print()
                 continue
@@ -494,6 +512,7 @@ class OutputFormatter:
             # Print warnings
             if cert.warnings:
                 for warning in cert.warnings:
+                    self.all_warnings.append(("SSL", warning))
                     self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
             self.console.print()
@@ -519,9 +538,11 @@ class OutputFormatter:
         # Print warnings and errors
         if result.errors:
             for error in result.errors:
+                self.all_errors.append(("SSL", error))
                 self.console.print(f"[red]✗ {error}[/red]")
         if result.warnings:
             for warning in result.warnings:
+                self.all_warnings.append(("SSL", warning))
                 self.console.print(f"[yellow]⚠ {warning}[/yellow]")
 
         if result.errors or result.warnings:
@@ -597,6 +618,7 @@ class OutputFormatter:
             if "No DKIM records found for selectors" in warning and not result.dkim:
                 continue
             if warning not in seen_warnings:
+                self.all_warnings.append(("Email", warning))
                 self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
                 seen_warnings.add(warning)
 
@@ -616,8 +638,10 @@ class OutputFormatter:
                 self.console.print(f"  [dim]Policy: {result.spf.qualifier}[/dim]")
 
             for warning in result.spf.warnings:
+                self.all_warnings.append(("Email/SPF", warning))
                 self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
             for error in result.spf.errors:
+                self.all_errors.append(("Email/SPF", error))
                 self.console.print(f"  [red]✗ {error}[/red]")
         else:
             self.console.print("[red]✗ No SPF record found[/red]")
@@ -633,8 +657,10 @@ class OutputFormatter:
                 self.console.print(f"     [dim]Key Type: {dkim.key_type}[/dim]")
 
                 for warning in dkim.warnings:
+                    self.all_warnings.append(("Email/DKIM", warning))
                     self.console.print(f"     [yellow]⚠ {warning}[/yellow]")
                 for error in dkim.errors:
+                    self.all_errors.append(("Email/DKIM", error))
                     self.console.print(f"     [red]✗ {error}[/red]")
         else:
             self.console.print("[yellow]⚠ No DKIM records found[/yellow]")
@@ -663,8 +689,10 @@ class OutputFormatter:
                 self.console.print(f"  [dim]Aggregate Reports: {', '.join(result.dmarc.rua)}[/dim]")
 
             for warning in result.dmarc.warnings:
+                self.all_warnings.append(("Email/DMARC", warning))
                 self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
             for error in result.dmarc.errors:
+                self.all_errors.append(("Email/DMARC", error))
                 self.console.print(f"  [red]✗ {error}[/red]")
         else:
             self.console.print("[red]✗ No DMARC record found[/red]")
@@ -714,6 +742,7 @@ class OutputFormatter:
 
         # Show actual warnings
         for warning in result.warnings:
+            self.all_warnings.append(("Security Headers", warning))
             self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
     def _print_security_headers_verbose(self, result: SecurityHeadersResult) -> None:
@@ -761,6 +790,7 @@ class OutputFormatter:
                 if check.warnings:
                     self.console.print(f"[yellow]{header_name}:[/yellow]")
                     for warning in check.warnings:
+                        self.all_warnings.append(("Security Headers", warning))
                         self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
             self.console.print()
@@ -836,6 +866,7 @@ class OutputFormatter:
         # Print warnings
         if result.warnings:
             for warning in result.warnings:
+                self.all_warnings.append(("RBL", warning))
                 self.console.print(f"[yellow]⚠ {warning}[/yellow]")
             self.console.print()
 
@@ -869,42 +900,25 @@ class OutputFormatter:
             self.console.print("[bold blue]═══ Summary ═══[/bold blue]")
             self.console.print()
 
-        # Count issues
-        total_errors = 0
-        total_warnings = 0
+        # Count issues from central arrays
+        total_errors = len(self.all_errors)
+        total_warnings = len(self.all_warnings)
 
-        if dns_result:
-            total_errors += len(dns_result.errors)
-            total_warnings += len(dns_result.warnings)
-
-        if http_result:
-            total_errors += len(http_result.errors)
-            total_warnings += len(http_result.warnings)
-
-        if ssl_result:
-            total_errors += len(ssl_result.errors)
-            total_warnings += len(ssl_result.warnings)
-
-        if email_result:
-            total_errors += len(email_result.errors)
-            total_warnings += len(email_result.warnings)
-
-        if security_headers:
-            for sh_result in security_headers:
-                total_errors += len(sh_result.errors)
-                total_warnings += len(sh_result.warnings)
-
-        if rbl_result:
-            total_errors += len(rbl_result.errors)
-            total_warnings += len(rbl_result.warnings)
-
-        # Print summary
+        # Print summary with individual errors/warnings
         if total_errors == 0 and total_warnings == 0:
             self.console.print("[green]✓ No issues found![/green]")
         else:
+            # Display individual errors
             if total_errors > 0:
-                self.console.print(f"[red]✗ {total_errors} error(s) found[/red]")
+                self.console.print(f"[red]✗ {total_errors} error(s) found:[/red]")
+                for category, error in self.all_errors:
+                    self.console.print(f"  [red]• [{category}] {error}[/red]")
+                self.console.print()
+
+            # Display individual warnings
             if total_warnings > 0:
-                self.console.print(f"[yellow]⚠ {total_warnings} warning(s) found[/yellow]")
+                self.console.print(f"[yellow]⚠ {total_warnings} warning(s) found:[/yellow]")
+                for category, warning in self.all_warnings:
+                    self.console.print(f"  [yellow]• [{category}] {warning}[/yellow]")
 
         self.console.print()
