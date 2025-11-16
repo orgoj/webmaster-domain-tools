@@ -10,6 +10,8 @@ from rich.console import Console
 from rich import box
 import rich.panel
 
+logger = logging.getLogger(__name__)
+
 # Remove borders from CLI help output by monkey-patching Panel
 _original_panel_init = rich.panel.Panel.__init__
 
