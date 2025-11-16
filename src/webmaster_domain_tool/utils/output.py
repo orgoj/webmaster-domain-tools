@@ -1434,8 +1434,6 @@ class OutputFormatter:
                 self.all_warnings.append(("Site Verification", warning))
                 self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
-        self.console.print()
-
     def _print_site_verification_verbose(self, result: SiteVerificationAnalysisResult) -> None:
         """Print site verification results in verbose mode with detailed tables."""
         self.console.print("[bold blue]═══ Site Verification ═══[/bold blue]")
@@ -1594,6 +1592,7 @@ class OutputFormatter:
         """Print SEO files analysis results."""
         if self.verbosity == "quiet":
             return
+
         self.console.print("[bold blue]SEO Files[/bold blue]")
 
         # robots.txt
