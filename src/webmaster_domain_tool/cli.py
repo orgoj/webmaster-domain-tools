@@ -1,14 +1,12 @@
 """Command-line interface for webmaster-domain-tool."""
 
-import logging
 import re
 from pathlib import Path
-from typing import Optional
 
-import typer
-from rich.console import Console
-from rich import box
 import rich.panel
+import typer
+from rich import box
+from rich.console import Console
 
 logger = logging.getLogger(__name__)
 
@@ -24,23 +22,23 @@ def _no_border_panel_init(self, *args, **kwargs):
 
 rich.panel.Panel.__init__ = _no_border_panel_init
 
-from .analyzers.dns_analyzer import DNSAnalyzer
-from .analyzers.http_analyzer import HTTPAnalyzer, HTTPAnalysisResult, HTTPResponse
-from .analyzers.ssl_analyzer import SSLAnalyzer
-from .analyzers.email_security import EmailSecurityAnalyzer
-from .analyzers.security_headers import SecurityHeadersAnalyzer
-from .analyzers.rbl_checker import RBLChecker, extract_ips_from_dns_result
-from .analyzers.site_verification_analyzer import (
-    SiteVerificationAnalyzer,
-    ServiceConfig,
-)
-from .analyzers.whois_analyzer import WhoisAnalyzer
-from .analyzers.seo_files_analyzer import SEOFilesAnalyzer
-from .analyzers.favicon_analyzer import FaviconAnalyzer
 from .analyzers.advanced_email_security import AdvancedEmailSecurityAnalyzer
 from .analyzers.cdn_detector import CDNDetector
-from .config import load_config, create_default_user_config, Config
-from .utils.logger import setup_logger, VerbosityLevel
+from .analyzers.dns_analyzer import DNSAnalyzer
+from .analyzers.email_security import EmailSecurityAnalyzer
+from .analyzers.favicon_analyzer import FaviconAnalyzer
+from .analyzers.http_analyzer import HTTPAnalyzer, HTTPAnalysisResult, HTTPResponse
+from .analyzers.rbl_checker import RBLChecker, extract_ips_from_dns_result
+from .analyzers.security_headers import SecurityHeadersAnalyzer
+from .analyzers.seo_files_analyzer import SEOFilesAnalyzer
+from .analyzers.site_verification_analyzer import (
+    ServiceConfig,
+    SiteVerificationAnalyzer,
+)
+from .analyzers.ssl_analyzer import SSLAnalyzer
+from .analyzers.whois_analyzer import WhoisAnalyzer
+from .config import Config, create_default_user_config, load_config
+from .utils.logger import VerbosityLevel, setup_logger
 from .utils.output import OutputFormatter
 
 app = typer.Typer(
@@ -86,7 +84,7 @@ def validate_max_redirects(value: int) -> int:
     return value
 
 
-def validate_nameservers(value: Optional[str]) -> Optional[str]:
+def validate_nameservers(value: str | None) -> str | None:
     """Validate nameserver IP addresses."""
     if value is None:
         return None
@@ -104,7 +102,7 @@ def validate_nameservers(value: Optional[str]) -> Optional[str]:
     return value
 
 
-def validate_config_file(value: Optional[str]) -> Optional[str]:
+def validate_config_file(value: str | None) -> str | None:
     """Validate config file exists."""
     if value is None:
         return None
@@ -256,13 +254,13 @@ def analyze(
         help="Skip testing www subdomain (useful for subdomains or domains without www)",
     ),
     # Email security options
-    dkim_selectors: Optional[str] = typer.Option(
+    dkim_selectors: str | None = typer.Option(
         None,
         "--dkim-selectors",
         help="Comma-separated list of DKIM selectors to check (e.g., 'default,google,k1')",
     ),
     # Site verification options
-    verify: Optional[list[str]] = typer.Option(
+    verify: list[str] | None = typer.Option(
         None,
         "--verify",
         help="Add verification IDs (format: 'Service:ID' or 'Service1:ID1,Service2:ID2'). Can be used multiple times.",
@@ -287,13 +285,13 @@ def analyze(
         help="Check if specific path exists on final URL (e.g., '/.wdt.hosting.info.txt')",
     ),
     # DNS options
-    nameservers: Optional[str] = typer.Option(
+    nameservers: str | None = typer.Option(
         None,
         "--nameservers",
         help="Comma-separated list of nameservers to use (e.g., '8.8.8.8,1.1.1.1')",
         callback=validate_nameservers,
     ),
-    warn_www_not_cname: Optional[bool] = typer.Option(
+    warn_www_not_cname: bool | None = typer.Option(
         None,
         "--warn-www-not-cname/--no-warn-www-not-cname",
         help="Warn if www subdomain is not a CNAME record (best practice)",
@@ -305,7 +303,7 @@ def analyze(
         help="Disable colored output",
     ),
     # Config options
-    config_file: Optional[str] = typer.Option(
+    config_file: str | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -313,7 +311,7 @@ def analyze(
         callback=validate_config_file,
     ),
     # RBL options
-    check_rbl: Optional[bool] = typer.Option(
+    check_rbl: bool | None = typer.Option(
         None,
         "--check-rbl/--no-check-rbl",
         help="Check IP addresses against blacklists (RBL)",
@@ -669,8 +667,8 @@ def create_config() -> None:
         config_path = create_default_user_config()
         console.print(f"[green]✓[/green] Created config file: [cyan]{config_path}[/cyan]")
         console.print(
-            f"\nEdit this file to customize default settings.\n"
-            f"You can also create a local config: [dim].webmaster-domain-tool.toml[/dim]"
+            "\nEdit this file to customize default settings.\n"
+            "You can also create a local config: [dim].webmaster-domain-tool.toml[/dim]"
         )
     except Exception as e:
         console.print(f"[red]Error creating config: {e}[/red]")

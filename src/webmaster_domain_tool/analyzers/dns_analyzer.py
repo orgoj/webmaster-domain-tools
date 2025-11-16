@@ -10,6 +10,8 @@ import dns.name
 import dns.resolver
 import dns.reversename
 
+from ..constants import DEFAULT_DNS_PUBLIC_SERVERS, DEFAULT_DNS_TIMEOUT
+
 logger = logging.getLogger(__name__)
 
 
@@ -80,6 +82,7 @@ class DNSAnalyzer:
         check_dnssec: bool = True,
         warn_www_not_cname: bool = False,
         skip_www: bool = False,
+        timeout: float = DEFAULT_DNS_TIMEOUT,
     ):
         """
         Initialize DNS analyzer.
@@ -89,6 +92,7 @@ class DNSAnalyzer:
             check_dnssec: Whether to check DNSSEC validation
             warn_www_not_cname: Warn if www subdomain is not a CNAME record
             skip_www: Skip checking www subdomain (useful for subdomains or domains without www)
+            timeout: DNS query timeout in seconds
         """
         self.check_dnssec = check_dnssec
         self.warn_www_not_cname = warn_www_not_cname
@@ -110,8 +114,12 @@ class DNSAnalyzer:
             self.resolver.nameservers = nameservers
         elif not self.resolver.nameservers:
             # Use public DNS servers as fallback
-            self.resolver.nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1"]
-            logger.debug("Using fallback public DNS servers: 8.8.8.8, 8.8.4.4, 1.1.1.1")
+            self.resolver.nameservers = DEFAULT_DNS_PUBLIC_SERVERS
+            logger.debug(f"Using fallback public DNS servers: {', '.join(DEFAULT_DNS_PUBLIC_SERVERS)}")
+
+        # Set timeout
+        self.resolver.timeout = timeout
+        self.resolver.lifetime = timeout
 
     def analyze(self, domain: str) -> DNSAnalysisResult:
         """
@@ -345,7 +353,7 @@ class DNSAnalyzer:
                                     f"PTR record {ptr_value} for {ip_address} resolves to {', '.join(forward_ips)} (mismatch)"
                                 )
                         except Exception:
-                            result.warnings.append(
+                            result.info_messages.append(
                                 f"PTR record {ptr_value} for {ip_address} does not resolve in forward lookup"
                             )
                 except dns.resolver.NXDOMAIN:

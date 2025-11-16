@@ -4,12 +4,12 @@ import pytest
 import typer
 
 from webmaster_domain_tool.cli import (
+    get_preferred_final_url,
+    validate_config_file,
     validate_domain,
-    validate_timeout,
     validate_max_redirects,
     validate_nameservers,
-    validate_config_file,
-    get_preferred_final_url,
+    validate_timeout,
 )
 from webmaster_domain_tool.analyzers.http_analyzer import (
     HTTPAnalysisResult,

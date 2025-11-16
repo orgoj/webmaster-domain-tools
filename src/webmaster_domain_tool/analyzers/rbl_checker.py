@@ -3,8 +3,10 @@
 import logging
 from dataclasses import dataclass, field
 
-import dns.resolver
 import dns.exception
+import dns.resolver
+
+from ..constants import DEFAULT_DNS_PUBLIC_SERVERS, DEFAULT_RBL_SERVERS, DEFAULT_RBL_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
@@ -33,18 +35,10 @@ class RBLAnalysisResult:
 class RBLChecker:
     """Checks IP addresses against realtime blacklists."""
 
-    # Common RBL servers
-    DEFAULT_RBL_SERVERS = [
-        "zen.spamhaus.org",  # Spamhaus ZEN (combined list)
-        "bl.spamcop.net",  # SpamCop
-        "b.barracudacentral.org",  # Barracuda
-        "dnsbl.sorbs.net",  # SORBS
-    ]
-
     def __init__(
         self,
         rbl_servers: list[str] | None = None,
-        timeout: float = 5.0,
+        timeout: float = DEFAULT_RBL_TIMEOUT,
     ):
         """
         Initialize RBL checker.
@@ -53,7 +47,7 @@ class RBLChecker:
             rbl_servers: List of RBL servers to check
             timeout: DNS query timeout in seconds
         """
-        self.rbl_servers = rbl_servers or self.DEFAULT_RBL_SERVERS
+        self.rbl_servers = rbl_servers or DEFAULT_RBL_SERVERS
 
         # Create resolver
         try:
@@ -62,7 +56,7 @@ class RBLChecker:
                 raise dns.resolver.NoResolverConfiguration("no nameservers")
         except (dns.resolver.NoResolverConfiguration, OSError):
             self.resolver = dns.resolver.Resolver(configure=False)
-            self.resolver.nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1"]
+            self.resolver.nameservers = DEFAULT_DNS_PUBLIC_SERVERS
 
         self.resolver.timeout = timeout
         self.resolver.lifetime = timeout
