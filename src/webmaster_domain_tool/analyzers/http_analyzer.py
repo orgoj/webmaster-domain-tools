@@ -28,6 +28,19 @@ class HTTPResponse:
 
 
 @dataclass
+class PathCheckResult:
+    """Result of checking a specific path on the final URL."""
+
+    path: str
+    full_url: str
+    status_code: int | None = None
+    content_length: int | None = None
+    response_time: float = 0.0
+    error: str | None = None
+    success: bool = False
+
+
+@dataclass
 class RedirectChain:
     """Represents a chain of HTTP redirects."""
 
@@ -46,6 +59,7 @@ class HTTPAnalysisResult:
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     preferred_final_url: str | None = None  # URL used for further analysis (headers, verification)
+    path_check_result: PathCheckResult | None = None  # Result of checking specific path
 
 
 class HTTPAnalyzer:
@@ -272,3 +286,73 @@ class HTTPAnalyzer:
             result.warnings.append(
                 f"{chain.start_url} uses 302 (temporary) redirects - consider 301 (permanent)"
             )
+
+    def check_path(self, base_url: str, path: str) -> PathCheckResult:
+        """
+        Check if a specific path exists on the base URL.
+
+        Args:
+            base_url: The base URL to check (e.g., "https://example.com")
+            path: The path to check (e.g., "/.wdt.hosting.info.txt")
+
+        Returns:
+            PathCheckResult with status and content information
+        """
+        # Ensure path starts with /
+        if not path.startswith('/'):
+            path = '/' + path
+
+        # Remove trailing slash from base_url
+        base_url = base_url.rstrip('/')
+
+        full_url = f"{base_url}{path}"
+
+        result = PathCheckResult(
+            path=path,
+            full_url=full_url
+        )
+
+        try:
+            start_time = datetime.now()
+            with httpx.Client(
+                timeout=self.timeout,
+                follow_redirects=True,  # Follow redirects for path check
+                verify=True,
+            ) as client:
+                response = client.get(
+                    full_url,
+                    headers={"User-Agent": self.user_agent},
+                )
+
+            result.response_time = (datetime.now() - start_time).total_seconds()
+            result.status_code = response.status_code
+
+            # Check if successful (200 OK)
+            if response.status_code == 200:
+                content = response.text
+                result.content_length = len(content)
+
+                # Check if content is not empty
+                if content and content.strip():
+                    result.success = True
+                    logger.info(f"Path check successful: {full_url} ({result.content_length} bytes)")
+                else:
+                    result.error = "Path returned 200 but content is empty"
+                    logger.warning(f"Path check failed: {full_url} - empty content")
+            else:
+                result.error = f"HTTP {response.status_code}"
+                logger.warning(f"Path check failed: {full_url} - status {response.status_code}")
+
+        except httpx.ConnectError as e:
+            result.error = f"Connection error: {str(e)}"
+            logger.error(f"Path check connection error for {full_url}: {e}")
+
+        except httpx.TimeoutException:
+            result.error = f"Request timeout ({self.timeout}s)"
+            logger.error(f"Path check timeout for {full_url}")
+
+        except Exception as e:
+            result.error = f"Unexpected error: {str(e)}"
+            logger.error(f"Path check unexpected error for {full_url}: {e}")
+
+        return result

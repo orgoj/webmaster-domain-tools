@@ -541,6 +541,16 @@ class OutputFormatter:
         if result.preferred_final_url:
             self.console.print(f"  [dim]→ Using {result.preferred_final_url} for security headers and site verification analysis[/dim]")
 
+        # Show path check result if available
+        if result.path_check_result:
+            path_check = result.path_check_result
+            if path_check.success:
+                self.console.print(f"  [green]✓ Path check: {path_check.path} exists ({path_check.content_length} bytes, {path_check.response_time:.2f}s)[/green]")
+            else:
+                error_msg = f"Path check failed: {path_check.path} - {path_check.error}"
+                self.all_errors.append(("HTTP", error_msg))
+                self.console.print(f"  [red]✗ {error_msg}[/red]")
+
     def _print_http_verbose(self, result: HTTPAnalysisResult) -> None:
         """Print HTTP results in verbose mode."""
         self.console.print("[bold blue]═══ HTTP/HTTPS Analysis ═══[/bold blue]")
@@ -587,6 +597,17 @@ class OutputFormatter:
         # Show which URL is used for further analysis
         if result.preferred_final_url:
             self.console.print(f"[dim]→ Using {result.preferred_final_url} for security headers and site verification analysis[/dim]")
+            self.console.print()
+
+        # Show path check result if available
+        if result.path_check_result:
+            path_check = result.path_check_result
+            if path_check.success:
+                self.console.print(f"[green]✓ Path check: {path_check.path} exists ({path_check.content_length} bytes, {path_check.response_time:.2f}s)[/green]")
+            else:
+                error_msg = f"Path check failed: {path_check.path} - {path_check.error}"
+                self.all_errors.append(("HTTP", error_msg))
+                self.console.print(f"[red]✗ {error_msg}[/red]")
             self.console.print()
 
     def print_ssl_results(self, result: SSLAnalysisResult) -> None:

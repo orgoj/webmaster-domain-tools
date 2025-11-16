@@ -277,6 +277,11 @@ def analyze(
         help="Maximum number of redirects to follow (0-50)",
         callback=validate_max_redirects,
     ),
+    check_path: Optional[str] = typer.Option(
+        None,
+        "--check-path",
+        help="Check if specific path exists on final URL (e.g., '/.wdt.hosting.info.txt')",
+    ),
     # DNS options
     nameservers: Optional[str] = typer.Option(
         None,
@@ -399,6 +404,12 @@ def analyze(
             http_result.errors.extend(url_errors)
             http_result.warnings.extend(url_warnings)
             http_result.preferred_final_url = preferred_url
+
+            # Check specific path if requested
+            if check_path and preferred_url:
+                logger.info(f"Checking path: {check_path}")
+                path_result = http_analyzer.check_path(preferred_url, check_path)
+                http_result.path_check_result = path_result
 
             formatter.print_http_results(http_result)
 
