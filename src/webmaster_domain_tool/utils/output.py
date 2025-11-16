@@ -420,9 +420,19 @@ class OutputFormatter:
             return
 
         for domain, cert in result.certificates.items():
-            if cert.errors:
-                self.console.print(f"  [red]✗ {domain}: {cert.errors[0]}[/red]")
-            else:
+            # Determine status and color
+            if cert.status == "none":
+                color = "red"
+                symbol = "✗"
+                status_text = "none"
+                days_text = ""  # No days for none status
+            elif cert.status == "mismatch":
+                color = "red"
+                symbol = "✗"
+                status_text = "mismatch"
+                days_text = f" ({cert.days_until_expiry}d)" if cert.days_until_expiry > 0 else ""
+            else:  # ok
+                # Check expiry for ok certificates
                 if cert.days_until_expiry < DEFAULT_SSL_EXPIRY_CRITICAL_DAYS:
                     color = "red"
                     symbol = "✗"
@@ -432,19 +442,20 @@ class OutputFormatter:
                 else:
                     color = "green"
                     symbol = "✓"
+                status_text = "ok"
+                days_text = f" ({cert.days_until_expiry}d)"
 
-                issuer = cert.issuer.get("organizationName", cert.issuer.get("commonName", "Unknown"))
-                self.console.print(
-                    f"  [{color}]{symbol}[/] {domain}: {issuer} ({cert.days_until_expiry}d)"
-                )
+            self.console.print(
+                f"  [{color}]{symbol}[/] {domain}: {status_text}{days_text}"
+            )
 
         if result.protocols:
             self.console.print(f"  TLS: {', '.join(result.protocols)}")
 
-        # Show actual warnings
-        for warning in result.warnings:
-            self.all_warnings.append(("SSL", warning))
-            self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
+        # Show TLSv1.3 warning if applicable
+        if result.protocols and "TLSv1.3" not in result.protocols:
+            self.all_warnings.append(("SSL", "TLSv1.3 is not supported (recommended)"))
+            self.console.print(f"  [yellow]⚠ TLSv1.3 is not supported (recommended)[/yellow]")
 
     def _print_ssl_verbose(self, result: SSLAnalysisResult) -> None:
         """Print SSL results in verbose mode."""
