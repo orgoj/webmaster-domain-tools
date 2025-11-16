@@ -1,25 +1,22 @@
 """Output formatting using rich library."""
 
-from typing import Any
 
+from rich import box
 from rich.console import Console
 from rich.table import Table
-from rich.panel import Panel
 from rich.tree import Tree
-from rich import box
 
 from ..analyzers.dns_analyzer import DNSAnalysisResult
-from ..analyzers.http_analyzer import HTTPAnalysisResult, HTTPResponse
+from ..analyzers.email_security import EmailSecurityResult
+from ..analyzers.http_analyzer import HTTPAnalysisResult
+from ..analyzers.rbl_checker import RBLAnalysisResult
+from ..analyzers.security_headers import SecurityHeadersResult
+from ..analyzers.site_verification_analyzer import SiteVerificationAnalysisResult
 from ..analyzers.ssl_analyzer import (
-    SSLAnalysisResult,
-    CertificateInfo,
     DEFAULT_SSL_EXPIRY_CRITICAL_DAYS,
     DEFAULT_SSL_EXPIRY_WARNING_DAYS,
+    SSLAnalysisResult,
 )
-from ..analyzers.email_security import EmailSecurityResult
-from ..analyzers.security_headers import SecurityHeadersResult
-from ..analyzers.rbl_checker import RBLAnalysisResult
-from ..analyzers.site_verification_analyzer import SiteVerificationAnalysisResult
 
 # Output formatting constants
 MAX_SAN_DISPLAY = 5
@@ -54,7 +51,7 @@ class OutputFormatter:
             self.console.print(f"[bold]{domain}[/bold]")
         else:
             self.console.print()
-            self.console.print(f"[bold cyan]Webmaster Domain Analysis[/bold cyan]")
+            self.console.print("[bold cyan]Webmaster Domain Analysis[/bold cyan]")
             self.console.print(f"Domain: [yellow]{domain}[/yellow]")
             self.console.print()
 
@@ -365,7 +362,7 @@ class OutputFormatter:
             for i, response in enumerate(chain.responses):
                 # Format status code with color
                 if response.error:
-                    status_str = f"[red]ERROR[/red]"
+                    status_str = "[red]ERROR[/red]"
                     node_label = f"{status_str} - {response.error}"
                 elif response.status_code >= 400:
                     status_str = f"[red]{response.status_code}[/red]"
@@ -465,7 +462,7 @@ class OutputFormatter:
         # Show TLSv1.3 warning if applicable
         if result.protocols and "TLSv1.3" not in result.protocols:
             self.all_warnings.append(("SSL", "TLSv1.3 is not supported (recommended)"))
-            self.console.print(f"  [yellow]⚠ TLSv1.3 is not supported (recommended)[/yellow]")
+            self.console.print("  [yellow]⚠ TLSv1.3 is not supported (recommended)[/yellow]")
 
     def _print_ssl_verbose(self, result: SSLAnalysisResult) -> None:
         """Print SSL results in verbose mode."""

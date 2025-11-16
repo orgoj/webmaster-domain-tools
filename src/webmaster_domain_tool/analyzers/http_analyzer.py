@@ -3,7 +3,6 @@
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
 from urllib.parse import urlparse
 
 import httpx

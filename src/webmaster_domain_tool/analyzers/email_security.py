@@ -3,8 +3,8 @@
 import logging
 from dataclasses import dataclass, field
 
-import dns.resolver
 import dns.exception
+import dns.resolver
 
 from ..constants import (
     DEFAULT_DKIM_SELECTORS,

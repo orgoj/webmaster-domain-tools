@@ -4,9 +4,9 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-import httpx
-import dns.resolver
 import dns.exception
+import dns.resolver
+import httpx
 
 from ..constants import (
     DEFAULT_DNS_PUBLIC_SERVERS,
@@ -482,7 +482,7 @@ class SiteVerificationAnalyzer:
 
         except httpx.TimeoutException:
             https_error = "Timeout"
-            logger.debug(f"HTTPS timeout, will try HTTP")
+            logger.debug("HTTPS timeout, will try HTTP")
 
         except Exception as e:
             https_error = f"Error: {str(e)}"
@@ -515,7 +515,7 @@ class SiteVerificationAnalyzer:
             logger.warning(error_msg)
 
         except httpx.TimeoutException:
-            error_msg = f"Timeout on both HTTPS and HTTP"
+            error_msg = "Timeout on both HTTPS and HTTP"
             result.html_fetch_error = error_msg
             logger.warning(error_msg)
 

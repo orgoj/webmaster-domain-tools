@@ -5,7 +5,6 @@ import socket
 import ssl
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
 
 from ..constants import (
     DEFAULT_SSL_EXPIRY_CRITICAL_DAYS,
@@ -185,7 +184,7 @@ class SSLAnalyzer:
             cert_info.errors.append(f"SSL error: {str(e)}")
             return cert_info
 
-        except socket.timeout:
+        except TimeoutError:
             logger.error(f"Connection timeout for {domain}:{port}")
             return None
 

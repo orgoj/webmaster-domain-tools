@@ -3,8 +3,8 @@
 import logging
 from dataclasses import dataclass, field
 
-import dns.resolver
 import dns.exception
+import dns.resolver
 
 from ..constants import DEFAULT_DNS_PUBLIC_SERVERS, DEFAULT_RBL_SERVERS, DEFAULT_RBL_TIMEOUT
 
