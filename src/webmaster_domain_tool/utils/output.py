@@ -527,6 +527,11 @@ class OutputFormatter:
                     # No redirect, just show URL with status
                     self.console.print(f"  [{status_color}]{status_symbol}[/] {chain.start_url} ({last_response.status_code})")
 
+        # Show errors
+        for error in result.errors:
+            self.all_errors.append(("HTTP", error))
+            self.console.print(f"  [red]✗ {error}[/red]")
+
         # Show warnings
         for warning in result.warnings:
             self.all_warnings.append(("HTTP", warning))
