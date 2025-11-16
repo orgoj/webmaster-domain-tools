@@ -233,16 +233,22 @@ class FaviconAnalyzer:
         if self.check_defaults:
             default_favicons = self._check_default_favicons(base_url)
 
+            # Check if HTML has any existing favicons
+            has_html_favicons = any(f.exists for f in html_favicons)
+
             # Deduplicate: only add default favicons not already in HTML
             for default_fav in default_favicons:
                 if default_fav.url not in html_urls:
                     result.favicons.append(default_fav)
 
-                    # Warning: favicon exists but not referenced in HTML
-                    if default_fav.exists:
-                        result.warnings.append(
-                            f"Favicon exists at {default_fav.url} but is not referenced in HTML"
-                        )
+                    # Warning: favicon exists on default path but not referenced in HTML
+                    # Only warn if HTML has favicons (meaning site uses favicons but didn't reference this one)
+                    if default_fav.exists and has_html_favicons:
+                        # For main defaults (/favicon.ico, /apple-touch-icon.png), warn about potential conflict
+                        if default_fav.url.endswith(('/favicon.ico', '/apple-touch-icon.png')):
+                            result.warnings.append(
+                                f"Favicon exists at {default_fav.url} but is not referenced in HTML (potential conflict with HTML-defined favicons)"
+                            )
                 # If URL already in HTML, skip it (HTML source takes precedence)
 
         # Check if default /favicon.ico exists
