@@ -1,11 +1,10 @@
 """Tests for DNS analyzer."""
 
-import pytest
 
 from webmaster_domain_tool.analyzers.dns_analyzer import (
+    DNSAnalysisResult,
     DNSAnalyzer,
     DNSRecord,
-    DNSAnalysisResult,
     DNSSECInfo,
 )
 

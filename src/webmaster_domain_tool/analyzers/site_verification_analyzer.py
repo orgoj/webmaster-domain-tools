@@ -4,9 +4,16 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-import httpx
-import dns.resolver
 import dns.exception
+import dns.resolver
+import httpx
+
+from ..constants import (
+    DEFAULT_DNS_PUBLIC_SERVERS,
+    DEFAULT_SITE_VERIFICATION_TIMEOUT,
+    DEFAULT_USER_AGENT,
+    TRACKING_PATTERNS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,20 +80,10 @@ class SiteVerificationAnalysisResult:
 class SiteVerificationAnalyzer:
     """Universal site verification analyzer supporting multiple services (Google, Facebook, Pinterest, etc)."""
 
-    # Common tracking code patterns (Google specific - legacy)
-    TRACKING_PATTERNS = {
-        "GTM": (r"GTM-[A-Z0-9]+", "Google Tag Manager"),
-        "GA4": (r"G-[A-Z0-9]+", "Google Analytics 4"),
-        "GAds": (r"AW-[0-9]+", "Google Ads Conversion"),
-        "UA": (r"UA-[0-9]+-[0-9]+", "Universal Analytics"),
-        "Google Optimize": (r"OPT-[A-Z0-9]+", "Google Optimize"),
-        "Google AdSense": (r"ca-pub-[0-9]+", "Google AdSense"),
-    }
-
     def __init__(
         self,
         services: list[ServiceConfig] | None = None,
-        timeout: float = 10.0,
+        timeout: float = DEFAULT_SITE_VERIFICATION_TIMEOUT,
         user_agent: str | None = None,
         nameservers: list[str] | None = None,
     ):
@@ -101,10 +98,13 @@ class SiteVerificationAnalyzer:
         """
         self.services = services or []
         self.timeout = timeout
-        self.user_agent = user_agent or (
-            "Mozilla/5.0 (compatible; WebmasterDomainTool/0.1; "
-            "+https://github.com/orgoj/webmaster-domain-tool)"
-        )
+        self.user_agent = user_agent or DEFAULT_USER_AGENT
+
+        # Precompile regex patterns for tracking codes (Google specific - legacy)
+        self.compiled_tracking_patterns = {
+            name: (re.compile(pattern), description)
+            for name, (pattern, description) in TRACKING_PATTERNS.items()
+        }
 
         # Setup DNS resolver
         try:
@@ -118,7 +118,7 @@ class SiteVerificationAnalyzer:
         if nameservers:
             self.resolver.nameservers = nameservers
         elif not self.resolver.nameservers:
-            self.resolver.nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1"]
+            self.resolver.nameservers = DEFAULT_DNS_PUBLIC_SERVERS
             logger.debug("Using fallback public DNS servers")
 
     def analyze(self, domain: str) -> SiteVerificationAnalysisResult:
@@ -482,7 +482,7 @@ class SiteVerificationAnalyzer:
 
         except httpx.TimeoutException:
             https_error = "Timeout"
-            logger.debug(f"HTTPS timeout, will try HTTP")
+            logger.debug("HTTPS timeout, will try HTTP")
 
         except Exception as e:
             https_error = f"Error: {str(e)}"
@@ -515,7 +515,7 @@ class SiteVerificationAnalyzer:
             logger.warning(error_msg)
 
         except httpx.TimeoutException:
-            error_msg = f"Timeout on both HTTPS and HTTP"
+            error_msg = "Timeout on both HTTPS and HTTP"
             result.html_fetch_error = error_msg
             logger.warning(error_msg)
 
@@ -541,8 +541,8 @@ class SiteVerificationAnalyzer:
         # Track found codes to avoid duplicates
         found_codes: set[tuple[str, str]] = set()
 
-        for name, (pattern, description) in self.TRACKING_PATTERNS.items():
-            matches = re.finditer(pattern, html)
+        for name, (compiled_pattern, description) in self.compiled_tracking_patterns.items():
+            matches = compiled_pattern.finditer(html)
 
             for match in matches:
                 code = match.group(0)

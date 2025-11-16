@@ -5,17 +5,15 @@ import socket
 import ssl
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+
+from ..constants import (
+    DEFAULT_SSL_EXPIRY_CRITICAL_DAYS,
+    DEFAULT_SSL_EXPIRY_WARNING_DAYS,
+    DEFAULT_SSL_PORT,
+    DEFAULT_SSL_TIMEOUT,
+)
 
 logger = logging.getLogger(__name__)
-
-# Default certificate expiry thresholds (in days)
-# These can be overridden via config
-DEFAULT_SSL_EXPIRY_CRITICAL_DAYS = 7
-DEFAULT_SSL_EXPIRY_WARNING_DAYS = 14
-
-# Default SSL port
-DEFAULT_SSL_PORT = 443
 
 
 @dataclass
@@ -54,7 +52,7 @@ class SSLAnalyzer:
 
     def __init__(
         self,
-        timeout: float = 10.0,
+        timeout: float = DEFAULT_SSL_TIMEOUT,
         cert_expiry_warning_days: int = DEFAULT_SSL_EXPIRY_WARNING_DAYS,
         cert_expiry_critical_days: int = DEFAULT_SSL_EXPIRY_CRITICAL_DAYS,
     ):
@@ -183,9 +181,10 @@ class SSLAnalyzer:
                 is_valid=False,
                 status=status,
             )
+            cert_info.errors.append(f"SSL error: {str(e)}")
             return cert_info
 
-        except socket.timeout:
+        except TimeoutError:
             logger.error(f"Connection timeout for {domain}:{port}")
             return None
 

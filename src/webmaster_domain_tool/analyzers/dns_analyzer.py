@@ -10,6 +10,8 @@ import dns.name
 import dns.resolver
 import dns.reversename
 
+from ..constants import DEFAULT_DNS_PUBLIC_SERVERS, DEFAULT_DNS_TIMEOUT
+
 logger = logging.getLogger(__name__)
 
 
@@ -79,6 +81,7 @@ class DNSAnalyzer:
         nameservers: list[str] | None = None,
         check_dnssec: bool = True,
         warn_www_not_cname: bool = False,
+        timeout: float = DEFAULT_DNS_TIMEOUT,
     ):
         """
         Initialize DNS analyzer.
@@ -87,6 +90,7 @@ class DNSAnalyzer:
             nameservers: Optional list of nameservers to use for queries
             check_dnssec: Whether to check DNSSEC validation
             warn_www_not_cname: Warn if www subdomain is not a CNAME record
+            timeout: DNS query timeout in seconds
         """
         self.check_dnssec = check_dnssec
         self.warn_www_not_cname = warn_www_not_cname
@@ -107,8 +111,12 @@ class DNSAnalyzer:
             self.resolver.nameservers = nameservers
         elif not self.resolver.nameservers:
             # Use public DNS servers as fallback
-            self.resolver.nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1"]
-            logger.debug("Using fallback public DNS servers: 8.8.8.8, 8.8.4.4, 1.1.1.1")
+            self.resolver.nameservers = DEFAULT_DNS_PUBLIC_SERVERS
+            logger.debug(f"Using fallback public DNS servers: {', '.join(DEFAULT_DNS_PUBLIC_SERVERS)}")
+
+        # Set timeout
+        self.resolver.timeout = timeout
+        self.resolver.lifetime = timeout
 
     def analyze(self, domain: str) -> DNSAnalysisResult:
         """
@@ -338,11 +346,11 @@ class DNSAnalyzer:
                             forward_ips = [str(rdata) for rdata in forward_answers]
 
                             if ip_address not in forward_ips:
-                                result.warnings.append(
+                                result.info_messages.append(
                                     f"PTR record {ptr_value} for {ip_address} does not resolve back to {ip_address}"
                                 )
                         except Exception:
-                            result.warnings.append(
+                            result.info_messages.append(
                                 f"PTR record {ptr_value} for {ip_address} does not resolve in forward lookup"
                             )
                 except dns.resolver.NXDOMAIN:

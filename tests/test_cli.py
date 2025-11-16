@@ -4,11 +4,11 @@ import pytest
 import typer
 
 from webmaster_domain_tool.cli import (
+    validate_config_file,
     validate_domain,
-    validate_timeout,
     validate_max_redirects,
     validate_nameservers,
-    validate_config_file,
+    validate_timeout,
 )
 
 
