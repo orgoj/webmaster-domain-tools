@@ -698,9 +698,11 @@ class OutputFormatter:
                 status_text = "ok"
                 days_text = f" ({cert.days_until_expiry}d)"
 
-            # Get issuer name
-            issuer_name = self._get_issuer_name(cert)
-            issuer_text = f" [{issuer_name}]" if cert.status == "ok" else ""
+            # Get issuer name (show if certificate has issuer info)
+            issuer_text = ""
+            if cert.issuer:
+                issuer_name = self._get_issuer_name(cert)
+                issuer_text = f" [{issuer_name}]"
 
             self.console.print(
                 f"  [{color}]{symbol}[/] {domain}: {status_text}{days_text}{issuer_text}"
