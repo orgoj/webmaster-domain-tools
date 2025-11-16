@@ -9,6 +9,12 @@ from webmaster_domain_tool.cli import (
     validate_max_redirects,
     validate_nameservers,
     validate_config_file,
+    get_preferred_final_url,
+)
+from webmaster_domain_tool.analyzers.http_analyzer import (
+    HTTPAnalysisResult,
+    HTTPResponse,
+    RedirectChain,
 )
 
 
@@ -122,3 +128,149 @@ class TestConfigFileValidation:
         """Test directory path is rejected."""
         with pytest.raises(typer.BadParameter):
             validate_config_file("/tmp")
+
+
+class TestGetPreferredFinalUrl:
+    """Test get_preferred_final_url function."""
+
+    def test_all_chains_same_url(self):
+        """Test when all redirect chains lead to the same URL."""
+        # Create HTTP result with multiple chains ending at same URL
+        http_result = HTTPAnalysisResult(domain="example.com")
+
+        # Chain 1: http://example.com -> https://www.example.com/
+        http_result.chains.append(RedirectChain(
+            start_url="http://example.com",
+            final_url="https://www.example.com/",
+            responses=[
+                HTTPResponse(url="https://www.example.com/", status_code=200, headers={})
+            ]
+        ))
+
+        # Chain 2: https://example.com -> https://www.example.com/
+        http_result.chains.append(RedirectChain(
+            start_url="https://example.com",
+            final_url="https://www.example.com/",
+            responses=[
+                HTTPResponse(url="https://www.example.com/", status_code=200, headers={})
+            ]
+        ))
+
+        final_url, final_response, warnings = get_preferred_final_url(http_result)
+
+        assert final_url == "https://www.example.com/"
+        assert final_response is not None
+        assert final_response.status_code == 200
+        assert len(warnings) == 0  # No warnings when all chains match
+
+    def test_different_final_urls_prefers_https_www(self):
+        """Test when chains lead to different URLs, prefer HTTPS with www."""
+        http_result = HTTPAnalysisResult(domain="example.com")
+
+        # Chain 1: ends at http://example.com
+        http_result.chains.append(RedirectChain(
+            start_url="http://example.com",
+            final_url="http://example.com/",
+            responses=[
+                HTTPResponse(url="http://example.com/", status_code=200, headers={})
+            ]
+        ))
+
+        # Chain 2: ends at https://www.example.com (should be preferred)
+        http_result.chains.append(RedirectChain(
+            start_url="https://example.com",
+            final_url="https://www.example.com/",
+            responses=[
+                HTTPResponse(url="https://www.example.com/", status_code=200, headers={})
+            ]
+        ))
+
+        final_url, final_response, warnings = get_preferred_final_url(http_result)
+
+        assert final_url == "https://www.example.com/"
+        assert len(warnings) == 1  # Should warn about inconsistent chains
+        assert "different final URLs" in warnings[0]
+
+    def test_different_final_urls_prefers_https_no_www(self):
+        """Test HTTPS without www is preferred over HTTP."""
+        http_result = HTTPAnalysisResult(domain="example.com")
+
+        # Chain 1: ends at http://example.com
+        http_result.chains.append(RedirectChain(
+            start_url="http://example.com",
+            final_url="http://example.com/",
+            responses=[
+                HTTPResponse(url="http://example.com/", status_code=200, headers={})
+            ]
+        ))
+
+        # Chain 2: ends at https://example.com (should be preferred)
+        http_result.chains.append(RedirectChain(
+            start_url="https://example.com",
+            final_url="https://example.com/",
+            responses=[
+                HTTPResponse(url="https://example.com/", status_code=200, headers={})
+            ]
+        ))
+
+        final_url, final_response, warnings = get_preferred_final_url(http_result)
+
+        assert final_url == "https://example.com/"
+        assert len(warnings) == 1
+
+    def test_url_normalization_trailing_slash(self):
+        """Test URLs with/without trailing slash are treated as same."""
+        http_result = HTTPAnalysisResult(domain="example.com")
+
+        # Chain 1: with trailing slash
+        http_result.chains.append(RedirectChain(
+            start_url="http://example.com",
+            final_url="https://www.example.com/",
+            responses=[
+                HTTPResponse(url="https://www.example.com/", status_code=200, headers={})
+            ]
+        ))
+
+        # Chain 2: without trailing slash (should be treated as same)
+        http_result.chains.append(RedirectChain(
+            start_url="https://example.com",
+            final_url="https://www.example.com",
+            responses=[
+                HTTPResponse(url="https://www.example.com", status_code=200, headers={})
+            ]
+        ))
+
+        final_url, final_response, warnings = get_preferred_final_url(http_result)
+
+        # Should recognize both as same URL
+        assert final_url in ["https://www.example.com/", "https://www.example.com"]
+        assert len(warnings) == 0  # No warning since URLs are same after normalization
+
+    def test_no_successful_chains(self):
+        """Test when no chains have successful (200) responses."""
+        http_result = HTTPAnalysisResult(domain="example.com")
+
+        # Chain with error response
+        http_result.chains.append(RedirectChain(
+            start_url="http://example.com",
+            final_url="http://example.com/",
+            responses=[
+                HTTPResponse(url="http://example.com/", status_code=404, headers={})
+            ]
+        ))
+
+        final_url, final_response, warnings = get_preferred_final_url(http_result)
+
+        assert final_url is None
+        assert final_response is None
+        assert len(warnings) == 0
+
+    def test_empty_chains(self):
+        """Test when HTTP result has no chains."""
+        http_result = HTTPAnalysisResult(domain="example.com")
+
+        final_url, final_response, warnings = get_preferred_final_url(http_result)
+
+        assert final_url is None
+        assert final_response is None
+        assert len(warnings) == 0
