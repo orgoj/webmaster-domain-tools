@@ -163,7 +163,7 @@ class SSLAnalyzer:
                     return cert_info
 
         except ssl.SSLError as e:
-            logger.error(f"SSL error for {domain}:{port}: {e}")
+            logger.warning(f"SSL error for {domain}:{port}: {e}")
             cert_info = CertificateInfo(
                 subject={},
                 issuer={},
@@ -173,7 +173,8 @@ class SSLAnalyzer:
                 not_after=datetime.now(),
                 is_valid=False,
             )
-            cert_info.errors.append(f"SSL error: {str(e)}")
+            # SSL errors are warnings, not errors (site may still work on HTTP)
+            cert_info.warnings.append(f"HTTPS not available: {str(e)}")
             return cert_info
 
         except socket.timeout:
