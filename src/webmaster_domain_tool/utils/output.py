@@ -1441,14 +1441,31 @@ class OutputFormatter:
 
         if found_favicons:
             for favicon in found_favicons:
+                # Source indicator
+                source_label = "Found in HTML" if favicon.source == "html" else "Default path"
+
+                # Dimensions info (actual from image data)
+                dims_info = ""
+                if favicon.actual_width and favicon.actual_height:
+                    dims_info = f" {favicon.actual_width}×{favicon.actual_height}"
+                elif favicon.sizes:
+                    # Fallback to HTML sizes attribute if no actual dimensions
+                    dims_info = f" {favicon.sizes} (from HTML)"
+
+                # File size
                 size_info = f" ({favicon.size_bytes} bytes)" if favicon.size_bytes else ""
-                rel_info = f" [{favicon.rel}]" if favicon.rel else ""
-                sizes_info = f" {favicon.sizes}" if favicon.sizes else ""
-                self.console.print(f"  [green]✓ {favicon.url}{size_info}{rel_info}{sizes_info}[/green]")
-        else:
-            for warning in result.warnings:
-                self.all_warnings.append(("Favicon", warning))
-                self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
+
+                # Full output
+                self.console.print(f"  [green]✓[/green] {favicon.url}")
+                self.console.print(f"    [dim]{source_label}{dims_info}{size_info}[/dim]")
+
+        # Display warnings
+        for warning in result.warnings:
+            self.all_warnings.append(("Favicon", warning))
+            self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
+
+        if not found_favicons and not result.warnings:
+            self.console.print(f"  [dim]No favicons found[/dim]")
 
     def print_advanced_email_results(self, result: AdvancedEmailSecurityResult) -> None:
         """Print advanced email security results."""

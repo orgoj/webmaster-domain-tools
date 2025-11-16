@@ -1,7 +1,9 @@
 """Favicon analyzer - detect all favicon versions."""
 
+import io
 import logging
 import re
+import struct
 from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse
 
@@ -10,17 +12,91 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+def _get_image_dimensions(image_data: bytes) -> tuple[int | None, int | None]:
+    """
+    Extract image dimensions from image data.
+
+    Supports PNG, ICO, JPEG, GIF formats.
+
+    Args:
+        image_data: Raw image bytes
+
+    Returns:
+        Tuple of (width, height) or (None, None) if cannot determine
+    """
+    if not image_data or len(image_data) < 24:
+        return None, None
+
+    # PNG format
+    if image_data[:8] == b'\x89PNG\r\n\x1a\n':
+        try:
+            # PNG IHDR chunk is at bytes 16-24
+            width, height = struct.unpack('>II', image_data[16:24])
+            return width, height
+        except struct.error:
+            pass
+
+    # ICO format
+    elif image_data[:4] == b'\x00\x00\x01\x00':
+        try:
+            # ICO directory entry at offset 6
+            # Width and height are at bytes 6 and 7 (0 means 256)
+            width = image_data[6] or 256
+            height = image_data[7] or 256
+            return width, height
+        except (IndexError, struct.error):
+            pass
+
+    # JPEG format
+    elif image_data[:2] == b'\xff\xd8':
+        try:
+            # JPEG uses markers - scan for SOF0 (Start of Frame)
+            data = io.BytesIO(image_data)
+            data.seek(2)  # Skip SOI marker
+
+            while True:
+                marker = data.read(2)
+                if len(marker) != 2:
+                    break
+
+                # SOF0, SOF1, SOF2 markers
+                if marker[0] == 0xff and marker[1] in (0xc0, 0xc1, 0xc2):
+                    data.read(3)  # Skip length and precision
+                    height, width = struct.unpack('>HH', data.read(4))
+                    return width, height
+
+                # Skip to next marker
+                length = struct.unpack('>H', data.read(2))[0]
+                data.seek(length - 2, 1)
+        except (struct.error, IOError):
+            pass
+
+    # GIF format
+    elif image_data[:6] in (b'GIF87a', b'GIF89a'):
+        try:
+            # GIF dimensions at bytes 6-10
+            width, height = struct.unpack('<HH', image_data[6:10])
+            return width, height
+        except struct.error:
+            pass
+
+    return None, None
+
+
 @dataclass
 class FaviconInfo:
     """Information about a single favicon."""
 
     url: str
+    source: str  # "html" or "default"
     rel: str | None = None  # icon, shortcut icon, apple-touch-icon, etc.
-    sizes: str | None = None  # e.g., "32x32", "180x180"
+    sizes: str | None = None  # e.g., "32x32", "180x180" (from HTML attribute)
     type: str | None = None  # e.g., "image/png", "image/x-icon"
     exists: bool = False
     status_code: int | None = None
     size_bytes: int | None = None
+    actual_width: int | None = None  # Real width from image data
+    actual_height: int | None = None  # Real height from image data
 
 
 @dataclass
@@ -85,14 +161,29 @@ class FaviconAnalyzer:
         result = FaviconAnalysisResult(domain=domain, base_url=base_url)
 
         # Parse HTML for favicon links
+        html_favicons = []
         if self.check_html:
             html_favicons = self._parse_html_favicons(base_url)
             result.favicons.extend(html_favicons)
 
+        # Collect URLs found in HTML
+        html_urls = {f.url for f in html_favicons}
+
         # Check default locations
         if self.check_defaults:
             default_favicons = self._check_default_favicons(base_url)
-            result.favicons.extend(default_favicons)
+
+            # Deduplicate: only add default favicons not already in HTML
+            for default_fav in default_favicons:
+                if default_fav.url not in html_urls:
+                    result.favicons.append(default_fav)
+
+                    # Warning: favicon exists but not referenced in HTML
+                    if default_fav.exists:
+                        result.warnings.append(
+                            f"Favicon exists at {default_fav.url} but is not referenced in HTML"
+                        )
+                # If URL already in HTML, skip it (HTML source takes precedence)
 
         # Check if default /favicon.ico exists
         favicon_ico = next(
@@ -101,7 +192,7 @@ class FaviconAnalyzer:
         )
         result.has_default_favicon = favicon_ico is not None
 
-        # Warnings
+        # General warnings
         if not result.favicons:
             result.warnings.append("No favicons found (consider adding one)")
         elif not any(f.exists for f in result.favicons):
@@ -155,12 +246,13 @@ class FaviconAnalyzer:
 
                 favicon = FaviconInfo(
                     url=full_url,
+                    source="html",
                     rel=rel,
                     sizes=sizes,
                     type=fav_type
                 )
 
-                # Check if favicon actually exists
+                # Check if favicon actually exists and get dimensions
                 self._check_favicon_exists(favicon)
 
                 favicons.append(favicon)
@@ -180,8 +272,7 @@ class FaviconAnalyzer:
         for path in self.DEFAULT_PATHS:
             url = urljoin(base_url, path)
 
-            # Skip if already checked from HTML
-            favicon = FaviconInfo(url=url, rel="default")
+            favicon = FaviconInfo(url=url, source="default")
             self._check_favicon_exists(favicon)
 
             if favicon.exists:
@@ -191,30 +282,61 @@ class FaviconAnalyzer:
         return favicons
 
     def _check_favicon_exists(self, favicon: FaviconInfo) -> None:
-        """Check if a favicon URL is accessible."""
+        """Check if a favicon URL is accessible and get its dimensions."""
         try:
             with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
-                response = client.head(
+                # First try HEAD to check existence
+                head_response = client.head(
                     favicon.url,
                     headers={"User-Agent": self.user_agent}
                 )
 
-            favicon.status_code = response.status_code
+            favicon.status_code = head_response.status_code
 
-            if response.status_code == 200:
+            if head_response.status_code == 200:
                 favicon.exists = True
 
-                # Try to get content length
-                content_length = response.headers.get('content-length')
+                # Get content length from HEAD response
+                content_length = head_response.headers.get('content-length')
                 if content_length:
                     try:
                         favicon.size_bytes = int(content_length)
                     except ValueError:
                         pass
 
+                # Download the image to get dimensions
+                # Only download if size is reasonable (< 5MB)
+                if favicon.size_bytes and favicon.size_bytes > 5 * 1024 * 1024:
+                    logger.warning(f"Favicon too large to download for dimension check: {favicon.url}")
+                else:
+                    try:
+                        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+                            get_response = client.get(
+                                favicon.url,
+                                headers={"User-Agent": self.user_agent}
+                            )
+
+                        if get_response.status_code == 200:
+                            image_data = get_response.content
+
+                            # Update size if not already known
+                            if not favicon.size_bytes:
+                                favicon.size_bytes = len(image_data)
+
+                            # Get dimensions from image data
+                            width, height = _get_image_dimensions(image_data)
+                            if width and height:
+                                favicon.actual_width = width
+                                favicon.actual_height = height
+                                logger.debug(f"Favicon dimensions: {width}x{height} - {favicon.url}")
+                    except httpx.TimeoutException:
+                        logger.debug(f"Timeout downloading favicon for dimension check: {favicon.url}")
+                    except Exception as e:
+                        logger.debug(f"Error downloading favicon for dimensions: {favicon.url} - {e}")
+
                 logger.debug(f"Favicon accessible: {favicon.url}")
             else:
-                logger.debug(f"Favicon not accessible: {favicon.url} - status {response.status_code}")
+                logger.debug(f"Favicon not accessible: {favicon.url} - status {head_response.status_code}")
 
         except httpx.TimeoutException:
             logger.debug(f"Timeout checking favicon: {favicon.url}")
