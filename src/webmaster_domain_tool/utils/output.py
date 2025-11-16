@@ -64,10 +64,15 @@ class OutputFormatter:
             return "Unknown"
 
         # Try organization first (most common for CAs)
+        # Python SSL returns full names like 'organizationName', not 'O'
+        if "organizationName" in cert.issuer:
+            return cert.issuer["organizationName"]
         if "O" in cert.issuer:
             return cert.issuer["O"]
 
         # Fallback to common name
+        if "commonName" in cert.issuer:
+            return cert.issuer["commonName"]
         if "CN" in cert.issuer:
             return cert.issuer["CN"]
 
