@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "lockfileVersion": 1,
+  "packages": {
+    "@prpm/self-improving-skill": {
+      "version": "1.0.4",
+      "resolved": "https://registry.prpm.dev/api/v1/packages/%40prpm%2Fself-improving-skill/1.0.4.tar.gz",
+      "integrity": "sha256-48752efd6765bf92f03a0aa1a15c45808484d7d96bf18d3eeaa4d03a41f86f79",
+      "format": "claude",
+      "subtype": "skill",
+      "sourceFormat": "claude",
+      "sourceSubtype": "skill",
+      "installedPath": ".claude/skills/self-improving-skill/SKILL.md"
+    }
+  },
+  "generated": "2025-11-16T20:21:58.236Z"
+}
