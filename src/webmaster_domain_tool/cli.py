@@ -28,6 +28,7 @@ from .analyzers.ssl_analyzer import SSLAnalyzer
 from .analyzers.email_security import EmailSecurityAnalyzer
 from .analyzers.security_headers import SecurityHeadersAnalyzer
 from .analyzers.rbl_checker import RBLChecker, extract_ips_from_dns_result
+from .analyzers.google_analyzer import GoogleAnalyzer
 from .config import load_config, create_default_user_config, Config
 from .utils.logger import setup_logger, VerbosityLevel
 from .utils.output import OutputFormatter
@@ -160,11 +161,22 @@ def analyze(
         "--skip-headers",
         help="Skip security headers analysis",
     ),
+    skip_google: bool = typer.Option(
+        False,
+        "--skip-google",
+        help="Skip Google services analysis (site verification, tracking codes)",
+    ),
     # Email security options
     dkim_selectors: Optional[str] = typer.Option(
         None,
         "--dkim-selectors",
         help="Comma-separated list of DKIM selectors to check (e.g., 'default,google,k1')",
+    ),
+    # Google services options
+    google_verification_ids: Optional[str] = typer.Option(
+        None,
+        "--google-verification-ids",
+        help="Comma-separated list of Google Site Verification IDs to check",
     ),
     # HTTP options
     timeout: float = typer.Option(
@@ -253,6 +265,7 @@ def analyze(
     skip_ssl = skip_ssl or config.analysis.skip_ssl
     skip_email = skip_email or config.analysis.skip_email
     skip_headers = skip_headers or config.analysis.skip_headers
+    skip_google = skip_google or config.analysis.skip_google
 
     # Determine RBL check
     do_rbl_check = check_rbl if check_rbl is not None else config.email.check_rbl
@@ -342,6 +355,26 @@ def analyze(
                     formatter.print_security_headers_results(headers_result)
                     seen_urls.add(headers_result.url)
 
+        # Google Services Analysis
+        google_result = None
+        if not skip_google:
+            # Determine verification IDs from CLI or config
+            verification_ids = (
+                google_verification_ids.split(",") if google_verification_ids
+                else config.google.verification_ids
+            )
+
+            # Only run if there are verification IDs OR we want to detect tracking codes
+            # (tracking codes detection always runs if not skipped)
+            logger.info("Running Google services analysis...")
+            google_analyzer = GoogleAnalyzer(
+                verification_ids=verification_ids,
+                timeout=timeout if timeout else config.http.timeout,
+                nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
+            )
+            google_result = google_analyzer.analyze(domain)
+            formatter.print_google_results(google_result)
+
         # RBL (Blacklist) Check
         rbl_result = None
         if do_rbl_check and dns_result:
@@ -365,6 +398,7 @@ def analyze(
             email_result=email_result,
             security_headers=security_headers_results,
             rbl_result=rbl_result,
+            google_result=google_result,
         )
 
         logger.info("Analysis complete")

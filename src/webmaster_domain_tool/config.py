@@ -134,6 +134,15 @@ class OutputConfig(BaseModel):
     )
 
 
+class GoogleConfig(BaseModel):
+    """Google services configuration."""
+
+    verification_ids: list[str] = Field(
+        default_factory=list,
+        description="Google Site Verification IDs to check",
+    )
+
+
 class AnalysisConfig(BaseModel):
     """Analysis options configuration."""
 
@@ -142,6 +151,7 @@ class AnalysisConfig(BaseModel):
     skip_ssl: bool = Field(default=False, description="Skip SSL/TLS analysis")
     skip_email: bool = Field(default=False, description="Skip email security analysis")
     skip_headers: bool = Field(default=False, description="Skip security headers analysis")
+    skip_google: bool = Field(default=False, description="Skip Google services analysis")
 
 
 class Config(BaseSettings):
@@ -156,6 +166,7 @@ class Config(BaseSettings):
     ssl: SSLConfig = Field(default_factory=SSLConfig)
     security_headers: SecurityHeadersConfig = Field(default_factory=SecurityHeadersConfig)
     email: EmailConfig = Field(default_factory=EmailConfig)
+    google: GoogleConfig = Field(default_factory=GoogleConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
 
@@ -318,6 +329,11 @@ dkim_selectors = ["default", "google", "k1", "k2", "selector1", "selector2"]
 check_rbl = false
 rbl_servers = ["zen.spamhaus.org", "bl.spamcop.net", "b.barracudacentral.org", "dnsbl.sorbs.net"]
 
+[google]
+# Google Site Verification IDs to check (empty by default)
+# Example: verification_ids = ["abcd1234efgh5678", "ijkl9012mnop3456"]
+verification_ids = []
+
 [output]
 color = true
 verbosity = "normal"  # quiet, normal, verbose, debug
@@ -328,6 +344,7 @@ skip_http = false
 skip_ssl = false
 skip_email = false
 skip_headers = false
+skip_google = false
 """
         )
         logger.info(f"Created default config file: {config_path}")
