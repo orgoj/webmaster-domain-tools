@@ -13,6 +13,27 @@ import dns.reversename
 logger = logging.getLogger(__name__)
 
 
+def _format_seconds_human(seconds: int) -> str:
+    """Convert seconds to human-readable format (e.g., '1d 2h' or '30m')."""
+    if seconds < 60:
+        return f"{seconds}s"
+    elif seconds < 3600:  # Less than 1 hour
+        minutes = seconds // 60
+        return f"{minutes}m"
+    elif seconds < 86400:  # Less than 1 day
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        if minutes > 0:
+            return f"{hours}h {minutes}m"
+        return f"{hours}h"
+    else:  # Days
+        days = seconds // 86400
+        hours = (seconds % 86400) // 3600
+        if hours > 0:
+            return f"{days}d {hours}h"
+        return f"{days}d"
+
+
 @dataclass
 class DNSRecord:
     """Represents a DNS record."""
@@ -126,6 +147,13 @@ class DNSAnalyzer:
             try:
                 answers = self.resolver.resolve(domain, record_type)
 
+                # Track seen values to avoid duplicates
+                key = f"{domain}:{record_type}"
+                if key not in result.records:
+                    result.records[key] = []
+
+                seen_values = {rec.value for rec in result.records[key]}
+
                 for rdata in answers:
                     record = self._create_dns_record(
                         record_type=record_type,
@@ -133,13 +161,11 @@ class DNSAnalyzer:
                         rdata=rdata,
                         ttl=answers.ttl,
                     )
-                    if record:
-                        key = f"{domain}:{record_type}"
-                        if key not in result.records:
-                            result.records[key] = []
+                    if record and record.value not in seen_values:
                         result.records[key].append(record)
+                        seen_values.add(record.value)
 
-                logger.debug(f"Found {len(answers)} {record_type} records for {domain}")
+                logger.debug(f"Found {len(result.records[key])} unique {record_type} records for {domain}")
 
             except dns.resolver.NXDOMAIN:
                 logger.debug(f"Domain {domain} does not exist")
@@ -166,7 +192,15 @@ class DNSAnalyzer:
             if record_type == "MX":
                 value = f"{rdata.preference} {rdata.exchange}"
             elif record_type == "SOA":
-                value = f"{rdata.mname} {rdata.rname}"
+                # Format: mname rname serial refresh retry expire minimum
+                value = (
+                    f"{rdata.mname} {rdata.rname} "
+                    f"(serial: {rdata.serial}, "
+                    f"refresh: {_format_seconds_human(rdata.refresh)}, "
+                    f"retry: {_format_seconds_human(rdata.retry)}, "
+                    f"expire: {_format_seconds_human(rdata.expire)}, "
+                    f"minimum: {_format_seconds_human(rdata.minimum)})"
+                )
             elif record_type == "CAA":
                 value = f'{rdata.flags} {rdata.tag} "{rdata.value}"'
             else:

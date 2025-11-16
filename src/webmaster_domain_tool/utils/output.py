@@ -13,8 +13,8 @@ from ..analyzers.http_analyzer import HTTPAnalysisResult, HTTPResponse
 from ..analyzers.ssl_analyzer import (
     SSLAnalysisResult,
     CertificateInfo,
-    SSL_EXPIRY_CRITICAL_DAYS,
-    SSL_EXPIRY_WARNING_DAYS,
+    DEFAULT_SSL_EXPIRY_CRITICAL_DAYS,
+    DEFAULT_SSL_EXPIRY_WARNING_DAYS,
 )
 from ..analyzers.email_security import EmailSecurityResult
 from ..analyzers.security_headers import SecurityHeadersResult
@@ -105,6 +105,14 @@ class OutputFormatter:
                     for value in values:
                         self.console.print(f"    - {value}")
                 shown_types.add(record_type)
+
+                # If CNAME, also show resolved A records
+                if record_type == "CNAME" and "CNAME_A" in records_by_type:
+                    cname_a_values = records_by_type["CNAME_A"]
+                    self.console.print(f"  └─> A (resolved):")
+                    for value in cname_a_values:
+                        self.console.print(f"    - {value}")
+                    shown_types.add("CNAME_A")
             else:
                 # Show missing important records
                 self.console.print(f"  {record_type}: [dim]none[/dim]")
@@ -248,14 +256,16 @@ class OutputFormatter:
                     status_color = "yellow"
                     status_symbol = "⚠"
 
-                # Build redirect chain string with status codes
+                # Build redirect chain string with status codes and destination URLs
                 if len(chain.responses) > 1:
                     redirect_chain = []
                     for i, resp in enumerate(chain.responses):
                         if resp.error:
                             redirect_chain.append(f"ERROR")
-                        elif i < len(chain.responses) - 1:  # Not last
+                        elif i < len(chain.responses) - 1:  # Not last (redirect)
                             redirect_chain.append(f"{resp.status_code}")
+                            if resp.redirect_to:
+                                redirect_chain.append(resp.redirect_to)
                         else:  # Last
                             redirect_chain.append(f"{resp.status_code}")
                     redirect_info = f" → {' → '.join(redirect_chain)}"
@@ -346,10 +356,10 @@ class OutputFormatter:
             if cert.errors:
                 self.console.print(f"  [red]✗ {domain}: {cert.errors[0]}[/red]")
             else:
-                if cert.days_until_expiry < SSL_EXPIRY_CRITICAL_DAYS:
+                if cert.days_until_expiry < DEFAULT_SSL_EXPIRY_CRITICAL_DAYS:
                     color = "red"
                     symbol = "✗"
-                elif cert.days_until_expiry < SSL_EXPIRY_WARNING_DAYS:
+                elif cert.days_until_expiry < DEFAULT_SSL_EXPIRY_WARNING_DAYS:
                     color = "yellow"
                     symbol = "⚠"
                 else:
@@ -413,9 +423,9 @@ class OutputFormatter:
             # Expiry with color based on days left
             if cert.days_until_expiry < 0:
                 expiry_str = f"[red]{cert.not_after.strftime('%Y-%m-%d %H:%M:%S')} (EXPIRED)[/red]"
-            elif cert.days_until_expiry < SSL_EXPIRY_CRITICAL_DAYS:
+            elif cert.days_until_expiry < DEFAULT_SSL_EXPIRY_CRITICAL_DAYS:
                 expiry_str = f"[red]{cert.not_after.strftime('%Y-%m-%d %H:%M:%S')} ({cert.days_until_expiry} days)[/red]"
-            elif cert.days_until_expiry < SSL_EXPIRY_WARNING_DAYS:
+            elif cert.days_until_expiry < DEFAULT_SSL_EXPIRY_WARNING_DAYS:
                 expiry_str = f"[yellow]{cert.not_after.strftime('%Y-%m-%d %H:%M:%S')} ({cert.days_until_expiry} days)[/yellow]"
             else:
                 expiry_str = f"[green]{cert.not_after.strftime('%Y-%m-%d %H:%M:%S')} ({cert.days_until_expiry} days)[/green]"

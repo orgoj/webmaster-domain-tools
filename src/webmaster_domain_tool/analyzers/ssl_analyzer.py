@@ -9,9 +9,10 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Certificate expiry thresholds (in days)
-SSL_EXPIRY_CRITICAL_DAYS = 30
-SSL_EXPIRY_WARNING_DAYS = 60
+# Default certificate expiry thresholds (in days)
+# These can be overridden via config
+DEFAULT_SSL_EXPIRY_CRITICAL_DAYS = 7
+DEFAULT_SSL_EXPIRY_WARNING_DAYS = 14
 
 # Default SSL port
 DEFAULT_SSL_PORT = 443
@@ -50,14 +51,23 @@ class SSLAnalysisResult:
 class SSLAnalyzer:
     """Analyzes SSL/TLS certificates and configurations."""
 
-    def __init__(self, timeout: float = 10.0):
+    def __init__(
+        self,
+        timeout: float = 10.0,
+        cert_expiry_warning_days: int = DEFAULT_SSL_EXPIRY_WARNING_DAYS,
+        cert_expiry_critical_days: int = DEFAULT_SSL_EXPIRY_CRITICAL_DAYS,
+    ):
         """
         Initialize SSL analyzer.
 
         Args:
             timeout: Connection timeout in seconds
+            cert_expiry_warning_days: Days before expiry to show warning
+            cert_expiry_critical_days: Days before expiry to show critical error
         """
         self.timeout = timeout
+        self.cert_expiry_warning_days = cert_expiry_warning_days
+        self.cert_expiry_critical_days = cert_expiry_critical_days
 
     def analyze(self, domain: str, port: int = DEFAULT_SSL_PORT) -> SSLAnalysisResult:
         """
@@ -202,11 +212,11 @@ class SSLAnalyzer:
             cert_info.errors.append(
                 f"Certificate expired {abs(cert_info.days_until_expiry)} days ago"
             )
-        elif cert_info.days_until_expiry < SSL_EXPIRY_CRITICAL_DAYS:
+        elif cert_info.days_until_expiry < self.cert_expiry_critical_days:
             cert_info.warnings.append(
                 f"Certificate expires in {cert_info.days_until_expiry} days"
             )
-        elif cert_info.days_until_expiry < SSL_EXPIRY_WARNING_DAYS:
+        elif cert_info.days_until_expiry < self.cert_expiry_warning_days:
             cert_info.warnings.append(
                 f"Certificate expires in {cert_info.days_until_expiry} days (consider renewal)"
             )
