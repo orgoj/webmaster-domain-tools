@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 import whois
@@ -99,37 +99,41 @@ class WhoisAnalyzer:
                 result.days_until_expiry = days_until_expiry
 
                 if days_until_expiry < 0:
-                    result.errors.append(
-                        f"Domain has expired {abs(days_until_expiry)} days ago"
-                    )
+                    result.errors.append(f"Domain has expired {abs(days_until_expiry)} days ago")
                 elif days_until_expiry <= self.expiry_critical_days:
-                    result.errors.append(
-                        f"Domain expires in {days_until_expiry} days (critical)"
-                    )
+                    result.errors.append(f"Domain expires in {days_until_expiry} days (critical)")
                 elif days_until_expiry <= self.expiry_warning_days:
-                    result.warnings.append(
-                        f"Domain expires in {days_until_expiry} days"
-                    )
+                    result.warnings.append(f"Domain expires in {days_until_expiry} days")
             else:
                 result.warnings.append("Expiration date not available in WHOIS data")
 
             # Extract registrant information
-            result.registrant_name = self._extract_string_field(whois_data, "name")
-            result.registrant_organization = self._extract_string_field(
-                whois_data, "org"
+            # Try multiple possible field names (different TLDs use different keys)
+            result.registrant_name = (
+                self._extract_string_field(whois_data, "name")
+                or self._extract_string_field(whois_data, "registrant_name")
+                or self._extract_string_field(whois_data, "registrant")
+            )
+            result.registrant_organization = (
+                self._extract_string_field(whois_data, "org")
+                or self._extract_string_field(whois_data, "registrant_organization")
+                or self._extract_string_field(whois_data, "registrant_org")
             )
 
             # Extract admin contact (may not be available due to GDPR)
-            result.admin_name = self._extract_string_field(whois_data, "admin_name")
-            result.admin_email = self._extract_string_field(whois_data, "admin_email")
+            result.admin_name = self._extract_string_field(
+                whois_data, "admin_name"
+            ) or self._extract_string_field(whois_data, "admin")
+            result.admin_email = self._extract_string_field(
+                whois_data, "admin_email"
+            ) or self._extract_string_field(whois_data, "admin_mail")
 
             # Extract nameservers
             nameservers = whois_data.get("name_servers")
             if nameservers:
                 if isinstance(nameservers, list):
                     result.nameservers = [
-                        ns.lower() if isinstance(ns, str) else str(ns)
-                        for ns in nameservers
+                        ns.lower() if isinstance(ns, str) else str(ns) for ns in nameservers
                     ]
                 elif isinstance(nameservers, str):
                     result.nameservers = [nameservers.lower()]
@@ -138,9 +142,7 @@ class WhoisAnalyzer:
             status = whois_data.get("status")
             if status:
                 if isinstance(status, list):
-                    result.status = [
-                        s if isinstance(s, str) else str(s) for s in status
-                    ]
+                    result.status = [s if isinstance(s, str) else str(s) for s in status]
                 elif isinstance(status, str):
                     result.status = [status]
 
@@ -153,12 +155,16 @@ class WhoisAnalyzer:
         except Exception as e:
             error_msg = str(e).lower()
             # Check if it's a WHOIS-specific error (domain not found)
-            if "no match" in error_msg or "not found" in error_msg or "no entries found" in error_msg:
+            if (
+                "no match" in error_msg
+                or "not found" in error_msg
+                or "no entries found" in error_msg
+            ):
                 result.errors.append("Domain not found in WHOIS database")
                 logger.error(f"WHOIS domain not found: {domain}")
             # Check if it's a connection/timeout error
             elif "timed out" in error_msg or "connection" in error_msg:
-                result.warnings.append(f"WHOIS query timed out or connection failed")
+                result.warnings.append("WHOIS query timed out or connection failed")
                 logger.warning(f"WHOIS connection error for {domain}: {e}")
             # Other errors
             else:
