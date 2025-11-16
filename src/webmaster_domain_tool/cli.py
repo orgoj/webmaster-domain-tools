@@ -179,7 +179,7 @@ def analyze(
     verify: Optional[list[str]] = typer.Option(
         None,
         "--verify",
-        help="Add verification ID for a service (format: Service:ID, e.g., 'Google:ABC123'). Can be used multiple times.",
+        help="Add verification IDs (format: 'Service:ID' or 'Service1:ID1,Service2:ID2'). Can be used multiple times.",
     ),
     # HTTP options
     timeout: float = typer.Option(
@@ -376,39 +376,44 @@ def analyze(
             # Parse and add CLI-provided verification IDs
             if verify:
                 for verify_arg in verify:
-                    # Parse format: Service:ID
-                    if ":" not in verify_arg:
-                        logger.error(
-                            f"Invalid --verify format: '{verify_arg}'. "
-                            f"Expected format: 'Service:ID' (e.g., 'Google:ABC123')"
-                        )
-                        continue
+                    # Support comma-separated values in single --verify
+                    # e.g., --verify "Google:ABC,Facebook:XYZ"
+                    verify_items = [item.strip() for item in verify_arg.split(",")]
 
-                    service_name, verification_id = verify_arg.split(":", 1)
-                    service_name = service_name.strip()
-                    verification_id = verification_id.strip()
+                    for verify_item in verify_items:
+                        # Parse format: Service:ID
+                        if ":" not in verify_item:
+                            logger.error(
+                                f"Invalid --verify format: '{verify_item}'. "
+                                f"Expected format: 'Service:ID' (e.g., 'Google:ABC123')"
+                            )
+                            continue
 
-                    if not service_name or not verification_id:
-                        logger.error(
-                            f"Invalid --verify format: '{verify_arg}'. "
-                            f"Both service name and ID are required."
-                        )
-                        continue
+                        service_name, verification_id = verify_item.split(":", 1)
+                        service_name = service_name.strip()
+                        verification_id = verification_id.strip()
 
-                    # Find service in list
-                    service = next((s for s in services if s.name == service_name), None)
-                    if service:
-                        # Add CLI ID to existing service (if not already there)
-                        if verification_id not in service.ids:
-                            service.ids.append(verification_id)
-                            logger.debug(f"Added verification ID for {service_name}: {verification_id}")
-                    else:
-                        # Service not in config, log warning
-                        logger.warning(
-                            f"Service '{service_name}' not found in predefined services. "
-                            f"Available services: {', '.join(s.name for s in services)}. "
-                            f"Add custom service to config.site_verification.services if needed."
-                        )
+                        if not service_name or not verification_id:
+                            logger.error(
+                                f"Invalid --verify format: '{verify_item}'. "
+                                f"Both service name and ID are required."
+                            )
+                            continue
+
+                        # Find service in list
+                        service = next((s for s in services if s.name == service_name), None)
+                        if service:
+                            # Add CLI ID to existing service (if not already there)
+                            if verification_id not in service.ids:
+                                service.ids.append(verification_id)
+                                logger.debug(f"Added verification ID for {service_name}: {verification_id}")
+                        else:
+                            # Service not in config, log warning
+                            logger.warning(
+                                f"Service '{service_name}' not found in predefined services. "
+                                f"Available services: {', '.join(s.name for s in services)}. "
+                                f"Add custom service to config.site_verification.services if needed."
+                            )
 
             # Only run if there are services configured
             if services:
