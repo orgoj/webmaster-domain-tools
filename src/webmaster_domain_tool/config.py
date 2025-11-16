@@ -134,12 +134,40 @@ class OutputConfig(BaseModel):
     )
 
 
-class GoogleConfig(BaseModel):
-    """Google services configuration."""
+class ServiceVerificationConfig(BaseModel):
+    """Configuration for a single service verification (Google, Facebook, Pinterest, etc)."""
 
-    verification_ids: list[str] = Field(
+    name: str = Field(
+        description="Service name (e.g., 'Google', 'Facebook', 'Pinterest')"
+    )
+    ids: list[str] = Field(
         default_factory=list,
-        description="Google Site Verification IDs to check",
+        description="Verification IDs to check for this service",
+    )
+    dns_pattern: str | None = Field(
+        default=None,
+        description="DNS TXT record pattern with {id} placeholder (e.g., 'google-site-verification={id}')",
+    )
+    file_pattern: str | None = Field(
+        default=None,
+        description="File URL path pattern with {id} placeholder (e.g., 'google{id}.html')",
+    )
+    meta_name: str | None = Field(
+        default=None,
+        description="Meta tag name attribute value (e.g., 'google-site-verification')",
+    )
+    auto_detect: bool = Field(
+        default=True,
+        description="Auto-detect verification IDs from DNS and HTML even if not in ids list",
+    )
+
+
+class SiteVerificationConfig(BaseModel):
+    """Site verification configuration for multiple services."""
+
+    services: list[ServiceVerificationConfig] = Field(
+        default_factory=list,
+        description="List of verification services to check",
     )
 
 
@@ -151,7 +179,9 @@ class AnalysisConfig(BaseModel):
     skip_ssl: bool = Field(default=False, description="Skip SSL/TLS analysis")
     skip_email: bool = Field(default=False, description="Skip email security analysis")
     skip_headers: bool = Field(default=False, description="Skip security headers analysis")
-    skip_google: bool = Field(default=False, description="Skip Google services analysis")
+    skip_site_verification: bool = Field(
+        default=False, description="Skip site verification analysis"
+    )
 
 
 class Config(BaseSettings):
@@ -166,7 +196,7 @@ class Config(BaseSettings):
     ssl: SSLConfig = Field(default_factory=SSLConfig)
     security_headers: SecurityHeadersConfig = Field(default_factory=SecurityHeadersConfig)
     email: EmailConfig = Field(default_factory=EmailConfig)
-    google: GoogleConfig = Field(default_factory=GoogleConfig)
+    site_verification: SiteVerificationConfig = Field(default_factory=SiteVerificationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
 

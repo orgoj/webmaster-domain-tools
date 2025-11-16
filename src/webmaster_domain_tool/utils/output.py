@@ -19,7 +19,7 @@ from ..analyzers.ssl_analyzer import (
 from ..analyzers.email_security import EmailSecurityResult
 from ..analyzers.security_headers import SecurityHeadersResult
 from ..analyzers.rbl_checker import RBLAnalysisResult
-from ..analyzers.google_analyzer import GoogleAnalysisResult
+from ..analyzers.site_verification_analyzer import SiteVerificationAnalysisResult
 
 # Output formatting constants
 MAX_SAN_DISPLAY = 5
@@ -899,32 +899,31 @@ class OutputFormatter:
             self.console.print("[green]✓ No IP addresses found on blacklists[/green]")
         self.console.print()
 
-    def print_google_results(self, result: GoogleAnalysisResult) -> None:
-        """Print Google services analysis results."""
+    def print_site_verification_results(self, result: SiteVerificationAnalysisResult) -> None:
+        """Print site verification analysis results (Google, Facebook, Pinterest, etc.)."""
         if self.verbosity == "quiet":
-            self._print_google_quiet(result)
+            self._print_site_verification_quiet(result)
             return
         elif self.verbosity == "normal":
-            self._print_google_compact(result)
+            self._print_site_verification_compact(result)
             return
         else:  # verbose or debug
-            self._print_google_verbose(result)
+            self._print_site_verification_verbose(result)
 
-    def _print_google_quiet(self, result: GoogleAnalysisResult) -> None:
-        """Print Google results in quiet mode."""
-        # Count verification results
-        verified_count = sum(1 for v in result.verification_results if v.found)
-        total_verification = len(result.verification_results)
+    def _print_site_verification_quiet(self, result: SiteVerificationAnalysisResult) -> None:
+        """Print site verification results in quiet mode."""
+        if not result.service_results and not result.tracking_codes:
+            return  # Nothing to print
 
-        # Count auto-detected verification IDs
-        detected_count = len(result.detected_verification_ids)
+        # Print status for each service
+        for service_result in result.service_results:
+            # Count verification results
+            verified_count = sum(1 for v in service_result.verification_results if v.found)
+            total_verification = len(service_result.verification_results)
 
-        # Count tracking codes
-        tracking_count = len(result.tracking_codes)
+            # Count auto-detected verification IDs
+            detected_count = len(service_result.detected_verification_ids)
 
-        if result.errors:
-            status = f"[red]✗ Google: {len(result.errors)} errors[/red]"
-        else:
             parts = []
             if total_verification > 0:
                 if verified_count == total_verification:
@@ -933,55 +932,65 @@ class OutputFormatter:
                     parts.append(f"[yellow]verified {verified_count}/{total_verification}[/yellow]")
             if detected_count > 0:
                 parts.append(f"{detected_count} auto-detected")
-            if tracking_count > 0:
-                parts.append(f"{tracking_count} tracking code(s)")
 
             if parts:
-                status = f"[green]✓ Google: {', '.join(parts)}[/green]"
+                status = f"[green]✓ {service_result.service}: {', '.join(parts)}[/green]"
             else:
-                status = "[dim]Google: no checks configured[/dim]"
+                status = f"[dim]{service_result.service}: no checks configured[/dim]"
 
-        self.console.print(status)
+            self.console.print(status)
 
-    def _print_google_compact(self, result: GoogleAnalysisResult) -> None:
-        """Print Google results in compact mode."""
-        self.console.print("[bold blue]Google Services[/bold blue]")
+        # Print tracking codes count if any (Google-specific legacy)
+        if result.tracking_codes:
+            tracking_count = len(result.tracking_codes)
+            self.console.print(f"[green]✓ Tracking Codes: {tracking_count} detected[/green]")
+
+        if result.errors:
+            self.console.print(f"[red]✗ Site Verification: {len(result.errors)} errors[/red]")
+
+    def _print_site_verification_compact(self, result: SiteVerificationAnalysisResult) -> None:
+        """Print site verification results in compact mode."""
+        self.console.print("[bold blue]Site Verification[/bold blue]")
 
         # Print HTML fetch error if any
         if result.html_fetch_error:
-            self.all_warnings.append(("Google", f"Could not fetch HTML: {result.html_fetch_error}"))
+            self.all_warnings.append(("Site Verification", f"Could not fetch HTML: {result.html_fetch_error}"))
             self.console.print(f"  [yellow]⚠ Could not fetch HTML: {result.html_fetch_error}[/yellow]")
 
-        # Print Site Verification results (configured)
-        if result.verification_results:
-            self.console.print("  [dim]Site Verification (configured):[/dim]")
-            for verification in result.verification_results:
-                if verification.found:
+        # Print results for each service
+        for service_result in result.service_results:
+            self.console.print(f"  [bold cyan]{service_result.service}[/bold cyan]")
+
+            # Print Site Verification results (configured)
+            if service_result.verification_results:
+                self.console.print("    [dim]Configured IDs:[/dim]")
+                for verification in service_result.verification_results:
+                    if verification.found:
+                        methods_str = ", ".join(verification.methods)
+                        self.console.print(
+                            f"      [green]✓ {verification.verification_id}[/green] "
+                            f"[dim]({methods_str})[/dim]"
+                        )
+                    else:
+                        self.all_errors.append(
+                            (f"{service_result.service}/Verification", f"ID {verification.verification_id} not found")
+                        )
+                        self.console.print(
+                            f"      [red]✗ {verification.verification_id}[/red] "
+                            f"[dim](not found)[/dim]"
+                        )
+
+            # Print auto-detected verification IDs
+            if service_result.detected_verification_ids:
+                self.console.print("    [dim]Auto-detected:[/dim]")
+                for verification in service_result.detected_verification_ids:
                     methods_str = ", ".join(verification.methods)
                     self.console.print(
-                        f"    [green]✓ {verification.verification_id}[/green] "
+                        f"      [cyan]• {verification.verification_id}[/cyan] "
                         f"[dim]({methods_str})[/dim]"
                     )
-                else:
-                    self.all_errors.append(
-                        ("Google/Verification", f"ID {verification.verification_id} not found")
-                    )
-                    self.console.print(
-                        f"    [red]✗ {verification.verification_id}[/red] "
-                        f"[dim](not found)[/dim]"
-                    )
 
-        # Print auto-detected verification IDs
-        if result.detected_verification_ids:
-            self.console.print("  [dim]Site Verification (auto-detected):[/dim]")
-            for verification in result.detected_verification_ids:
-                methods_str = ", ".join(verification.methods)
-                self.console.print(
-                    f"    [cyan]• {verification.verification_id}[/cyan] "
-                    f"[dim]({methods_str})[/dim]"
-                )
-
-        # Print tracking codes
+        # Print tracking codes (Google-specific legacy)
         if result.tracking_codes:
             self.console.print("  [dim]Tracking Codes:[/dim]")
             for code in result.tracking_codes:
@@ -989,80 +998,85 @@ class OutputFormatter:
                     f"    [cyan]• {code.name}:[/cyan] {code.code} "
                     f"[dim]({code.location})[/dim]"
                 )
-        elif not result.html_fetch_error:
+        elif not result.html_fetch_error and result.service_results:
             # Only show "no tracking codes" if we successfully fetched HTML
             self.console.print("  [dim]Tracking Codes: None detected[/dim]")
 
         # Print errors
         if result.errors:
             for error in result.errors:
-                self.all_errors.append(("Google", error))
+                self.all_errors.append(("Site Verification", error))
                 self.console.print(f"  [red]✗ {error}[/red]")
 
         # Print warnings
         if result.warnings:
             for warning in result.warnings:
-                self.all_warnings.append(("Google", warning))
+                self.all_warnings.append(("Site Verification", warning))
                 self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
 
         self.console.print()
 
-    def _print_google_verbose(self, result: GoogleAnalysisResult) -> None:
-        """Print Google results in verbose mode with detailed tables."""
-        self.console.print("[bold blue]═══ Google Services ═══[/bold blue]")
+    def _print_site_verification_verbose(self, result: SiteVerificationAnalysisResult) -> None:
+        """Print site verification results in verbose mode with detailed tables."""
+        self.console.print("[bold blue]═══ Site Verification ═══[/bold blue]")
         self.console.print()
 
         # Print HTML fetch status
         if result.html_fetch_error:
-            self.all_warnings.append(("Google", f"Could not fetch HTML: {result.html_fetch_error}"))
+            self.all_warnings.append(("Site Verification", f"Could not fetch HTML: {result.html_fetch_error}"))
             self.console.print(f"[yellow]⚠ HTML Fetch Error: {result.html_fetch_error}[/yellow]")
             self.console.print()
         else:
             self.console.print("[green]✓ HTML content fetched successfully[/green]")
             self.console.print()
 
-        # Site Verification Table (configured)
-        if result.verification_results:
-            self.console.print("[bold]Site Verification (Configured)[/bold]")
-            table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
-            table.add_column("Verification ID")
-            table.add_column("Status")
-            table.add_column("Methods Found")
+        # Print verification tables for each service
+        for service_result in result.service_results:
+            self.console.print(f"[bold cyan]═══ {service_result.service} ═══[/bold cyan]")
+            self.console.print()
 
-            for verification in result.verification_results:
-                if verification.found:
-                    status = "[green]✓ VERIFIED[/green]"
+            # Site Verification Table (configured)
+            if service_result.verification_results:
+                self.console.print(f"[bold]{service_result.service} Verification (Configured)[/bold]")
+                table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
+                table.add_column("Verification ID")
+                table.add_column("Status")
+                table.add_column("Methods Found")
+
+                for verification in service_result.verification_results:
+                    if verification.found:
+                        status = "[green]✓ VERIFIED[/green]"
+                        methods = ", ".join(verification.methods)
+                    else:
+                        status = "[red]✗ NOT FOUND[/red]"
+                        methods = "[dim]—[/dim]"
+                        self.all_errors.append(
+                            (f"{service_result.service}/Verification", f"ID {verification.verification_id} not found")
+                        )
+
+                    table.add_row(verification.verification_id, status, methods)
+
+                self.console.print(table)
+                self.console.print()
+
+            # Auto-detected Verification IDs Table
+            if service_result.detected_verification_ids:
+                self.console.print(f"[bold]{service_result.service} Verification (Auto-detected)[/bold]")
+                table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
+                table.add_column("Verification ID")
+                table.add_column("Methods Found")
+
+                for verification in service_result.detected_verification_ids:
                     methods = ", ".join(verification.methods)
-                else:
-                    status = "[red]✗ NOT FOUND[/red]"
-                    methods = "[dim]—[/dim]"
-                    self.all_errors.append(
-                        ("Google/Verification", f"ID {verification.verification_id} not found")
+                    table.add_row(
+                        f"[cyan]{verification.verification_id}[/cyan]",
+                        methods
                     )
 
-                table.add_row(verification.verification_id, status, methods)
+                self.console.print(table)
+                self.console.print()
 
-            self.console.print(table)
-            self.console.print()
-
-        # Auto-detected Verification IDs Table
-        if result.detected_verification_ids:
-            self.console.print("[bold]Site Verification (Auto-detected)[/bold]")
-            table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
-            table.add_column("Verification ID")
-            table.add_column("Methods Found")
-
-            for verification in result.detected_verification_ids:
-                methods = ", ".join(verification.methods)
-                table.add_row(
-                    f"[cyan]{verification.verification_id}[/cyan]",
-                    methods
-                )
-
-            self.console.print(table)
-            self.console.print()
-
-        # Tracking Codes Table
+        # Tracking Codes Table (Google-specific legacy)
         if result.tracking_codes:
             self.console.print("[bold]Tracking Codes Detected[/bold]")
             table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
@@ -1079,21 +1093,21 @@ class OutputFormatter:
 
             self.console.print(table)
             self.console.print()
-        elif not result.html_fetch_error:
+        elif not result.html_fetch_error and result.service_results:
             self.console.print("[dim]No tracking codes detected[/dim]")
             self.console.print()
 
         # Print errors
         if result.errors:
             for error in result.errors:
-                self.all_errors.append(("Google", error))
+                self.all_errors.append(("Site Verification", error))
                 self.console.print(f"[red]✗ {error}[/red]")
             self.console.print()
 
         # Print warnings
         if result.warnings:
             for warning in result.warnings:
-                self.all_warnings.append(("Google", warning))
+                self.all_warnings.append(("Site Verification", warning))
                 self.console.print(f"[yellow]⚠ {warning}[/yellow]")
             self.console.print()
 
@@ -1105,7 +1119,7 @@ class OutputFormatter:
         email_result: EmailSecurityResult | None = None,
         security_headers: list[SecurityHeadersResult] | None = None,
         rbl_result: RBLAnalysisResult | None = None,
-        google_result: GoogleAnalysisResult | None = None,
+        site_verification_result: SiteVerificationAnalysisResult | None = None,
     ) -> None:
         """Print summary of all results."""
         if self.verbosity == "quiet":

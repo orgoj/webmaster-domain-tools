@@ -28,7 +28,10 @@ from .analyzers.ssl_analyzer import SSLAnalyzer
 from .analyzers.email_security import EmailSecurityAnalyzer
 from .analyzers.security_headers import SecurityHeadersAnalyzer
 from .analyzers.rbl_checker import RBLChecker, extract_ips_from_dns_result
-from .analyzers.google_analyzer import GoogleAnalyzer
+from .analyzers.site_verification_analyzer import (
+    SiteVerificationAnalyzer,
+    ServiceConfig,
+)
 from .config import load_config, create_default_user_config, Config
 from .utils.logger import setup_logger, VerbosityLevel
 from .utils.output import OutputFormatter
@@ -163,8 +166,8 @@ def analyze(
     ),
     skip_google: bool = typer.Option(
         False,
-        "--skip-google",
-        help="Skip Google services analysis (site verification, tracking codes)",
+        "--skip-google/--skip-site-verification",
+        help="Skip site verification analysis (Google, Facebook, Pinterest, etc.)",
     ),
     # Email security options
     dkim_selectors: Optional[str] = typer.Option(
@@ -265,7 +268,7 @@ def analyze(
     skip_ssl = skip_ssl or config.analysis.skip_ssl
     skip_email = skip_email or config.analysis.skip_email
     skip_headers = skip_headers or config.analysis.skip_headers
-    skip_google = skip_google or config.analysis.skip_google
+    skip_google = skip_google or config.analysis.skip_site_verification
 
     # Determine RBL check
     do_rbl_check = check_rbl if check_rbl is not None else config.email.check_rbl
@@ -355,25 +358,56 @@ def analyze(
                     formatter.print_security_headers_results(headers_result)
                     seen_urls.add(headers_result.url)
 
-        # Google Services Analysis
-        google_result = None
+        # Site Verification Analysis (Google, Facebook, Pinterest, etc.)
+        site_verification_result = None
         if not skip_google:
-            # Determine verification IDs from CLI or config
-            verification_ids = (
-                google_verification_ids.split(",") if google_verification_ids
-                else config.google.verification_ids
-            )
+            # Build list of service configurations
+            services = []
 
-            # Only run if there are verification IDs OR we want to detect tracking codes
-            # (tracking codes detection always runs if not skipped)
-            logger.info("Running Google services analysis...")
-            google_analyzer = GoogleAnalyzer(
-                verification_ids=verification_ids,
-                timeout=timeout if timeout else config.http.timeout,
-                nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
-            )
-            google_result = google_analyzer.analyze(domain)
-            formatter.print_google_results(google_result)
+            # Add services from config
+            for service_cfg in config.site_verification.services:
+                services.append(ServiceConfig(
+                    name=service_cfg.name,
+                    ids=service_cfg.ids,
+                    dns_pattern=service_cfg.dns_pattern,
+                    file_pattern=service_cfg.file_pattern,
+                    meta_name=service_cfg.meta_name,
+                    auto_detect=service_cfg.auto_detect,
+                ))
+
+            # Handle legacy --google-verification-ids CLI parameter
+            # (add/override Google service if provided via CLI)
+            if google_verification_ids:
+                google_ids = google_verification_ids.split(",")
+                # Check if Google service already exists in config
+                google_service_idx = next(
+                    (i for i, svc in enumerate(services) if svc.name == "Google"),
+                    None
+                )
+                if google_service_idx is not None:
+                    # Override IDs for existing Google service
+                    services[google_service_idx].ids = google_ids
+                else:
+                    # Add new Google service with CLI IDs
+                    services.append(ServiceConfig(
+                        name="Google",
+                        ids=google_ids,
+                        dns_pattern="google-site-verification={id}",
+                        file_pattern="google{id}.html",
+                        meta_name="google-site-verification",
+                        auto_detect=True,
+                    ))
+
+            # Only run if there are services configured
+            if services:
+                logger.info("Running site verification analysis...")
+                site_verification_analyzer = SiteVerificationAnalyzer(
+                    services=services,
+                    timeout=timeout if timeout else config.http.timeout,
+                    nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
+                )
+                site_verification_result = site_verification_analyzer.analyze(domain)
+                formatter.print_site_verification_results(site_verification_result)
 
         # RBL (Blacklist) Check
         rbl_result = None
@@ -398,7 +432,7 @@ def analyze(
             email_result=email_result,
             security_headers=security_headers_results,
             rbl_result=rbl_result,
-            google_result=google_result,
+            site_verification_result=site_verification_result,
         )
 
         logger.info("Analysis complete")
