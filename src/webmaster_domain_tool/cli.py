@@ -417,6 +417,37 @@ def analyze(
 
             formatter.print_http_results(http_result)
 
+        # CDN Detection (uses DNS CNAME + HTTP headers)
+        cdn_result = None
+        if not config.analysis.skip_cdn_detection and http_result:
+            logger.info("Detecting CDN...")
+            cdn_detector = CDNDetector()
+
+            # Detect from HTTP headers
+            if http_result.preferred_final_url and http_result.chains:
+                # Get headers from preferred final response
+                final_response = None
+                for chain in http_result.chains:
+                    if chain.responses and chain.final_url == http_result.preferred_final_url:
+                        final_response = chain.responses[-1]
+                        break
+
+                if final_response and final_response.headers:
+                    header_result = cdn_detector.detect_from_headers(final_response.headers)
+                    header_result.domain = domain
+
+                    # Detect from DNS CNAME if available
+                    cname_result = cdn_detector.detect_from_cname([])
+                    if dns_result:
+                        cname_key = f"{domain}:CNAME"
+                        if cname_key in dns_result.records:
+                            cname_values = [r.value for r in dns_result.records[cname_key]]
+                            cname_result = cdn_detector.detect_from_cname(cname_values)
+
+                    # Combine results
+                    cdn_result = cdn_detector.combine_results(domain, header_result, cname_result)
+                    formatter.print_cdn_results(cdn_result)
+
         # SSL/TLS Analysis
         ssl_result = None
         if not skip_ssl:
@@ -429,8 +460,9 @@ def analyze(
             ssl_result = ssl_analyzer.analyze(domain)
             formatter.print_ssl_results(ssl_result)
 
-        # Email Security Analysis
+        # Email Security Analysis (SPF, DKIM, DMARC + BIMI, MTA-STS, TLS-RPT)
         email_result = None
+        advanced_email_result = None
         if not skip_email:
             logger.info("Running email security analysis...")
             selectors = (
@@ -438,7 +470,21 @@ def analyze(
             )
             email_analyzer = EmailSecurityAnalyzer(dkim_selectors=selectors)
             email_result = email_analyzer.analyze(domain)
-            formatter.print_email_security_results(email_result)
+
+            # Advanced Email Security (BIMI, MTA-STS, TLS-RPT)
+            if not config.analysis.skip_advanced_email:
+                logger.info("Running advanced email security analysis...")
+                advanced_email_analyzer = AdvancedEmailSecurityAnalyzer(
+                    nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
+                    check_bimi=config.advanced_email.check_bimi,
+                    check_mta_sts=config.advanced_email.check_mta_sts,
+                    check_tls_rpt=config.advanced_email.check_tls_rpt,
+                    timeout=timeout if timeout else config.http.timeout,
+                )
+                advanced_email_result = advanced_email_analyzer.analyze(domain)
+
+            # Print both email security results together
+            formatter.print_email_security_results(email_result, advanced_email_result)
 
         # Security Headers Analysis
         security_headers_results = []
@@ -588,51 +634,6 @@ def analyze(
             )
             favicon_result = favicon_analyzer.analyze(http_result.preferred_final_url)
             formatter.print_favicon_results(favicon_result)
-
-        # Advanced Email Security (BIMI, MTA-STS, TLS-RPT)
-        advanced_email_result = None
-        if not config.analysis.skip_advanced_email:
-            logger.info("Running advanced email security analysis...")
-            advanced_email_analyzer = AdvancedEmailSecurityAnalyzer(
-                nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
-                check_bimi=config.advanced_email.check_bimi,
-                check_mta_sts=config.advanced_email.check_mta_sts,
-                check_tls_rpt=config.advanced_email.check_tls_rpt,
-                timeout=timeout if timeout else config.http.timeout,
-            )
-            advanced_email_result = advanced_email_analyzer.analyze(domain)
-            formatter.print_advanced_email_results(advanced_email_result)
-
-        # CDN Detection
-        cdn_result = None
-        if not config.analysis.skip_cdn_detection and http_result:
-            logger.info("Detecting CDN...")
-            cdn_detector = CDNDetector()
-
-            # Detect from HTTP headers
-            if http_result.preferred_final_url and http_result.chains:
-                # Get headers from preferred final response
-                final_response = None
-                for chain in http_result.chains:
-                    if chain.responses and chain.final_url == http_result.preferred_final_url:
-                        final_response = chain.responses[-1]
-                        break
-
-                if final_response and final_response.headers:
-                    header_result = cdn_detector.detect_from_headers(final_response.headers)
-                    header_result.domain = domain
-
-                    # Detect from DNS CNAME if available
-                    cname_result = cdn_detector.detect_from_cname([])
-                    if dns_result:
-                        cname_key = f"{domain}:CNAME"
-                        if cname_key in dns_result.records:
-                            cname_values = [r.value for r in dns_result.records[cname_key]]
-                            cname_result = cdn_detector.detect_from_cname(cname_values)
-
-                    # Combine results
-                    cdn_result = cdn_detector.combine_results(domain, header_result, cname_result)
-                    formatter.print_cdn_results(cdn_result)
 
         # Print summary
         formatter.print_summary(

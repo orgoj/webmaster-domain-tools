@@ -789,25 +789,46 @@ class OutputFormatter:
         if result.errors or result.warnings:
             self.console.print()
 
-    def print_email_security_results(self, result: EmailSecurityResult) -> None:
-        """Print email security analysis results."""
+    def print_email_security_results(
+        self,
+        result: EmailSecurityResult,
+        advanced_result: "AdvancedEmailSecurityResult | None" = None
+    ) -> None:
+        """Print email security analysis results (SPF/DKIM/DMARC + advanced)."""
         if self.verbosity == "quiet":
-            self._print_email_quiet(result)
+            self._print_email_quiet(result, advanced_result)
             return
         elif self.verbosity == "normal":
-            self._print_email_compact(result)
+            self._print_email_compact(result, advanced_result)
             return
         else:
-            self._print_email_verbose(result)
+            self._print_email_verbose(result, advanced_result)
 
-    def _print_email_quiet(self, result: EmailSecurityResult) -> None:
+    def _print_email_quiet(
+        self,
+        result: EmailSecurityResult,
+        advanced_result: "AdvancedEmailSecurityResult | None" = None
+    ) -> None:
         """Print email security results in quiet mode."""
         spf_ok = result.spf and result.spf.is_valid
         dmarc_ok = result.dmarc and result.dmarc.is_valid
         dkim_count = len(result.dkim)
 
+        # Check advanced features
+        advanced_count = 0
+        if advanced_result:
+            if advanced_result.bimi and advanced_result.bimi.record_found:
+                advanced_count += 1
+            if advanced_result.mta_sts and advanced_result.mta_sts.policy_found:
+                advanced_count += 1
+            if advanced_result.tls_rpt and advanced_result.tls_rpt.record_found:
+                advanced_count += 1
+
         if spf_ok and dmarc_ok and dkim_count > 0:
-            status = f"[green]✓ Email: SPF, DKIM({dkim_count}), DMARC[/green]"
+            status = f"[green]✓ Email: SPF, DKIM({dkim_count}), DMARC"
+            if advanced_count > 0:
+                status += f" +{advanced_count} advanced"
+            status += "[/green]"
         elif result.errors:
             status = f"[red]✗ Email: {len(result.errors)} errors[/red]"
         else:
@@ -821,7 +842,11 @@ class OutputFormatter:
             status = f"[yellow]⚠ Email: Missing {', '.join(missing)}[/yellow]"
         self.console.print(status)
 
-    def _print_email_compact(self, result: EmailSecurityResult) -> None:
+    def _print_email_compact(
+        self,
+        result: EmailSecurityResult,
+        advanced_result: "AdvancedEmailSecurityResult | None" = None
+    ) -> None:
         """Print email security results in compact mode."""
         self.console.print("[bold blue]Email Security[/bold blue]")
 
@@ -856,6 +881,39 @@ class OutputFormatter:
             self.all_errors.append(("Email/DMARC", "DMARC: Not configured"))
             self.console.print("  [red]✗ DMARC: Not configured[/red]")
 
+        # Advanced Email Security (BIMI, MTA-STS, TLS-RPT)
+        if advanced_result:
+            # BIMI
+            if advanced_result.bimi:
+                if advanced_result.bimi.record_found:
+                    self.console.print(f"  [green]✓[/] BIMI configured")
+                    if advanced_result.bimi.logo_url and self.verbosity in ["verbose", "debug"]:
+                        self.console.print(f"    [dim]Logo: {advanced_result.bimi.logo_url}[/dim]")
+                else:
+                    self.console.print(f"  [dim]BIMI not configured[/dim]")
+
+            # MTA-STS
+            if advanced_result.mta_sts:
+                if advanced_result.mta_sts.policy_found:
+                    mode_color = "green" if advanced_result.mta_sts.policy_mode == "enforce" else "yellow"
+                    self.console.print(f"  [{mode_color}]✓[/] MTA-STS (mode: {advanced_result.mta_sts.policy_mode})")
+                elif advanced_result.mta_sts.record_found:
+                    for error in advanced_result.mta_sts.errors:
+                        self.all_errors.append(("Email/MTA-STS", error))
+                        self.console.print(f"  [red]✗ MTA-STS: {error}[/red]")
+                else:
+                    self.console.print(f"  [dim]MTA-STS not configured[/dim]")
+
+            # TLS-RPT
+            if advanced_result.tls_rpt:
+                if advanced_result.tls_rpt.record_found:
+                    self.console.print(f"  [green]✓[/] TLS-RPT configured")
+                    if advanced_result.tls_rpt.reporting_addresses and self.verbosity in ["verbose", "debug"]:
+                        for addr in advanced_result.tls_rpt.reporting_addresses:
+                            self.console.print(f"    [dim]Reporting: {addr}[/dim]")
+                else:
+                    self.console.print(f"  [dim]TLS-RPT not configured[/dim]")
+
         # Show actual warnings (deduplicated)
         seen_warnings = set()
         for warning in result.warnings:
@@ -867,9 +925,13 @@ class OutputFormatter:
                 self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
                 seen_warnings.add(warning)
 
-    def _print_email_verbose(self, result: EmailSecurityResult) -> None:
+    def _print_email_verbose(
+        self,
+        result: EmailSecurityResult,
+        advanced_result: "AdvancedEmailSecurityResult | None" = None
+    ) -> None:
         """Print email security results in verbose mode."""
-        self.console.print("[bold blue]═══ Email Security (SPF, DKIM, DMARC) ═══[/bold blue]")
+        self.console.print("[bold blue]═══ Email Security ═══[/bold blue]")
         self.console.print()
 
         # SPF
@@ -944,6 +1006,49 @@ class OutputFormatter:
         else:
             self.all_errors.append(("Email/DMARC", "No DMARC record found"))
             self.console.print("[red]✗ No DMARC record found[/red]")
+
+        # Advanced Email Security
+        if advanced_result:
+            self.console.print()
+            self.console.print("[cyan]Advanced Features[/cyan]")
+            self.console.print()
+
+            # BIMI
+            if advanced_result.bimi:
+                if advanced_result.bimi.record_found:
+                    self.console.print(f"[green]✓[/green] [cyan]BIMI configured[/cyan]")
+                    if advanced_result.bimi.logo_url:
+                        self.console.print(f"  Logo URL: {advanced_result.bimi.logo_url}")
+                    if advanced_result.bimi.vmc_url:
+                        self.console.print(f"  VMC URL: {advanced_result.bimi.vmc_url}")
+                else:
+                    self.console.print("[dim]BIMI not configured[/dim]")
+
+            # MTA-STS
+            if advanced_result.mta_sts:
+                if advanced_result.mta_sts.policy_found:
+                    mode_color = "green" if advanced_result.mta_sts.policy_mode == "enforce" else "yellow"
+                    self.console.print(f"[{mode_color}]✓[/{mode_color}] [cyan]MTA-STS[/cyan]")
+                    self.console.print(f"  Mode: {advanced_result.mta_sts.policy_mode}")
+                    if advanced_result.mta_sts.max_age:
+                        self.console.print(f"  Max Age: {advanced_result.mta_sts.max_age} seconds")
+                    if advanced_result.mta_sts.mx_patterns:
+                        self.console.print(f"  MX patterns: {', '.join(advanced_result.mta_sts.mx_patterns)}")
+                elif advanced_result.mta_sts.record_found:
+                    for error in advanced_result.mta_sts.errors:
+                        self.all_errors.append(("Email/MTA-STS", error))
+                        self.console.print(f"[red]✗ MTA-STS: {error}[/red]")
+                else:
+                    self.console.print("[dim]MTA-STS not configured[/dim]")
+
+            # TLS-RPT
+            if advanced_result.tls_rpt:
+                if advanced_result.tls_rpt.record_found:
+                    self.console.print(f"[green]✓[/green] [cyan]TLS-RPT configured[/cyan]")
+                    for addr in advanced_result.tls_rpt.reporting_addresses:
+                        self.console.print(f"  Reporting: {addr}")
+                else:
+                    self.console.print("[dim]TLS-RPT not configured[/dim]")
 
         self.console.print()
 
@@ -1476,42 +1581,6 @@ class OutputFormatter:
 
         if not found_favicons and not result.warnings:
             self.console.print(f"  [dim]No favicons found[/dim]")
-
-    def print_advanced_email_results(self, result: AdvancedEmailSecurityResult) -> None:
-        """Print advanced email security results."""
-        if self.verbosity == "quiet":
-            return
-
-        self.console.print("[bold blue]Advanced Email Security[/bold blue]")
-
-        # BIMI
-        if result.bimi:
-            if result.bimi.record_found:
-                self.console.print(f"  [green]✓ BIMI configured[/green]")
-                if result.bimi.logo_url:
-                    self.console.print(f"    Logo: {result.bimi.logo_url}")
-            else:
-                self.console.print(f"  [dim]BIMI not configured[/dim]")
-
-        # MTA-STS
-        if result.mta_sts:
-            if result.mta_sts.policy_found:
-                self.console.print(f"  [green]✓ MTA-STS[/green] (mode: {result.mta_sts.policy_mode})")
-            elif result.mta_sts.record_found:
-                for error in result.mta_sts.errors:
-                    self.all_errors.append(("Email/MTA-STS", error))
-                    self.console.print(f"  [red]✗ MTA-STS: {error}[/red]")
-            else:
-                self.console.print(f"  [dim]MTA-STS not configured[/dim]")
-
-        # TLS-RPT
-        if result.tls_rpt:
-            if result.tls_rpt.record_found:
-                self.console.print(f"  [green]✓ TLS-RPT configured[/green]")
-                for addr in result.tls_rpt.reporting_addresses:
-                    self.console.print(f"    Reporting: {addr}")
-            else:
-                self.console.print(f"  [dim]TLS-RPT not configured[/dim]")
 
     def print_cdn_results(self, result: CDNDetectionResult) -> None:
         """Print CDN detection results."""
