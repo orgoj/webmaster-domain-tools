@@ -22,6 +22,7 @@ app = typer.Typer(
     name="webmaster-domain-tool",
     help="Comprehensive domain analysis tool for webmasters",
     add_completion=False,
+    no_args_is_help=True,
 )
 
 console = Console()

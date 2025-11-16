@@ -78,13 +78,13 @@ Komplexní nástroj pro webmastery, který analyzuje a přehledně zobrazuje vš
 Spuštění přímo z gitu bez instalace:
 
 ```bash
-uvx --from git+https://github.com/orgoj/webmaster-domain-tool webmaster-domain-tool example.com
+uvx --from git+https://github.com/orgoj/webmaster-domain-tool webmaster-domain-tool analyze example.com
 ```
 
 Nebo zkrácený alias:
 
 ```bash
-uvx --from git+https://github.com/orgoj/webmaster-domain-tool wdt example.com
+uvx --from git+https://github.com/orgoj/webmaster-domain-tool wdt analyze example.com
 ```
 
 ### Instalace přes uv
@@ -104,7 +104,7 @@ uv sync
 Spuštění v dev módu:
 
 ```bash
-uv run webmaster-domain-tool example.com
+uv run webmaster-domain-tool analyze example.com
 ```
 
 ## Použití
@@ -112,13 +112,13 @@ uv run webmaster-domain-tool example.com
 ### Základní použití
 
 ```bash
-webmaster-domain-tool example.com
+webmaster-domain-tool analyze example.com
 ```
 
 Nebo zkrácený příkaz:
 
 ```bash
-wdt example.com
+wdt analyze example.com
 ```
 
 ### Konfigurace
@@ -144,8 +144,8 @@ wdt create-config
 
 ```bash
 # Použití vlastního config souboru
-wdt --config /path/to/config.toml example.com
-wdt -c myconfig.toml example.com
+wdt analyze --config /path/to/config.toml example.com
+wdt analyze -c myconfig.toml example.com
 ```
 
 **Příklad konfigurace:**
@@ -180,41 +180,49 @@ skip_email = false
 
 ```bash
 # Quiet mode - pouze chyby
-wdt --quiet example.com
-wdt -q example.com
+wdt analyze --quiet example.com
+wdt analyze -q example.com
 
 # Normal mode - default
-wdt example.com
+wdt analyze example.com
 
 # Verbose mode - detailní informace
-wdt --verbose example.com
-wdt -v example.com
+wdt analyze --verbose example.com
+wdt analyze -v example.com
 
 # Debug mode - velmi detailní výstup
-wdt --debug example.com
-wdt -d example.com
+wdt analyze --debug example.com
+wdt analyze -d example.com
 ```
 
 #### Přeskočení určitých kontrol
 
+**Defaultní stav:**
+- ✅ DNS analýza - zapnuto
+- ✅ HTTP/HTTPS analýza - zapnuto
+- ✅ SSL/TLS analýza - zapnuto
+- ✅ Email security (SPF, DKIM, DMARC) - zapnuto
+- ✅ Security headers - zapnuto
+- ❌ RBL kontrola - vypnuto (zapnout pomocí `--check-rbl`)
+
 ```bash
 # Přeskočit DNS analýzu
-wdt --skip-dns example.com
+wdt analyze --skip-dns example.com
 
 # Přeskočit HTTP/HTTPS analýzu
-wdt --skip-http example.com
+wdt analyze --skip-http example.com
 
 # Přeskočit SSL/TLS analýzu
-wdt --skip-ssl example.com
+wdt analyze --skip-ssl example.com
 
 # Přeskočit email security (SPF, DKIM, DMARC)
-wdt --skip-email example.com
+wdt analyze --skip-email example.com
 
 # Přeskočit security headers
-wdt --skip-headers example.com
+wdt analyze --skip-headers example.com
 
 # Kombinace - pouze DNS a SSL
-wdt --skip-http --skip-email --skip-headers example.com
+wdt analyze --skip-http --skip-email --skip-headers example.com
 ```
 
 #### DKIM selektory
@@ -224,38 +232,40 @@ Můžete specifikovat vlastní selektory:
 
 ```bash
 # Vlastní DKIM selektory
-wdt --dkim-selectors "selector1,selector2,custom" example.com
+wdt analyze --dkim-selectors "selector1,selector2,custom" example.com
 ```
 
 #### HTTP nastavení
 
 ```bash
 # Vlastní timeout (default: 10s)
-wdt --timeout 5 example.com
-wdt -t 5 example.com
+wdt analyze --timeout 5 example.com
+wdt analyze -t 5 example.com
 
 # Maximální počet redirectů (default: 10)
-wdt --max-redirects 5 example.com
+wdt analyze --max-redirects 5 example.com
 ```
 
 #### DNS nastavení
 
 ```bash
 # Vlastní DNS servery
-wdt --nameservers "8.8.8.8,1.1.1.1" example.com
+wdt analyze --nameservers "8.8.8.8,1.1.1.1" example.com
 ```
 
 #### RBL (Blacklist) kontrola
 
-```bash
-# Vypnout RBL kontrolu
-wdt --no-check-rbl example.com
+**Defaultně vypnuto** - RBL kontrola je výchozím nastavením vypnutá, protože může zpomalit analýzu.
 
-# Zapnout RBL kontrolu (pokud je vypnutá v configu)
-wdt --check-rbl example.com
+```bash
+# Zapnout RBL kontrolu
+wdt analyze --check-rbl example.com
+
+# Vypnout RBL kontrolu (pokud je zapnutá v configu)
+wdt analyze --no-check-rbl example.com
 ```
 
-Standardně se kontrolují:
+Pokud zapnuto, kontrolují se tyto RBL servery:
 - Spamhaus ZEN (`zen.spamhaus.org`)
 - SpamCop (`bl.spamcop.net`)
 - Barracuda Central (`b.barracudacentral.org`)
@@ -267,27 +277,27 @@ Vlastní RBL servery můžete nastavit v config souboru.
 
 ```bash
 # Vypnout barevný výstup
-wdt --no-color example.com
+wdt analyze --no-color example.com
 ```
 
 ### Příklady komplexního použití
 
 ```bash
 # Rychlá kontrola s vlastními DNS servery
-wdt --nameservers "1.1.1.1,8.8.8.8" example.com
+wdt analyze --nameservers "1.1.1.1,8.8.8.8" example.com
 
 # Detailní analýza s debug výstupem
-wdt --debug --timeout 15 example.com
+wdt analyze --debug --timeout 15 example.com
 
 # Pouze email security s vlastními DKIM selektory
-wdt --skip-dns --skip-http --skip-ssl --skip-headers \
+wdt analyze --skip-dns --skip-http --skip-ssl --skip-headers \
     --dkim-selectors "google,default,mail" example.com
 
 # Verbose výstup bez barev (pro logování)
-wdt -v --no-color example.com > domain-report.txt
+wdt analyze -v --no-color example.com > domain-report.txt
 
 # Rychlá kontrola bez email security
-wdt --skip-email --timeout 5 example.com
+wdt analyze --skip-email --timeout 5 example.com
 ```
 
 ## Výstup

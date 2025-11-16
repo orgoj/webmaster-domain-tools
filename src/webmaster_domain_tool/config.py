@@ -56,7 +56,7 @@ class EmailConfig(BaseModel):
         description="DKIM selectors to check",
     )
     check_rbl: bool = Field(
-        default=True,
+        default=False,
         description="Check realtime blacklists (RBL) for mail servers",
     )
     rbl_servers: list[str] = Field(
@@ -94,7 +94,6 @@ class Config(BaseSettings):
     """Main configuration for webmaster-domain-tool."""
 
     model_config = SettingsConfigDict(
-        toml_file="config.toml",
         extra="ignore",
     )
 
@@ -242,7 +241,7 @@ max_redirects = 10
 
 [email]
 dkim_selectors = ["default", "google", "k1", "k2", "selector1", "selector2"]
-check_rbl = true
+check_rbl = false
 rbl_servers = ["zen.spamhaus.org", "bl.spamcop.net", "b.barracudacentral.org", "dnsbl.sorbs.net"]
 
 [output]
