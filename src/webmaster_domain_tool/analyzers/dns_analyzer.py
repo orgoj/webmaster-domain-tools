@@ -207,6 +207,19 @@ class DNSAnalyzer:
                 logger.error(f"Error querying {record_type} for {domain}: {e}")
                 result.errors.append(f"Error querying {record_type} for {domain}: {str(e)}")
 
+        # DNS rule: if domain has CNAME, it cannot have A/AAAA records
+        # Remove A/AAAA if CNAME exists (they might be returned by resolver following CNAME)
+        cname_key = f"{domain}:CNAME"
+        if cname_key in result.records and result.records[cname_key]:
+            a_key = f"{domain}:A"
+            aaaa_key = f"{domain}:AAAA"
+            if a_key in result.records:
+                logger.debug(f"Removing A records for {domain} (has CNAME)")
+                del result.records[a_key]
+            if aaaa_key in result.records:
+                logger.debug(f"Removing AAAA records for {domain} (has CNAME)")
+                del result.records[aaaa_key]
+
     def _create_dns_record(
         self, record_type: str, name: str, rdata: Any, ttl: int | None
     ) -> DNSRecord | None:
