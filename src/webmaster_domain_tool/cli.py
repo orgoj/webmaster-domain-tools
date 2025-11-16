@@ -357,24 +357,31 @@ def analyze(
                 "check_content_type": config.security_headers.check_content_type,
             }
 
-            # Analyze headers from final URLs in redirect chains
+            # Collect unique final URLs from redirect chains
+            # Normalize URLs to avoid duplicates (remove trailing slash, lowercase)
+            seen_urls = set()
+            unique_responses = []
+
             for chain in http_result.chains:
                 if chain.responses:
                     last_response = chain.responses[-1]
                     if last_response.status_code == 200:
-                        headers_analyzer = SecurityHeadersAnalyzer(enabled_checks=enabled_checks)
-                        headers_result = headers_analyzer.analyze(
-                            last_response.url,
-                            last_response.headers,
-                        )
-                        security_headers_results.append(headers_result)
+                        # Normalize URL for comparison
+                        normalized_url = last_response.url.rstrip('/').lower()
 
-            # Print only unique final URLs (avoid duplicates)
-            seen_urls = set()
-            for headers_result in security_headers_results:
-                if headers_result.url not in seen_urls:
-                    formatter.print_security_headers_results(headers_result)
-                    seen_urls.add(headers_result.url)
+                        if normalized_url not in seen_urls:
+                            seen_urls.add(normalized_url)
+                            unique_responses.append(last_response)
+
+            # Analyze headers for unique final URLs only
+            for response in unique_responses:
+                headers_analyzer = SecurityHeadersAnalyzer(enabled_checks=enabled_checks)
+                headers_result = headers_analyzer.analyze(
+                    response.url,
+                    response.headers,
+                )
+                security_headers_results.append(headers_result)
+                formatter.print_security_headers_results(headers_result)
 
         # Site Verification Analysis (Google, Facebook, Pinterest, etc.)
         site_verification_result = None
