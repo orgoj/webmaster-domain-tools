@@ -1,5 +1,6 @@
 """Command-line interface for webmaster-domain-tool."""
 
+import logging
 import re
 from pathlib import Path
 
@@ -16,28 +17,27 @@ _original_panel_init = rich.panel.Panel.__init__
 
 def _no_border_panel_init(self, *args, **kwargs):
     # Remove borders from panels - use HORIZONTALS for minimal formatting
-    kwargs['box'] = box.HORIZONTALS
+    kwargs["box"] = box.HORIZONTALS
     return _original_panel_init(self, *args, **kwargs)
 
 
 rich.panel.Panel.__init__ = _no_border_panel_init
 
+# flake8: noqa: E402
+# ruff: noqa: E402
 from .analyzers.advanced_email_security import AdvancedEmailSecurityAnalyzer
 from .analyzers.cdn_detector import CDNDetector
 from .analyzers.dns_analyzer import DNSAnalyzer
 from .analyzers.email_security import EmailSecurityAnalyzer
 from .analyzers.favicon_analyzer import FaviconAnalyzer
-from .analyzers.http_analyzer import HTTPAnalyzer, HTTPAnalysisResult, HTTPResponse
+from .analyzers.http_analyzer import HTTPAnalysisResult, HTTPAnalyzer, HTTPResponse
 from .analyzers.rbl_checker import RBLChecker, extract_ips_from_dns_result
 from .analyzers.security_headers import SecurityHeadersAnalyzer
 from .analyzers.seo_files_analyzer import SEOFilesAnalyzer
-from .analyzers.site_verification_analyzer import (
-    ServiceConfig,
-    SiteVerificationAnalyzer,
-)
+from .analyzers.site_verification_analyzer import ServiceConfig, SiteVerificationAnalyzer
 from .analyzers.ssl_analyzer import SSLAnalyzer
 from .analyzers.whois_analyzer import WhoisAnalyzer
-from .config import Config, create_default_user_config, load_config
+from .config import create_default_user_config, load_config
 from .utils.logger import VerbosityLevel, setup_logger
 from .utils.output import OutputFormatter
 
@@ -59,13 +59,11 @@ def validate_domain(domain: str) -> str:
 
     # Basic domain validation regex
     domain_pattern = re.compile(
-        r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+        r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
     )
 
     if not domain_pattern.match(domain):
-        raise typer.BadParameter(
-            f"Invalid domain format: {domain}. Expected format: example.com"
-        )
+        raise typer.BadParameter(f"Invalid domain format: {domain}. Expected format: example.com")
 
     return domain
 
@@ -148,7 +146,7 @@ def get_preferred_final_url(
             last_response = chain.responses[-1]
             if last_response.status_code == 200:
                 # Normalize URL for comparison (remove trailing slash, lowercase)
-                normalized_url = last_response.url.rstrip('/').lower()
+                normalized_url = last_response.url.rstrip("/").lower()
 
                 if normalized_url not in final_urls:
                     final_urls[normalized_url] = (last_response.url, last_response)
@@ -173,13 +171,12 @@ def get_preferred_final_url(
     # Choose preferred URL (priority: https with www > https without www > http)
     def url_priority(url: str) -> tuple[int, int, str]:
         """Return priority tuple (https=0/http=1, has_www=0/no_www=1, url)."""
-        is_https = 0 if url.startswith('https://') else 1
-        has_www = 0 if '://www.' in url else 1
+        is_https = 0 if url.startswith("https://") else 1
+        has_www = 0 if "://www." in url else 1
         return (is_https, has_www, url)
 
     # Sort by priority and take the best one
-    preferred_normalized = min(final_urls.keys(),
-                              key=lambda k: url_priority(final_urls[k][0]))
+    preferred_normalized = min(final_urls.keys(), key=lambda k: url_priority(final_urls[k][0]))
     preferred_url, preferred_response = final_urls[preferred_normalized]
 
     logger.info(f"Using preferred final URL for analysis: {preferred_url}")
@@ -279,7 +276,7 @@ def analyze(
         help="Maximum number of redirects to follow (0-50)",
         callback=validate_max_redirects,
     ),
-    check_path: Optional[str] = typer.Option(
+    check_path: str | None = typer.Option(
         None,
         "--check-path",
         help="Check if specific path exists on final URL (e.g., '/.wdt.hosting.info.txt')",
@@ -382,7 +379,11 @@ def analyze(
             dns_analyzer = DNSAnalyzer(
                 nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
                 check_dnssec=config.dns.check_dnssec,
-                warn_www_not_cname=warn_www_not_cname if warn_www_not_cname is not None else config.dns.warn_www_not_cname,
+                warn_www_not_cname=(
+                    warn_www_not_cname
+                    if warn_www_not_cname is not None
+                    else config.dns.warn_www_not_cname
+                ),
                 skip_www=skip_www if skip_www else config.analysis.skip_www,
             )
             dns_result = dns_analyzer.analyze(domain)
@@ -463,9 +464,7 @@ def analyze(
         advanced_email_result = None
         if not skip_email:
             logger.info("Running email security analysis...")
-            selectors = (
-                dkim_selectors.split(",") if dkim_selectors else config.email.dkim_selectors
-            )
+            selectors = dkim_selectors.split(",") if dkim_selectors else config.email.dkim_selectors
             email_analyzer = EmailSecurityAnalyzer(dkim_selectors=selectors)
             email_result = email_analyzer.analyze(domain)
 
@@ -522,14 +521,16 @@ def analyze(
             # Build list of service configurations from config
             services = []
             for service_cfg in config.site_verification.services:
-                services.append(ServiceConfig(
-                    name=service_cfg.name,
-                    ids=list(service_cfg.ids),  # Copy to avoid modifying config
-                    dns_pattern=service_cfg.dns_pattern,
-                    file_pattern=service_cfg.file_pattern,
-                    meta_name=service_cfg.meta_name,
-                    auto_detect=service_cfg.auto_detect,
-                ))
+                services.append(
+                    ServiceConfig(
+                        name=service_cfg.name,
+                        ids=list(service_cfg.ids),  # Copy to avoid modifying config
+                        dns_pattern=service_cfg.dns_pattern,
+                        file_pattern=service_cfg.file_pattern,
+                        meta_name=service_cfg.meta_name,
+                        auto_detect=service_cfg.auto_detect,
+                    )
+                )
 
             # Parse and add CLI-provided verification IDs
             if verify:
@@ -564,7 +565,9 @@ def analyze(
                             # Add CLI ID to existing service (if not already there)
                             if verification_id not in service.ids:
                                 service.ids.append(verification_id)
-                                logger.debug(f"Added verification ID for {service_name}: {verification_id}")
+                                logger.debug(
+                                    f"Added verification ID for {service_name}: {verification_id}"
+                                )
                         else:
                             # Service not in config, log warning
                             logger.warning(

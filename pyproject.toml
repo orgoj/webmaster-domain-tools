@@ -69,6 +69,8 @@ target-version = ["py310", "py311", "py312"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
@@ -80,6 +82,10 @@ select = [
 ]
 ignore = [
     "E501",  # line too long (handled by black)
+    "B904",  # raise from err - TODO: fix these properly
+    "B008",  # function call in defaults (typer pattern)
+    "B007",  # unused loop variable
+    "C401",  # unnecessary generator
 ]
 
 [tool.mypy]
