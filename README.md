@@ -12,11 +12,14 @@ Komplexní nástroj pro webmastery, který analyzuje a přehledně zobrazuje vš
 - ✅ SOA záznamy
 - ✅ CAA záznamy (Certificate Authority Authorization)
 - ✅ CNAME záznamy
+  - **Automatická kontrola DNS pravidel** (CNAME nemůže koexistovat s A/AAAA)
+  - Rozlišení mezi CNAME a přímými A záznamy
 - ✅ **DNSSEC validace**
   - Kontrola DNSKEY a DS záznamů
   - Validace chain of trust
   - Upozornění na neplatnou konfiguraci
 - ✅ Kontrola domény i www varianty
+- ✅ **Volitelné upozornění** když www není CNAME (best practice)
 
 ### HTTP/HTTPS Analýza
 - ✅ Testování všech variant (http/https, s/bez www)
@@ -155,6 +158,8 @@ wdt analyze -c myconfig.toml example.com
 nameservers = ["1.1.1.1", "8.8.8.8"]
 timeout = 5.0
 check_dnssec = true
+# Upozornit když www subdoména není CNAME (best practice pro snadnější správu)
+warn_www_not_cname = false
 
 [http]
 timeout = 10.0
@@ -251,7 +256,25 @@ wdt analyze --max-redirects 5 example.com
 ```bash
 # Vlastní DNS servery
 wdt analyze --nameservers "8.8.8.8,1.1.1.1" example.com
+
+# Upozornit když www subdoména není CNAME (best practice)
+wdt analyze --warn-www-not-cname example.com
+
+# Vypnout upozornění (pokud je zapnuté v configu)
+wdt analyze --no-warn-www-not-cname example.com
 ```
+
+**Proč je CNAME pro www lepší?**
+
+Když má www subdoména přímý A záznam místo CNAME:
+- ❌ Složitější správa při změně hostingu/CDN
+- ❌ Musíte měnit A záznamy na více místech
+- ❌ Klienti co mají zastaralé A záznamy mohou mít výpadek
+
+S CNAME:
+- ✅ Stačí změnit cíl CNAME na jednom místě
+- ✅ Automatická aktualizace IP adresy
+- ✅ Snadnější migrace mezi poskytovateli
 
 #### RBL (Blacklist) kontrola
 
@@ -343,7 +366,9 @@ Nástroj zobrazuje přehledný barevný výstup rozdělený do sekcí:
 
 ### 7. Summary
 - Celkový počet chyb a warnings
-- Přehledné shrnutí
+- **Detailní seznam všech errors/warnings s kategoriemi**
+- Každá chyba/warning zobrazena s přesným popisem a kategorií (DNS, HTTP, SSL, Email, atd.)
+- 100% přesné počítání - count vždy odpovídá zobrazovaným zprávám
 
 ## Požadavky
 
