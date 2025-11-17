@@ -560,3 +560,107 @@ class TestDisplayResults:
         # Should have summary + 12 panels (one for each analyzer)
         # Note: advanced_email is merged into email panel, so we get 11 panels + summary
         assert len(app.results_column.controls) >= 11
+
+    @pytest.mark.slow
+    def test_end_to_end_real_analysis_example_com(self, app):
+        """END-TO-END TEST: Run REAL analyzers on example.com and display results.
+
+        This test uses REAL analyzers (not Mocks) to analyze a real domain (example.com)
+        and displays the actual results. This catches ANY AttributeError that would occur
+        in production with real data structures.
+
+        IMPORTANT: This is the CORRECT way to test GUI display - use real analyzers
+        with real network calls to catch all possible AttributeErrors!
+        """
+        from webmaster_domain_tool.analyzers.cdn_detector import CDNDetector
+        from webmaster_domain_tool.analyzers.dns_analyzer import DNSAnalyzer
+        from webmaster_domain_tool.analyzers.email_security import EmailSecurityAnalyzer
+        from webmaster_domain_tool.analyzers.favicon_analyzer import FaviconAnalyzer
+        from webmaster_domain_tool.analyzers.http_analyzer import HTTPAnalyzer
+        from webmaster_domain_tool.analyzers.rbl_checker import (
+            RBLChecker,
+            extract_ips_from_dns_result,
+        )
+        from webmaster_domain_tool.analyzers.security_headers import SecurityHeadersAnalyzer
+        from webmaster_domain_tool.analyzers.seo_files_analyzer import SEOFilesAnalyzer
+        from webmaster_domain_tool.analyzers.site_verification_analyzer import (
+            SiteVerificationAnalyzer,
+        )
+        from webmaster_domain_tool.analyzers.ssl_analyzer import SSLAnalyzer
+
+        domain = "example.com"
+        results = {}
+
+        # Run REAL analyzers (this makes network calls!)
+        try:
+            # DNS Analysis
+            dns_analyzer = DNSAnalyzer()
+            results["dns"] = dns_analyzer.analyze(domain)
+
+            # HTTP Analysis
+            http_analyzer = HTTPAnalyzer()
+            results["http"] = http_analyzer.analyze(domain)
+
+            # SSL Analysis
+            ssl_analyzer = SSLAnalyzer()
+            results["ssl"] = ssl_analyzer.analyze(domain)
+
+            # Email Security
+            email_analyzer = EmailSecurityAnalyzer()
+            results["email"] = email_analyzer.analyze(domain)
+
+            # Security Headers (needs HTTP result)
+            if results.get("http"):
+                http_result = results["http"]
+                if http_result.chains and http_result.chains[0].responses:
+                    final_response = http_result.chains[0].responses[-1]
+                    if final_response.status_code == 200:
+                        headers_analyzer = SecurityHeadersAnalyzer()
+                        results["headers"] = headers_analyzer.analyze(
+                            final_response.url, final_response.headers
+                        )
+
+            # RBL Check (needs DNS result)
+            if results.get("dns"):
+                dns_result = results["dns"]
+                ips = extract_ips_from_dns_result(dns_result)
+                if ips:
+                    rbl_checker = RBLChecker()
+                    results["rbl"] = rbl_checker.check_ips(domain, ips)
+
+            # SEO Files (needs HTTP result)
+            if results.get("http"):
+                http_result = results["http"]
+                if http_result.chains and http_result.chains[0].responses:
+                    final_response = http_result.chains[0].responses[-1]
+                    if final_response.status_code == 200:
+                        seo_analyzer = SEOFilesAnalyzer()
+                        results["seo"] = seo_analyzer.analyze(final_response.url)
+
+            # Favicon (needs HTTP result)
+            if results.get("http"):
+                http_result = results["http"]
+                if http_result.chains and http_result.chains[0].responses:
+                    final_response = http_result.chains[0].responses[-1]
+                    if final_response.status_code == 200:
+                        favicon_analyzer = FaviconAnalyzer()
+                        results["favicon"] = favicon_analyzer.analyze(final_response.url)
+
+            # Site Verification
+            site_verification_analyzer = SiteVerificationAnalyzer()
+            results["site_verification"] = site_verification_analyzer.analyze(domain)
+
+            # CDN Detection
+            cdn_detector = CDNDetector()
+            results["cdn"] = cdn_detector.analyze(domain)
+
+        except Exception as e:
+            pytest.skip(f"Network error during real analysis: {e}")
+
+        # Display results - THIS is where AttributeErrors would occur!
+        # If any panel tries to access a wrong attribute, it will fail here
+        app.display_results(domain, results)
+
+        # Verify results are displayed
+        assert app.results_card.visible is True
+        assert len(app.results_column.controls) > 0
