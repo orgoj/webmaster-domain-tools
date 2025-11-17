@@ -25,19 +25,8 @@ rich.panel.Panel.__init__ = _no_border_panel_init
 
 # flake8: noqa: E402
 # ruff: noqa: E402
-from .analyzers.advanced_email_security import AdvancedEmailSecurityAnalyzer
-from .analyzers.cdn_detector import CDNDetector
-from .analyzers.dns_analyzer import DNSAnalyzer
-from .analyzers.email_security import EmailSecurityAnalyzer
-from .analyzers.favicon_analyzer import FaviconAnalyzer
-from .analyzers.http_analyzer import HTTPAnalysisResult, HTTPAnalyzer, HTTPResponse
-from .analyzers.rbl_checker import RBLChecker, extract_ips_from_dns_result
-from .analyzers.security_headers import SecurityHeadersAnalyzer
-from .analyzers.seo_files_analyzer import SEOFilesAnalyzer
-from .analyzers.site_verification_analyzer import ServiceConfig, SiteVerificationAnalyzer
-from .analyzers.ssl_analyzer import SSLAnalyzer
-from .analyzers.whois_analyzer import WhoisAnalyzer
 from .config import create_default_user_config, load_config
+from .core import run_domain_analysis
 from .utils.logger import VerbosityLevel, setup_logger
 from .utils.output import OutputFormatter
 
@@ -113,74 +102,6 @@ def validate_config_file(value: str | None) -> str | None:
         raise typer.BadParameter(f"Config path is not a file: {value}")
 
     return value
-
-
-def get_preferred_final_url(
-    http_result: HTTPAnalysisResult,
-) -> tuple[str | None, HTTPResponse | None, list[str], list[str]]:
-    """
-    Analyze redirect chains and return the preferred final URL.
-
-    This function checks all redirect chains and determines the single
-    canonical final URL to use for content analysis (security headers,
-    tracking codes, etc.).
-
-    Args:
-        http_result: HTTP analysis result with redirect chains
-
-    Returns:
-        Tuple of (preferred_url, preferred_response, warnings, errors):
-        - preferred_url: The selected final URL (or None if no successful chains)
-        - preferred_response: The HTTP response for that URL (or None)
-        - warnings: List of warning messages
-        - errors: List of error messages (e.g., inconsistent redirect chains)
-    """
-    warnings = []
-    errors = []
-
-    # Collect unique final URLs from all successful redirect chains
-    final_urls = {}  # normalized_url -> (original_url, response)
-
-    for chain in http_result.chains:
-        if chain.responses:
-            last_response = chain.responses[-1]
-            if last_response.status_code == 200:
-                # Normalize URL for comparison (remove trailing slash, lowercase)
-                normalized_url = last_response.url.rstrip("/").lower()
-
-                if normalized_url not in final_urls:
-                    final_urls[normalized_url] = (last_response.url, last_response)
-
-    # No successful final URLs found
-    if not final_urls:
-        return None, None, warnings, errors
-
-    # All chains lead to the same final URL - perfect!
-    if len(final_urls) == 1:
-        normalized_url = list(final_urls.keys())[0]
-        final_url, final_response = final_urls[normalized_url]
-        logger.debug(f"All redirect chains lead to the same final URL: {final_url}")
-        return final_url, final_response, warnings, errors
-
-    # Multiple different final URLs - this is a CONFIGURATION ERROR
-    urls_list = [url for url, _ in final_urls.values()]
-    error_msg = f"Redirect chains lead to different final URLs: {', '.join(urls_list)}"
-    errors.append(error_msg)
-    logger.debug(f"Configuration error detected: {error_msg}")
-
-    # Choose preferred URL (priority: https with www > https without www > http)
-    def url_priority(url: str) -> tuple[int, int, str]:
-        """Return priority tuple (https=0/http=1, has_www=0/no_www=1, url)."""
-        is_https = 0 if url.startswith("https://") else 1
-        has_www = 0 if "://www." in url else 1
-        return (is_https, has_www, url)
-
-    # Sort by priority and take the best one
-    preferred_normalized = min(final_urls.keys(), key=lambda k: url_priority(final_urls[k][0]))
-    preferred_url, preferred_response = final_urls[preferred_normalized]
-
-    logger.info(f"Using preferred final URL for analysis: {preferred_url}")
-    return preferred_url, preferred_response, warnings, errors
 
 
 @app.command()
@@ -361,298 +282,78 @@ def analyze(
     do_rbl_check = check_rbl if check_rbl is not None else config.email.check_rbl
 
     try:
-        # WHOIS Analysis
-        whois_result = None
-        if not skip_whois:
-            logger.info("Running WHOIS analysis...")
-            whois_analyzer = WhoisAnalyzer(
-                expiry_warning_days=config.whois.expiry_warning_days,
-                expiry_critical_days=config.whois.expiry_critical_days,
-            )
-            whois_result = whois_analyzer.analyze(domain)
-            formatter.print_whois_results(whois_result)
+        # Run all analysis using core module
+        results = run_domain_analysis(
+            domain=domain,
+            config=config,
+            nameservers=nameservers,
+            timeout=timeout,
+            max_redirects=max_redirects,
+            warn_www_not_cname=warn_www_not_cname,
+            skip_www=skip_www,
+            dkim_selectors=dkim_selectors,
+            check_path=check_path,
+            verify=verify,
+            skip_whois=skip_whois,
+            skip_dns=skip_dns,
+            skip_http=skip_http,
+            skip_ssl=skip_ssl,
+            skip_email=skip_email,
+            skip_headers=skip_headers,
+            skip_site_verification=skip_site_verification,
+            do_rbl_check=do_rbl_check,
+        )
 
-        # DNS Analysis
-        dns_result = None
-        if not skip_dns:
-            logger.info("Running DNS analysis...")
-            dns_analyzer = DNSAnalyzer(
-                nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
-                check_dnssec=config.dns.check_dnssec,
-                warn_www_not_cname=(
-                    warn_www_not_cname
-                    if warn_www_not_cname is not None
-                    else config.dns.warn_www_not_cname
-                ),
-                skip_www=skip_www if skip_www else config.analysis.skip_www,
-            )
-            dns_result = dns_analyzer.analyze(domain)
-            formatter.print_dns_results(dns_result)
-        else:
-            dns_result = None
+        # Print results using formatter
+        if results.whois:
+            formatter.print_whois_results(results.whois)
 
-        # HTTP/HTTPS Analysis
-        http_result = None
-        if not skip_http:
-            logger.info("Running HTTP/HTTPS analysis...")
-            http_analyzer = HTTPAnalyzer(
-                timeout=timeout if timeout else config.http.timeout,
-                max_redirects=max_redirects if max_redirects else config.http.max_redirects,
-                skip_www=skip_www if skip_www else config.analysis.skip_www,
-            )
-            http_result = http_analyzer.analyze(domain)
+        if results.dns:
+            formatter.print_dns_results(results.dns)
 
-            # Analyze redirect chains and add any errors/warnings BEFORE printing
-            preferred_url, _, url_warnings, url_errors = get_preferred_final_url(http_result)
-            http_result.errors.extend(url_errors)
-            http_result.warnings.extend(url_warnings)
-            http_result.preferred_final_url = preferred_url
+        if results.http:
+            formatter.print_http_results(results.http)
 
-            # Check specific path if requested
-            if check_path and preferred_url:
-                logger.info(f"Checking path: {check_path}")
-                path_result = http_analyzer.check_path(preferred_url, check_path)
-                http_result.path_check_result = path_result
+        if results.cdn:
+            formatter.print_cdn_results(results.cdn)
 
-            formatter.print_http_results(http_result)
+        if results.ssl:
+            formatter.print_ssl_results(results.ssl)
 
-        # CDN Detection (uses DNS CNAME + HTTP headers)
-        cdn_result = None
-        if not config.analysis.skip_cdn_detection and http_result:
-            logger.info("Detecting CDN...")
-            cdn_detector = CDNDetector()
+        if results.email:
+            formatter.print_email_security_results(results.email, results.advanced_email)
 
-            # Detect from HTTP headers
-            if http_result.preferred_final_url and http_result.chains:
-                # Get headers from preferred final response
-                final_response = None
-                for chain in http_result.chains:
-                    if chain.responses and chain.final_url == http_result.preferred_final_url:
-                        final_response = chain.responses[-1]
-                        break
-
-                if final_response and final_response.headers:
-                    header_result = cdn_detector.detect_from_headers(final_response.headers)
-                    header_result.domain = domain
-
-                    # Detect from DNS CNAME if available
-                    cname_result = cdn_detector.detect_from_cname([])
-                    if dns_result:
-                        cname_key = f"{domain}:CNAME"
-                        if cname_key in dns_result.records:
-                            cname_values = [r.value for r in dns_result.records[cname_key]]
-                            cname_result = cdn_detector.detect_from_cname(cname_values)
-
-                    # Combine results
-                    cdn_result = cdn_detector.combine_results(domain, header_result, cname_result)
-                    formatter.print_cdn_results(cdn_result)
-
-        # SSL/TLS Analysis
-        ssl_result = None
-        if not skip_ssl:
-            logger.info("Running SSL/TLS analysis...")
-            ssl_analyzer = SSLAnalyzer(
-                timeout=timeout if timeout else config.http.timeout,
-                cert_expiry_warning_days=config.ssl.cert_expiry_warning_days,
-                cert_expiry_critical_days=config.ssl.cert_expiry_critical_days,
-            )
-            ssl_result = ssl_analyzer.analyze(domain)
-            formatter.print_ssl_results(ssl_result)
-
-        # Email Security Analysis (SPF, DKIM, DMARC + BIMI, MTA-STS, TLS-RPT)
-        email_result = None
-        advanced_email_result = None
-        if not skip_email:
-            logger.info("Running email security analysis...")
-            selectors = dkim_selectors.split(",") if dkim_selectors else config.email.dkim_selectors
-            email_analyzer = EmailSecurityAnalyzer(dkim_selectors=selectors)
-            email_result = email_analyzer.analyze(domain)
-
-            # Advanced Email Security (BIMI, MTA-STS, TLS-RPT)
-            if not config.analysis.skip_advanced_email:
-                logger.info("Running advanced email security analysis...")
-                advanced_email_analyzer = AdvancedEmailSecurityAnalyzer(
-                    nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
-                    check_bimi=config.advanced_email.check_bimi,
-                    check_mta_sts=config.advanced_email.check_mta_sts,
-                    check_tls_rpt=config.advanced_email.check_tls_rpt,
-                    timeout=timeout if timeout else config.http.timeout,
-                )
-                advanced_email_result = advanced_email_analyzer.analyze(domain)
-
-            # Print both email security results together
-            formatter.print_email_security_results(email_result, advanced_email_result)
-
-        # Security Headers Analysis
-        security_headers_results = []
-        if not skip_headers and http_result:
-            logger.info("Running security headers analysis...")
-
-            # Get the preferred final URL from all redirect chains
-            # (errors/warnings already added to http_result in HTTP analysis section)
-            final_url, final_response, _, _ = get_preferred_final_url(http_result)
-
-            # Only analyze if we have a successful final URL
-            if final_url and final_response:
-                # Prepare enabled checks from config
-                enabled_checks = {
-                    "check_strict_transport_security": config.security_headers.check_strict_transport_security,
-                    "check_content_security_policy": config.security_headers.check_content_security_policy,
-                    "check_x_frame_options": config.security_headers.check_x_frame_options,
-                    "check_x_content_type_options": config.security_headers.check_x_content_type_options,
-                    "check_referrer_policy": config.security_headers.check_referrer_policy,
-                    "check_permissions_policy": config.security_headers.check_permissions_policy,
-                    "check_x_xss_protection": config.security_headers.check_x_xss_protection,
-                    "check_content_type": config.security_headers.check_content_type,
-                }
-
-                # Analyze the preferred final URL
-                headers_analyzer = SecurityHeadersAnalyzer(enabled_checks=enabled_checks)
-                headers_result = headers_analyzer.analyze(
-                    final_response.url,
-                    final_response.headers,
-                )
-                security_headers_results.append(headers_result)
+        if results.headers:
+            for headers_result in results.headers:
                 formatter.print_security_headers_results(headers_result)
 
-        # Site Verification Analysis (Google, Facebook, Pinterest, etc.)
-        site_verification_result = None
-        if not skip_site_verification:
-            # Build list of service configurations from config
-            services = []
-            for service_cfg in config.site_verification.services:
-                services.append(
-                    ServiceConfig(
-                        name=service_cfg.name,
-                        ids=list(service_cfg.ids),  # Copy to avoid modifying config
-                        dns_pattern=service_cfg.dns_pattern,
-                        file_pattern=service_cfg.file_pattern,
-                        meta_name=service_cfg.meta_name,
-                        auto_detect=service_cfg.auto_detect,
-                    )
-                )
+        if results.site_verification:
+            formatter.print_site_verification_results(results.site_verification)
 
-            # Parse and add CLI-provided verification IDs
-            if verify:
-                for verify_arg in verify:
-                    # Support comma-separated values in single --verify
-                    # e.g., --verify "Google:ABC,Facebook:XYZ"
-                    verify_items = [item.strip() for item in verify_arg.split(",")]
+        if results.rbl:
+            formatter.print_rbl_results(results.rbl)
 
-                    for verify_item in verify_items:
-                        # Parse format: Service:ID
-                        if ":" not in verify_item:
-                            logger.error(
-                                f"Invalid --verify format: '{verify_item}'. "
-                                f"Expected format: 'Service:ID' (e.g., 'Google:ABC123')"
-                            )
-                            continue
+        if results.seo:
+            formatter.print_seo_results(results.seo)
 
-                        service_name, verification_id = verify_item.split(":", 1)
-                        service_name = service_name.strip()
-                        verification_id = verification_id.strip()
-
-                        if not service_name or not verification_id:
-                            logger.error(
-                                f"Invalid --verify format: '{verify_item}'. "
-                                f"Both service name and ID are required."
-                            )
-                            continue
-
-                        # Find service in list
-                        service = next((s for s in services if s.name == service_name), None)
-                        if service:
-                            # Add CLI ID to existing service (if not already there)
-                            if verification_id not in service.ids:
-                                service.ids.append(verification_id)
-                                logger.debug(
-                                    f"Added verification ID for {service_name}: {verification_id}"
-                                )
-                        else:
-                            # Service not in config, log warning
-                            logger.warning(
-                                f"Service '{service_name}' not found in predefined services. "
-                                f"Available services: {', '.join(s.name for s in services)}. "
-                                f"Add custom service to config.site_verification.services if needed."
-                            )
-
-            # Only run if there are services configured
-            if services:
-                logger.info("Running site verification analysis...")
-                site_verification_analyzer = SiteVerificationAnalyzer(
-                    services=services,
-                    timeout=timeout if timeout else config.http.timeout,
-                    nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
-                )
-
-                # Use preferred final URL from HTTP analysis if available
-                verification_url = None
-                if http_result:
-                    final_url, final_response, _, _ = get_preferred_final_url(http_result)
-                    verification_url = final_url
-
-                site_verification_result = site_verification_analyzer.analyze(
-                    domain, url=verification_url
-                )
-                formatter.print_site_verification_results(site_verification_result)
-
-        # RBL (Blacklist) Check
-        rbl_result = None
-        if do_rbl_check and dns_result:
-            logger.info("Running RBL blacklist check...")
-            ips = extract_ips_from_dns_result(dns_result)
-            if ips:
-                rbl_checker = RBLChecker(
-                    rbl_servers=config.email.rbl_servers,
-                    timeout=config.dns.timeout,
-                )
-                rbl_result = rbl_checker.check_ips(domain, ips)
-                formatter.print_rbl_results(rbl_result)
-            else:
-                logger.debug("No IP addresses found for RBL check")
-
-        # SEO Files Analysis (robots.txt, sitemap.xml, llms.txt)
-        seo_result = None
-        if not config.analysis.skip_seo and http_result and http_result.preferred_final_url:
-            logger.info("Running SEO files analysis...")
-            seo_analyzer = SEOFilesAnalyzer(
-                timeout=timeout if timeout else config.http.timeout,
-                check_robots=config.seo.check_robots,
-                check_llms_txt=config.seo.check_llms_txt,
-                check_sitemap=config.seo.check_sitemap,
-            )
-            seo_result = seo_analyzer.analyze(http_result.preferred_final_url)
-            formatter.print_seo_results(seo_result)
-
-        # Favicon Detection
-        favicon_result = None
-        if not config.analysis.skip_favicon and http_result and http_result.preferred_final_url:
-            logger.info("Running favicon detection...")
-            favicon_analyzer = FaviconAnalyzer(
-                timeout=timeout if timeout else config.http.timeout,
-                check_html=config.favicon.check_html,
-                check_defaults=config.favicon.check_defaults,
-            )
-            favicon_result = favicon_analyzer.analyze(http_result.preferred_final_url)
-            formatter.print_favicon_results(favicon_result)
+        if results.favicon:
+            formatter.print_favicon_results(results.favicon)
 
         # Print summary
         formatter.print_summary(
-            whois_result=whois_result,
-            dns_result=dns_result,
-            http_result=http_result,
-            ssl_result=ssl_result,
-            email_result=email_result,
-            security_headers=security_headers_results,
-            rbl_result=rbl_result,
-            site_verification_result=site_verification_result,
-            seo_result=seo_result,
-            favicon_result=favicon_result,
-            advanced_email_result=advanced_email_result,
-            cdn_result=cdn_result,
+            whois_result=results.whois,
+            dns_result=results.dns,
+            http_result=results.http,
+            ssl_result=results.ssl,
+            email_result=results.email,
+            security_headers=results.headers if results.headers else [],
+            rbl_result=results.rbl,
+            site_verification_result=results.site_verification,
+            seo_result=results.seo,
+            favicon_result=results.favicon,
+            advanced_email_result=results.advanced_email,
+            cdn_result=results.cdn,
         )
-
-        logger.info("Analysis complete")
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Analysis interrupted by user[/yellow]")

@@ -8,19 +8,8 @@ from typing import Any
 
 import flet as ft
 
-from .analyzers.advanced_email_security import AdvancedEmailSecurityAnalyzer
-from .analyzers.cdn_detector import CDNDetector
-from .analyzers.dns_analyzer import DNSAnalyzer
-from .analyzers.email_security import EmailSecurityAnalyzer
-from .analyzers.favicon_analyzer import FaviconAnalyzer
-from .analyzers.http_analyzer import HTTPAnalyzer
-from .analyzers.rbl_checker import RBLChecker, extract_ips_from_dns_result
-from .analyzers.security_headers import SecurityHeadersAnalyzer
-from .analyzers.seo_files_analyzer import SEOFilesAnalyzer
-from .analyzers.site_verification_analyzer import ServiceConfig, SiteVerificationAnalyzer
-from .analyzers.ssl_analyzer import SSLAnalyzer
-from .analyzers.whois_analyzer import WhoisAnalyzer
 from .config import load_config
+from .core.analyzer import DomainAnalysisResults, run_domain_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -308,188 +297,51 @@ class DomainAnalyzerApp:
     def _run_analysis_sync(self, domain: str) -> None:
         """Run analysis synchronously in background thread."""
         try:
-            results: dict[str, Any] = {}
+            # Update status for user
+            self.update_status(f"Analyzing {domain}...")
 
-            # WHOIS Analysis
-            if self.check_whois.value:
-                self.update_status("Checking WHOIS information...")
-                whois_analyzer = WhoisAnalyzer(
-                    expiry_warning_days=self.config.whois.expiry_warning_days,
-                    expiry_critical_days=self.config.whois.expiry_critical_days,
-                )
-                results["whois"] = whois_analyzer.analyze(domain)
+            # Copy config to avoid side effects when modifying for checkbox overrides
+            config = self.config.model_copy(deep=True)
 
-            # DNS Analysis
-            if self.check_dns.value:
-                self.update_status("Analyzing DNS records...")
-                dns_analyzer = DNSAnalyzer(
-                    nameservers=self.config.dns.nameservers,
-                    check_dnssec=self.config.dns.check_dnssec,
-                    warn_www_not_cname=self.config.dns.warn_www_not_cname,
-                )
-                results["dns"] = dns_analyzer.analyze(domain)
+            # Apply GUI checkbox overrides to config for features without skip parameters
+            if not self.check_seo.value:
+                config.analysis.skip_seo = True
+            if not self.check_favicon.value:
+                config.analysis.skip_favicon = True
+            # CDN detection doesn't have a checkbox, uses config default
 
-            # HTTP/HTTPS Analysis
-            if self.check_http.value:
-                self.update_status("Analyzing HTTP/HTTPS...")
-                http_analyzer = HTTPAnalyzer(
-                    timeout=self.config.http.timeout,
-                    max_redirects=self.config.http.max_redirects,
-                )
-                results["http"] = http_analyzer.analyze(domain)
+            # Call CORE analysis (same as CLI!)
+            results = run_domain_analysis(
+                domain,
+                config,
+                skip_whois=not self.check_whois.value,
+                skip_dns=not self.check_dns.value,
+                skip_http=not self.check_http.value,
+                skip_ssl=not self.check_ssl.value,
+                skip_email=not self.check_email.value,
+                skip_headers=not self.check_headers.value,
+                skip_site_verification=not self.check_site_verification.value,
+                do_rbl_check=self.check_rbl.value,
+            )
 
-            # SSL/TLS Analysis
-            if self.check_ssl.value:
-                self.update_status("Analyzing SSL/TLS certificates...")
-                ssl_analyzer = SSLAnalyzer(
-                    timeout=self.config.http.timeout,
-                    cert_expiry_warning_days=self.config.ssl.cert_expiry_warning_days,
-                    cert_expiry_critical_days=self.config.ssl.cert_expiry_critical_days,
-                )
-                results["ssl"] = ssl_analyzer.analyze(domain)
+            # Convert to dict for display_results
+            results_dict = {
+                "whois": results.whois,
+                "dns": results.dns,
+                "http": results.http,
+                "ssl": results.ssl,
+                "email": results.email,
+                "advanced_email": results.advanced_email,
+                "headers": results.headers,
+                "rbl": results.rbl,
+                "seo": results.seo,
+                "favicon": results.favicon,
+                "site_verification": results.site_verification,
+                "cdn": results.cdn,
+            }
 
-            # Email Security
-            if self.check_email.value:
-                self.update_status("Checking email security (SPF/DKIM/DMARC)...")
-                email_analyzer = EmailSecurityAnalyzer(
-                    dkim_selectors=self.config.email.dkim_selectors
-                )
-                results["email"] = email_analyzer.analyze(domain)
-
-                # Advanced Email Security
-                if not self.config.analysis.skip_advanced_email:
-                    advanced_email_analyzer = AdvancedEmailSecurityAnalyzer(
-                        nameservers=self.config.dns.nameservers,
-                        check_bimi=self.config.advanced_email.check_bimi,
-                        check_mta_sts=self.config.advanced_email.check_mta_sts,
-                        check_tls_rpt=self.config.advanced_email.check_tls_rpt,
-                        timeout=self.config.http.timeout,
-                    )
-                    results["advanced_email"] = advanced_email_analyzer.analyze(domain)
-
-            # Security Headers
-            if self.check_headers.value and results.get("http"):
-                self.update_status("Checking security headers...")
-                http_result = results["http"]
-                if http_result.chains and http_result.chains[0].responses:
-                    final_response = http_result.chains[0].responses[-1]
-                    if final_response.status_code == 200:
-                        enabled_checks = {
-                            "check_strict_transport_security": self.config.security_headers.check_strict_transport_security,
-                            "check_content_security_policy": self.config.security_headers.check_content_security_policy,
-                            "check_x_frame_options": self.config.security_headers.check_x_frame_options,
-                            "check_x_content_type_options": self.config.security_headers.check_x_content_type_options,
-                            "check_referrer_policy": self.config.security_headers.check_referrer_policy,
-                            "check_permissions_policy": self.config.security_headers.check_permissions_policy,
-                            "check_x_xss_protection": self.config.security_headers.check_x_xss_protection,
-                            "check_content_type": self.config.security_headers.check_content_type,
-                        }
-                        headers_analyzer = SecurityHeadersAnalyzer(enabled_checks=enabled_checks)
-                        results["headers"] = headers_analyzer.analyze(
-                            final_response.url, final_response.headers
-                        )
-
-            # RBL Check
-            if self.check_rbl.value and results.get("dns"):
-                self.update_status("Checking RBL blacklists...")
-                dns_result = results["dns"]
-                ips = extract_ips_from_dns_result(dns_result)
-                if ips:
-                    rbl_checker = RBLChecker(
-                        rbl_servers=self.config.email.rbl_servers,
-                        timeout=self.config.dns.timeout,
-                    )
-                    results["rbl"] = rbl_checker.check_ips(domain, ips)
-
-            # SEO Files
-            if self.check_seo.value and results.get("http"):
-                self.update_status("Checking SEO files...")
-                http_result = results["http"]
-                if http_result.chains and http_result.chains[0].responses:
-                    final_response = http_result.chains[0].responses[-1]
-                    if final_response.status_code == 200:
-                        seo_analyzer = SEOFilesAnalyzer(
-                            timeout=self.config.http.timeout,
-                            check_robots=self.config.seo.check_robots,
-                            check_llms_txt=self.config.seo.check_llms_txt,
-                            check_sitemap=self.config.seo.check_sitemap,
-                        )
-                        results["seo"] = seo_analyzer.analyze(final_response.url)
-
-            # Favicon Detection
-            if self.check_favicon.value and results.get("http"):
-                self.update_status("Detecting favicon...")
-                http_result = results["http"]
-                if http_result.chains and http_result.chains[0].responses:
-                    final_response = http_result.chains[0].responses[-1]
-                    if final_response.status_code == 200:
-                        favicon_analyzer = FaviconAnalyzer(
-                            timeout=self.config.http.timeout,
-                            check_html=self.config.favicon.check_html,
-                            check_defaults=self.config.favicon.check_defaults,
-                        )
-                        results["favicon"] = favicon_analyzer.analyze(final_response.url)
-
-            # Site Verification
-            if self.check_site_verification.value:
-                self.update_status("Checking site verification...")
-                services = []
-                for service_cfg in self.config.site_verification.services:
-                    services.append(
-                        ServiceConfig(
-                            name=service_cfg.name,
-                            ids=list(service_cfg.ids),
-                            dns_pattern=service_cfg.dns_pattern,
-                            file_pattern=service_cfg.file_pattern,
-                            meta_name=service_cfg.meta_name,
-                            auto_detect=service_cfg.auto_detect,
-                        )
-                    )
-
-                if services:
-                    site_verification_analyzer = SiteVerificationAnalyzer(
-                        services=services,
-                        timeout=self.config.http.timeout,
-                        nameservers=self.config.dns.nameservers,
-                    )
-
-                    verification_url = None
-                    if results.get("http"):
-                        http_result = results["http"]
-                        if http_result.chains and http_result.chains[0].responses:
-                            final_response = http_result.chains[0].responses[-1]
-                            if final_response.status_code == 200:
-                                verification_url = final_response.url
-
-                    results["site_verification"] = site_verification_analyzer.analyze(
-                        domain, verification_url
-                    )
-
-            # CDN Detection
-            if results.get("http") and results.get("dns"):
-                self.update_status("Detecting CDN...")
-                cdn_detector = CDNDetector()
-                http_result = results["http"]
-                dns_result = results["dns"]
-
-                if http_result.chains and http_result.chains[0].responses:
-                    final_response = http_result.chains[0].responses[-1]
-                    if final_response.status_code == 200 and final_response.headers:
-                        header_result = cdn_detector.detect_from_headers(final_response.headers)
-                        header_result.domain = domain
-
-                        cname_result = cdn_detector.detect_from_cname([])
-                        cname_key = f"{domain}:CNAME"
-                        if cname_key in dns_result.records:
-                            cname_values = [r.value for r in dns_result.records[cname_key]]
-                            cname_result = cdn_detector.detect_from_cname(cname_values)
-
-                        results["cdn"] = cdn_detector.combine_results(
-                            domain, header_result, cname_result
-                        )
-
-            # Display results
-            self.display_results(domain, results)
+            # Display results (existing method handles this)
+            self.display_results(domain, results_dict)
 
         except Exception as e:
             logger.error(f"Analysis error: {e}", exc_info=True)
