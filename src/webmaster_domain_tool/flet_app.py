@@ -1262,7 +1262,7 @@ class DomainAnalyzerApp:
         self._add_errors_and_warnings(content, result)
 
         # SEO files status
-        if result.robots:
+        if result.robots and result.robots.exists:
             content.append(
                 ft.Container(
                     content=self._row(
@@ -1282,7 +1282,9 @@ class DomainAnalyzerApp:
                 )
             )
 
-        if result.sitemaps:
+        # Filter sitemaps to only show ones that exist
+        existing_sitemaps = [s for s in result.sitemaps if s.exists]
+        if existing_sitemaps:
             content.append(
                 ft.Container(
                     content=ft.Column(
@@ -1295,7 +1297,7 @@ class DomainAnalyzerApp:
                                         size=self.theme.icon_small,
                                     ),
                                     self._text(
-                                        f"{len(result.sitemaps)} sitemap(s) found:",
+                                        f"{len(existing_sitemaps)} sitemap(s) found:",
                                         color=self.theme.success_color,
                                     ),
                                 ],
@@ -1308,7 +1310,7 @@ class DomainAnalyzerApp:
                                     ],
                                     spacing=0,
                                 )
-                                for sitemap in result.sitemaps
+                                for sitemap in existing_sitemaps
                             ],
                         ],
                         spacing=self.theme.spacing_tiny,
@@ -1320,7 +1322,7 @@ class DomainAnalyzerApp:
                 )
             )
 
-        if result.llms_txt:
+        if result.llms_txt and result.llms_txt.exists:
             content.append(
                 ft.Container(
                     content=self._row(
