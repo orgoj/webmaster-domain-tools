@@ -15,6 +15,108 @@ This document provides comprehensive information about the project for AI assist
 - `cryptography` for SSL analysis
 - `pydantic` for configuration and data validation
 
+## ⚠️ CRITICAL: Test-Driven Development Workflow
+
+**ALWAYS follow this workflow when making ANY code changes:**
+
+### The Rule
+
+**NEVER commit code without testing it first!**
+
+### Required Workflow
+
+1. **Write a test FIRST**
+   - Create a test that demonstrates the issue or feature
+   - The test should FAIL initially (proving the bug exists or feature is missing)
+   - Example: `tests/test_progress_callback.py`
+
+2. **Make the code change**
+   - Fix the bug or implement the feature
+   - DO NOT run the application manually - rely on tests
+
+3. **Run the test**
+   - Test MUST pass after your changes
+   - If test fails, fix until it passes
+   - Example: `uv run pytest tests/test_progress_callback.py -v`
+
+4. **Verify no regressions**
+   - Run full test suite: `uv run pytest`
+   - All existing tests must still pass
+
+5. **Only then commit**
+   - Commit test AND fix together
+   - Include both in the same commit
+
+### Example: Type Hint Error
+
+**BAD (what NOT to do):**
+```python
+# Just wrote code with type hint error
+progress_callback: callable | None = None  # ❌ WRONG - `callable` is builtin, not a type
+# Committed without testing
+# Application crashes on import
+```
+
+**GOOD (correct workflow):**
+```python
+# Step 1: Write test first
+# tests/test_progress_callback.py
+def test_import_analyzer_module():
+    from webmaster_domain_tool.core import analyzer
+    assert analyzer is not None
+
+# Step 2: Run test - FAILS with TypeError
+$ uv run pytest tests/test_progress_callback.py::test_import_analyzer_module
+# ERROR: TypeError: unsupported operand type(s) for |: 'builtin_function_or_method' and 'NoneType'
+
+# Step 3: Fix the code
+from collections.abc import Callable
+progress_callback: Callable[[str], None] | None = None  # ✅ CORRECT
+
+# Step 4: Run test again - PASSES
+$ uv run pytest tests/test_progress_callback.py -v
+# test_import_analyzer_module PASSED
+
+# Step 5: Run full test suite
+$ uv run pytest
+
+# Step 6: Commit test + fix together
+$ git add tests/test_progress_callback.py src/webmaster_domain_tool/core/analyzer.py
+$ git commit -m "Fix type hint error in progress_callback"
+```
+
+### Common Type Hint Mistakes
+
+**Wrong:**
+```python
+def foo(callback: callable) -> None:  # ❌ `callable` is a builtin function
+```
+
+**Correct:**
+```python
+from collections.abc import Callable  # ✅ Import Callable type
+
+def foo(callback: Callable[[str], None]) -> None:  # ✅ Proper type hint
+    # Callable[[arg_types], return_type]
+    pass
+```
+
+### Why This Matters
+
+- **Runtime errors**: Type hint errors cause import failures (app won't even start)
+- **User trust**: Every untested commit breaks user's confidence
+- **Debugging cost**: Finding bugs without tests is 10x harder
+- **No excuses**: "I forgot to test" is not acceptable
+
+### Testing Levels
+
+1. **Unit tests**: Test individual functions/classes (`tests/test_*.py`)
+2. **Integration tests**: Test analyzer interactions (`tests/test_cli.py`)
+3. **Import tests**: Verify modules can be imported (catches type hint errors)
+4. **Manual testing**: Only AFTER all automated tests pass
+
+**Remember: If there's no test, the feature doesn't exist.**
+
 ## Architecture
 
 ### Core Components

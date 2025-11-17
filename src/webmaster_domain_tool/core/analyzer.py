@@ -1,6 +1,7 @@
 """Core domain analysis functionality shared between CLI and GUI."""
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from ..analyzers.advanced_email_security import (
@@ -256,7 +257,7 @@ def run_domain_analysis(
     skip_site_verification: bool = False,
     do_rbl_check: bool = False,
     # Progress callback for GUI
-    progress_callback: callable | None = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> DomainAnalysisResults:
     """
     Run complete domain analysis based on configuration.
