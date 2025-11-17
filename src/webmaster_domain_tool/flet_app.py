@@ -11,6 +11,7 @@ import flet as ft
 
 from .config import load_config
 from .core.analyzer import (
+    ANALYZER_REGISTRY,
     run_domain_analysis,
 )
 
@@ -459,43 +460,39 @@ class DomainAnalyzerApp:
         )
         self.results_column.controls.append(summary_card)
 
-        # Individual results
-        if "whois" in results:
-            self.results_column.controls.append(self._create_whois_panel(results["whois"]))
+        # Individual results - iterate through analyzer registry (DRY)
+        # No hardcoded if statements! Uses ANALYZER_REGISTRY as single source of truth
+        for analyzer_key, metadata in ANALYZER_REGISTRY.items():
+            result_field = metadata.result_field
 
-        if "dns" in results:
-            self.results_column.controls.append(self._create_dns_panel(results["dns"]))
+            # Skip if analyzer not in results or result is None (disabled)
+            if result_field not in results or results[result_field] is None:
+                continue
 
-        if "http" in results:
-            self.results_column.controls.append(self._create_http_panel(results["http"]))
+            result = results[result_field]
 
-        if "ssl" in results:
-            self.results_column.controls.append(self._create_ssl_panel(results["ssl"]))
+            # Route to appropriate renderer based on custom_renderer metadata
+            if metadata.custom_renderer:
+                # Use custom renderer method
+                renderer_method_name = f"_create_{metadata.custom_renderer}_panel"
+                renderer_method = getattr(self, renderer_method_name, None)
 
-        if "email" in results:
-            self.results_column.controls.append(
-                self._create_email_panel(results["email"], results.get("advanced_email"))
-            )
+                if renderer_method:
+                    # Special case for email analyzer (needs advanced_email too)
+                    if analyzer_key == "email":
+                        panel = renderer_method(result, results.get("advanced_email"))
+                    else:
+                        panel = renderer_method(result)
 
-        if "headers" in results:
-            self.results_column.controls.append(self._create_headers_panel(results["headers"]))
-
-        if "rbl" in results:
-            self.results_column.controls.append(self._create_rbl_panel(results["rbl"]))
-
-        if "seo" in results:
-            self.results_column.controls.append(self._create_seo_panel(results["seo"]))
-
-        if "favicon" in results:
-            self.results_column.controls.append(self._create_favicon_panel(results["favicon"]))
-
-        if "site_verification" in results:
-            self.results_column.controls.append(
-                self._create_site_verification_panel(results["site_verification"])
-            )
-
-        if "cdn" in results:
-            self.results_column.controls.append(self._create_cdn_panel(results["cdn"]))
+                    self.results_column.controls.append(panel)
+                else:
+                    logger.warning(
+                        f"Custom renderer {renderer_method_name} not found for {analyzer_key}"
+                    )
+            else:
+                # Use default auto-display renderer
+                panel = self._create_default_auto_display_panel(metadata, result)
+                self.results_column.controls.append(panel)
 
         self.results_card.visible = True
         self.page.update()
@@ -695,7 +692,7 @@ class DomainAnalyzerApp:
         error_count: int = 0,
         warning_count: int = 0,
     ) -> ft.ExpansionTile:
-        """Create an expandable panel for results."""
+        """Create an expandable panel with multi-line text selection support."""
         # Build title with error/warning counts
         title_parts = [title]
         if error_count > 0:
@@ -713,12 +710,22 @@ class DomainAnalyzerApp:
         else:
             title_color = self.theme.text_primary
 
+        # Wrap content in SelectionArea to allow selecting across multiple lines
+        # This enables drag-to-select across all text/controls in the panel
+        selectable_content = ft.SelectionArea(
+            content=ft.Column(
+                controls=content,
+                spacing=self.theme.spacing_small,
+                horizontal_alignment=ft.CrossAxisAlignment.START,
+            )
+        )
+
         return ft.ExpansionTile(
             title=ft.Text(
                 full_title, size=self.theme.text_subheading, weight="bold", color=title_color
             ),
             leading=ft.Icon(icon, color=title_color),
-            controls=content,
+            controls=[selectable_content],  # Wrap in list since it's now a single SelectionArea
             initially_expanded=error_count > 0,  # Auto-expand if errors
             # ← KEY FIX: ExpansionTile defaults to CENTER, must set to START!
             expanded_cross_axis_alignment=ft.CrossAxisAlignment.START,
