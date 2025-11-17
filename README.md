@@ -239,6 +239,16 @@ The GUI application requires the `libmpv` multimedia library to be installed on 
 - **Arch Linux**: `sudo pacman -S mpv`
 - **macOS**: `brew install mpv`
 
+**Ubuntu 24.04+ Compatibility Fix:**
+
+If you get "error while loading shared libraries: libmpv.so.1" on Ubuntu 24.04+, you need to create a symlink because Flet expects the older libmpv.so.1 but Ubuntu 24.04 ships with libmpv.so.2:
+
+```bash
+# Create compatibility symlink
+sudo ln -s /usr/lib/x86_64-linux-gnu/libmpv.so.2 /usr/lib/x86_64-linux-gnu/libmpv.so.1
+sudo ldconfig
+```
+
 **Note**: The CLI version (`wdt`) does not require these system dependencies - only the GUI (`wdt-app`) needs them.
 
 **Features:**
