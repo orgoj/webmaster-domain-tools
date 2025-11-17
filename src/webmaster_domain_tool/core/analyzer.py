@@ -255,6 +255,8 @@ def run_domain_analysis(
     skip_headers: bool = False,
     skip_site_verification: bool = False,
     do_rbl_check: bool = False,
+    # Progress callback for GUI
+    progress_callback: callable | None = None,
 ) -> DomainAnalysisResults:
     """
     Run complete domain analysis based on configuration.
@@ -289,6 +291,8 @@ def run_domain_analysis(
 
     # WHOIS Analysis
     if not skip_whois:
+        if progress_callback:
+            progress_callback("Running WHOIS analysis...")
         logger.info("Running WHOIS analysis...")
         whois_analyzer = WhoisAnalyzer(
             expiry_warning_days=config.whois.expiry_warning_days,
@@ -298,6 +302,8 @@ def run_domain_analysis(
 
     # DNS Analysis
     if not skip_dns:
+        if progress_callback:
+            progress_callback("Running DNS analysis...")
         logger.info("Running DNS analysis...")
         dns_analyzer = DNSAnalyzer(
             nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
@@ -313,6 +319,8 @@ def run_domain_analysis(
 
     # HTTP/HTTPS Analysis
     if not skip_http:
+        if progress_callback:
+            progress_callback("Running HTTP/HTTPS analysis...")
         logger.info("Running HTTP/HTTPS analysis...")
         http_analyzer = HTTPAnalyzer(
             timeout=timeout if timeout else config.http.timeout,
@@ -335,6 +343,8 @@ def run_domain_analysis(
 
     # CDN Detection (uses DNS CNAME + HTTP headers)
     if not config.analysis.skip_cdn_detection and results.http:
+        if progress_callback:
+            progress_callback("Detecting CDN...")
         logger.info("Detecting CDN...")
         cdn_detector = CDNDetector()
 
@@ -364,6 +374,8 @@ def run_domain_analysis(
 
     # SSL/TLS Analysis
     if not skip_ssl:
+        if progress_callback:
+            progress_callback("Running SSL/TLS analysis...")
         logger.info("Running SSL/TLS analysis...")
         ssl_analyzer = SSLAnalyzer(
             timeout=timeout if timeout else config.http.timeout,
@@ -374,6 +386,8 @@ def run_domain_analysis(
 
     # Email Security Analysis (SPF, DKIM, DMARC + BIMI, MTA-STS, TLS-RPT)
     if not skip_email:
+        if progress_callback:
+            progress_callback("Running email security analysis...")
         logger.info("Running email security analysis...")
         selectors = dkim_selectors.split(",") if dkim_selectors else config.email.dkim_selectors
         email_analyzer = EmailSecurityAnalyzer(dkim_selectors=selectors)
@@ -381,6 +395,8 @@ def run_domain_analysis(
 
         # Advanced Email Security (BIMI, MTA-STS, TLS-RPT)
         if not config.analysis.skip_advanced_email:
+            if progress_callback:
+                progress_callback("Running advanced email security analysis...")
             logger.info("Running advanced email security analysis...")
             advanced_email_analyzer = AdvancedEmailSecurityAnalyzer(
                 nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
@@ -393,6 +409,8 @@ def run_domain_analysis(
 
     # Security Headers Analysis
     if not skip_headers and results.http:
+        if progress_callback:
+            progress_callback("Running security headers analysis...")
         logger.info("Running security headers analysis...")
 
         # Get the preferred final URL from all redirect chains
@@ -483,6 +501,8 @@ def run_domain_analysis(
 
         # Only run if there are services configured
         if services:
+            if progress_callback:
+                progress_callback("Running site verification analysis...")
             logger.info("Running site verification analysis...")
             site_verification_analyzer = SiteVerificationAnalyzer(
                 services=services,
@@ -502,6 +522,8 @@ def run_domain_analysis(
 
     # RBL (Blacklist) Check
     if do_rbl_check and results.dns:
+        if progress_callback:
+            progress_callback("Running RBL blacklist check...")
         logger.info("Running RBL blacklist check...")
         ips = extract_ips_from_dns_result(results.dns)
         if ips:
@@ -515,6 +537,8 @@ def run_domain_analysis(
 
     # SEO Files Analysis (robots.txt, sitemap.xml, llms.txt)
     if not config.analysis.skip_seo and results.http and results.http.preferred_final_url:
+        if progress_callback:
+            progress_callback("Running SEO files analysis...")
         logger.info("Running SEO files analysis...")
         seo_analyzer = SEOFilesAnalyzer(
             timeout=timeout if timeout else config.http.timeout,
@@ -526,6 +550,8 @@ def run_domain_analysis(
 
     # Favicon Detection
     if not config.analysis.skip_favicon and results.http and results.http.preferred_final_url:
+        if progress_callback:
+            progress_callback("Running favicon detection...")
         logger.info("Running favicon detection...")
         favicon_analyzer = FaviconAnalyzer(
             timeout=timeout if timeout else config.http.timeout,

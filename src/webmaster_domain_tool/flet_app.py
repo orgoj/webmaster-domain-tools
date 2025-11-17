@@ -75,6 +75,9 @@ class DomainAnalyzerApp:
         self.page.theme_mode = ft.ThemeMode.LIGHT
         self.page.scroll = ft.ScrollMode.AUTO
 
+        # Handle window close event to prevent Flutter embedder error
+        self.page.on_window_event = self._on_window_event
+
         # Initialize theme
         self.theme = UITheme()
         self.page.padding = self.theme.padding_large
@@ -103,7 +106,12 @@ class DomainAnalyzerApp:
         )
 
         self.progress_bar = ft.ProgressBar(visible=False)
-        self.status_text = ft.Text("", size=self.theme.text_label, color=self.theme.text_secondary)
+        self.status_text = ft.Text(
+            "",
+            size=self.theme.text_label,
+            color=self.theme.text_secondary,
+            text_align=ft.TextAlign.LEFT,
+        )
 
         # Analysis options checkboxes
         self.check_dns = ft.Checkbox(label="DNS Analysis", value=True)
@@ -167,7 +175,10 @@ class DomainAnalyzerApp:
                 content=ft.Column(
                     [
                         ft.Text(
-                            "Enter Domain", size=self.theme.text_heading, weight=ft.FontWeight.BOLD
+                            "Enter Domain",
+                            size=self.theme.text_heading,
+                            weight=ft.FontWeight.BOLD,
+                            text_align=ft.TextAlign.LEFT,
                         ),
                         ft.Row(
                             [
@@ -195,6 +206,7 @@ class DomainAnalyzerApp:
                             "Analysis Options",
                             size=self.theme.text_heading,
                             weight=ft.FontWeight.BOLD,
+                            text_align=ft.TextAlign.LEFT,
                         ),
                         ft.ResponsiveRow(
                             [
@@ -225,7 +237,12 @@ class DomainAnalyzerApp:
             content=ft.Container(
                 content=ft.Column(
                     [
-                        ft.Text("Results", size=self.theme.text_heading, weight=ft.FontWeight.BOLD),
+                        ft.Text(
+                            "Results",
+                            size=self.theme.text_heading,
+                            weight=ft.FontWeight.BOLD,
+                            text_align=ft.TextAlign.LEFT,
+                        ),
                         self.results_column,
                     ],
                     spacing=self.theme.spacing_small,
@@ -312,7 +329,7 @@ class DomainAnalyzerApp:
                 config.analysis.skip_favicon = True
             # CDN detection doesn't have a checkbox, uses config default
 
-            # Call CORE analysis (same as CLI!)
+            # Call CORE analysis (same as CLI!) with progress callback
             results = run_domain_analysis(
                 domain,
                 config,
@@ -324,6 +341,7 @@ class DomainAnalyzerApp:
                 skip_headers=not self.check_headers.value,
                 skip_site_verification=not self.check_site_verification.value,
                 do_rbl_check=self.check_rbl.value,
+                progress_callback=self.update_status,
             )
 
             # Convert to dict for display_results
@@ -358,6 +376,12 @@ class DomainAnalyzerApp:
         """Update status message."""
         self.status_text.value = message
         self.page.update()
+
+    def _on_window_event(self, e: ft.ControlEvent) -> None:
+        """Handle window events to prevent Flutter embedder error on close."""
+        if e.data == "close":
+            # Just close the window without trying to remove views
+            self.page.window_destroy()
 
     def display_results(self, domain: str, results: dict[str, Any]) -> None:
         """Display analysis results."""
@@ -404,11 +428,13 @@ class DomainAnalyzerApp:
                                 f"{status_text}: {domain}",
                                 size=self.theme.text_subheading,
                                 weight="bold",
+                                text_align=ft.TextAlign.LEFT,
                             ),
                             ft.Text(
                                 f"Errors: {total_errors} | Warnings: {total_warnings}",
                                 size=self.theme.text_body,
                                 color=self.theme.text_secondary,
+                                text_align=ft.TextAlign.LEFT,
                             ),
                         ],
                         spacing=self.theme.spacing_tiny,
@@ -1103,7 +1129,11 @@ class DomainAnalyzerApp:
                                 color=self.theme.success_color,
                                 size=self.theme.icon_small,
                             ),
-                            ft.Text("No blacklist listings found", color=self.theme.success_color),
+                            ft.Text(
+                                "No blacklist listings found",
+                                color=self.theme.success_color,
+                                text_align=ft.TextAlign.LEFT,
+                            ),
                         ]
                     ),
                     bgcolor=self.theme.success_bg,
@@ -1525,7 +1555,7 @@ class DomainAnalyzerApp:
             content=ft.Row(
                 [
                     ft.Icon(ft.Icons.ERROR, color=self.theme.error_color),
-                    ft.Text(message, color=self.theme.error_color),
+                    ft.Text(message, color=self.theme.error_color, text_align=ft.TextAlign.LEFT),
                 ],
             ),
             bgcolor=self.theme.error_bg,
