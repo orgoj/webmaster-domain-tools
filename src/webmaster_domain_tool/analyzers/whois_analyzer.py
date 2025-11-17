@@ -282,20 +282,28 @@ class WhoisAnalyzer(BaseAnalyzer[WhoisAnalysisResult]):
         for line in lines:
             line = line.strip()
 
-            # Detect section boundaries
-            if line.startswith("domain:"):
-                in_domain_section = True
+            # Empty line or comment marks end of current section
+            if not line or line.startswith("%"):
+                in_domain_section = False
                 in_contact_section = False
-            elif line.startswith("contact:"):
+                continue
+
+            # Detect section boundaries - contact: always starts a new section
+            if line.startswith("contact:"):
                 in_domain_section = False
                 in_contact_section = True
                 # Extract contact handle
                 parts = line.split(":", 1)
                 if len(parts) == 2:
                     current_contact = parts[1].strip()
-            elif line.startswith("nsset:") or line.startswith("keyset:"):
-                in_domain_section = False
-                in_contact_section = False
+                continue
+
+            # nsset: and keyset: start new sections only if we're not in domain/contact section
+            # (they can appear as fields within the domain section)
+            if not in_domain_section and not in_contact_section:
+                if line.startswith("nsset:") or line.startswith("keyset:"):
+                    # These are section definitions, not fields we care about
+                    continue
 
             # Parse domain section fields
             if in_domain_section and ":" in line:
