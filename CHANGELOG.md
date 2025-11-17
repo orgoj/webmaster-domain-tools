@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Major Dependency Updates - All Packages Updated to Latest Stable Versions**
+  - Updated all dependencies to eliminate technical debt
+  - **Core dependencies:**
+    - dnspython: 2.6.1 → 2.8.0
+    - httpx: 0.27.0 → 0.28.1
+    - cryptography: 42.0.0 → 46.0.3 (major security updates)
+    - rich: 13.7.0 → 14.2.0
+    - typer: 0.12.0 → 0.20.0
+    - pydantic: 2.7.0 → 2.12.4
+    - pydantic-settings: 2.2.0 → 2.12.0
+    - tomli: 2.0.0 → 2.3.0
+    - python-whois: 0.9.0 → 0.9.6
+    - flet: 0.28.0 → 0.28.3
+    - flet-desktop: 0.28.0 → 0.28.3
+  - **Dev dependencies:**
+    - pytest: 8.0.0 → 9.0.1
+    - pytest-asyncio: 0.23.0 → 1.3.0
+    - black: 24.0.0 → 25.11.0 (new 2025 stable style)
+    - ruff: 0.3.0 → 0.14.1
+    - mypy: 1.9.0 → 1.18.2
+  - Removed duplicate dependency entries (pytest-cov, pre-commit) that conflicted between sections
+  - All packages tested and working with latest versions
+
 ### Added
 - **Enhanced WHOIS Information Display**
   - Added registrant email field extraction from WHOIS data
