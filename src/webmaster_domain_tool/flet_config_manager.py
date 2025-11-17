@@ -20,6 +20,7 @@ class FletConfigProfileManager:
     # Key prefix for namespacing (prevents conflicts with other apps)
     KEY_PREFIX = "wdt.profile."
     PROFILE_LIST_KEY = "wdt.profiles.list"
+    LAST_SELECTED_KEY = "wdt.last_selected_profile"
 
     def __init__(self, page: "ft.Page") -> None:
         """
@@ -166,3 +167,28 @@ class FletConfigProfileManager:
             config = Config()
             self.save_profile("default", config)
             return config
+
+    def set_last_selected_profile(self, profile_name: str) -> None:
+        """
+        Remember the last selected profile name.
+
+        Args:
+            profile_name: Name of the profile to remember
+        """
+        self.page.client_storage.set(self.LAST_SELECTED_KEY, profile_name)
+        logger.debug(f"Saved last selected profile: {profile_name}")
+
+    def get_last_selected_profile(self) -> str:
+        """
+        Get the last selected profile name.
+
+        Returns:
+            Last selected profile name, or "default" if none saved
+        """
+        last_profile = self.page.client_storage.get(self.LAST_SELECTED_KEY)
+        if last_profile and self.profile_exists(last_profile):
+            logger.debug(f"Retrieved last selected profile: {last_profile}")
+            return last_profile
+        else:
+            logger.debug("No valid last selected profile, returning 'default'")
+            return "default"

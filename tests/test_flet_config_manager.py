@@ -199,3 +199,45 @@ def test_key_namespacing(profile_manager, mock_page):
     set_calls = mock_page.client_storage.set.call_args_list
     assert any("wdt.profile.test" in str(call) for call in set_calls)
     assert any("wdt.profiles.list" in str(call) for call in set_calls)
+
+
+def test_set_and_get_last_selected_profile(profile_manager):
+    """Test saving and retrieving last selected profile."""
+    # Create a profile first
+    config = Config()
+    profile_manager.save_profile("my_profile", config)
+
+    # Set as last selected
+    profile_manager.set_last_selected_profile("my_profile")
+
+    # Retrieve it
+    last = profile_manager.get_last_selected_profile()
+    assert last == "my_profile"
+
+
+def test_get_last_selected_profile_default(profile_manager):
+    """Test that default is returned when no last profile saved."""
+    # Ensure default profile exists
+    profile_manager.get_or_create_default()
+
+    # Should return "default" when nothing saved
+    last = profile_manager.get_last_selected_profile()
+    assert last == "default"
+
+
+def test_get_last_selected_profile_nonexistent(profile_manager):
+    """Test that default is returned when last profile doesn't exist."""
+    # Set a profile that will be deleted
+    config = Config()
+    profile_manager.save_profile("temp", config)
+    profile_manager.set_last_selected_profile("temp")
+
+    # Delete the profile
+    profile_manager.delete_profile("temp")
+
+    # Ensure default exists
+    profile_manager.get_or_create_default()
+
+    # Should return "default" since "temp" no longer exists
+    last = profile_manager.get_last_selected_profile()
+    assert last == "default"

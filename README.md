@@ -302,6 +302,7 @@ The GUI supports **named configuration profiles** for managing different analysi
 
 **Profile Storage:**
 - Profiles stored in browser client storage (persistent across sessions)
+- **Automatically restores your last used profile** when you reopen the app
 - JSON format with Pydantic validation
 - `default` profile auto-created on first run
 - All CLI configuration options available in GUI

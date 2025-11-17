@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **GUI Configuration Profiles System**
   - Named configuration profiles for managing different analysis scenarios
   - Profile dropdown in GUI header for quick switching between configs
+  - **Last selected profile persistence** - automatically restores your last used profile on app restart
   - Save/load/delete profiles via GUI buttons with confirmation dialogs
   - Comprehensive config editor dialog with tabbed interface for all settings:
     - DNS tab: nameservers, timeout, DNSSEC, www CNAME warnings

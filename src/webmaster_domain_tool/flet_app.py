@@ -93,10 +93,17 @@ class DomainAnalyzerApp:
         self.theme = UITheme()
         self.page.padding = self.theme.padding_large
 
-        # Initialize profile manager and load config
+        # Initialize profile manager and load last selected profile
         self.profile_manager = FletConfigProfileManager(self.page)
-        self.current_profile_name = "default"
-        self.config = self.profile_manager.get_or_create_default()
+        self.current_profile_name = self.profile_manager.get_last_selected_profile()
+
+        # Load the profile (create default if needed)
+        if self.profile_manager.profile_exists(self.current_profile_name):
+            self.config = self.profile_manager.load_profile(self.current_profile_name)
+        else:
+            # Fallback to default if last selected doesn't exist
+            self.current_profile_name = "default"
+            self.config = self.profile_manager.get_or_create_default()
 
         # UI Components
         self.domain_input = ft.TextField(
@@ -1667,6 +1674,9 @@ class DomainAnalyzerApp:
             self.config = self.profile_manager.load_profile(new_profile_name)
             self.current_profile_name = new_profile_name
 
+            # Save as last selected profile for next session
+            self.profile_manager.set_last_selected_profile(new_profile_name)
+
             # Update analyzer checkboxes from new config
             # (Currently checkboxes don't reflect config, they're independent)
             # Future enhancement: sync checkboxes with config.analysis.skip_* values
@@ -1731,6 +1741,9 @@ class DomainAnalyzerApp:
                 self.profile_dropdown.value = name
                 self.current_profile_name = name
 
+                # Save as last selected profile for next session
+                self.profile_manager.set_last_selected_profile(name)
+
                 # Close dialog
                 dialog.open = False
 
@@ -1784,6 +1797,9 @@ class DomainAnalyzerApp:
                 # Switch to default profile
                 self.current_profile_name = "default"
                 self.config = self.profile_manager.load_profile("default")
+
+                # Save default as last selected profile for next session
+                self.profile_manager.set_last_selected_profile("default")
 
                 # Reload profile list
                 self._load_profile_list()
