@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Enhanced WHOIS Information Display**
+  - Added registrant email field extraction from WHOIS data
+  - Added administrator contact (admin-c) display for .cz domains
+  - Special parser for .cz domains to correctly extract registrar from domain section (not contact section)
+  - Displays admin-c handle along with admin name and email when available
+  - Both CLI and GUI updated to show new contact information
+
+### Fixed
+- **WHOIS Registrar Display for .cz Domains**
+  - Fixed incorrect registrar extraction for .cz domains
+  - Previously showed registrar from contact records instead of domain record
+  - Now correctly parses raw WHOIS text to extract domain-level registrar
+  - Example: sahmgastro.cz now correctly shows "REG-ZONER" instead of "REG-MOJEID"
+
+### Added
 - **Cross-Platform GUI Application (Desktop & Mobile)**
   - Modern graphical interface built with Flet framework
   - Supports Windows, macOS, Linux desktop platforms

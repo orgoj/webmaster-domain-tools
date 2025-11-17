@@ -161,17 +161,22 @@ class OutputFormatter:
             self.console.print(f"  [yellow]⚠ {warning_msg}[/yellow]")
 
         # Owner/Registrant (if available)
-        if result.registrant_name or result.registrant_organization:
+        if result.registrant_name or result.registrant_organization or result.registrant_email:
             owner_parts = []
             if result.registrant_organization:
                 owner_parts.append(result.registrant_organization)
             if result.registrant_name:
                 owner_parts.append(result.registrant_name)
+            if result.registrant_email:
+                owner_parts.append(result.registrant_email)
             self.console.print(f"  Owner: {' / '.join(owner_parts)}")
 
         # Admin contact (if available)
-        if result.admin_name or result.admin_email:
+        if result.admin_name or result.admin_email or result.admin_contact:
             admin_parts = []
+            if result.admin_contact:
+                # For .cz domains, show the admin-c handle
+                admin_parts.append(f"[{result.admin_contact}]")
             if result.admin_name:
                 admin_parts.append(result.admin_name)
             if result.admin_email:
@@ -239,7 +244,13 @@ class OutputFormatter:
         if result.registrant_name:
             table.add_row("Registrant", result.registrant_name)
 
+        if result.registrant_email:
+            table.add_row("Registrant Email", result.registrant_email)
+
         # Admin contact
+        if result.admin_contact:
+            table.add_row("Admin Contact", result.admin_contact)
+
         if result.admin_name:
             table.add_row("Admin Name", result.admin_name)
 
