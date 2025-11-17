@@ -1,8 +1,8 @@
 """Flet multiplatform GUI application for webmaster-domain-tool."""
 
-import asyncio
 import logging
 import re
+import threading
 from dataclasses import dataclass
 from typing import Any
 
@@ -126,8 +126,12 @@ class DomainAnalyzerApp:
         self.check_favicon = ft.Checkbox(label="Favicon Detection", value=True)
         self.check_site_verification = ft.Checkbox(label="Site Verification", value=True)
 
-        # Results container
-        self.results_column = ft.Column(spacing=self.theme.spacing_small, expand=True)
+        # Results container (aligned left, not centered)
+        self.results_column = ft.Column(
+            spacing=self.theme.spacing_small,
+            expand=True,
+            horizontal_alignment=ft.CrossAxisAlignment.START,
+        )
 
         # Build UI
         self._build_ui()
@@ -297,11 +301,12 @@ class DomainAnalyzerApp:
         self.results_card.visible = False
         self.page.update()
 
-        # Run analysis in background
-        asyncio.create_task(self._run_analysis_async(domain))
+        # Run analysis in background thread
+        thread = threading.Thread(target=self._run_analysis_sync, args=(domain,), daemon=True)
+        thread.start()
 
-    async def _run_analysis_async(self, domain: str) -> None:
-        """Run analysis asynchronously."""
+    def _run_analysis_sync(self, domain: str) -> None:
+        """Run analysis synchronously in background thread."""
         try:
             results: dict[str, Any] = {}
 
@@ -312,7 +317,7 @@ class DomainAnalyzerApp:
                     expiry_warning_days=self.config.whois.expiry_warning_days,
                     expiry_critical_days=self.config.whois.expiry_critical_days,
                 )
-                results["whois"] = await asyncio.to_thread(whois_analyzer.analyze, domain)
+                results["whois"] = whois_analyzer.analyze(domain)
 
             # DNS Analysis
             if self.check_dns.value:
@@ -322,7 +327,7 @@ class DomainAnalyzerApp:
                     check_dnssec=self.config.dns.check_dnssec,
                     warn_www_not_cname=self.config.dns.warn_www_not_cname,
                 )
-                results["dns"] = await asyncio.to_thread(dns_analyzer.analyze, domain)
+                results["dns"] = dns_analyzer.analyze(domain)
 
             # HTTP/HTTPS Analysis
             if self.check_http.value:
@@ -331,7 +336,7 @@ class DomainAnalyzerApp:
                     timeout=self.config.http.timeout,
                     max_redirects=self.config.http.max_redirects,
                 )
-                results["http"] = await asyncio.to_thread(http_analyzer.analyze, domain)
+                results["http"] = http_analyzer.analyze(domain)
 
             # SSL/TLS Analysis
             if self.check_ssl.value:
@@ -341,7 +346,7 @@ class DomainAnalyzerApp:
                     cert_expiry_warning_days=self.config.ssl.cert_expiry_warning_days,
                     cert_expiry_critical_days=self.config.ssl.cert_expiry_critical_days,
                 )
-                results["ssl"] = await asyncio.to_thread(ssl_analyzer.analyze, domain)
+                results["ssl"] = ssl_analyzer.analyze(domain)
 
             # Email Security
             if self.check_email.value:
@@ -349,7 +354,7 @@ class DomainAnalyzerApp:
                 email_analyzer = EmailSecurityAnalyzer(
                     dkim_selectors=self.config.email.dkim_selectors
                 )
-                results["email"] = await asyncio.to_thread(email_analyzer.analyze, domain)
+                results["email"] = email_analyzer.analyze(domain)
 
                 # Advanced Email Security
                 if not self.config.analysis.skip_advanced_email:
@@ -360,9 +365,7 @@ class DomainAnalyzerApp:
                         check_tls_rpt=self.config.advanced_email.check_tls_rpt,
                         timeout=self.config.http.timeout,
                     )
-                    results["advanced_email"] = await asyncio.to_thread(
-                        advanced_email_analyzer.analyze, domain
-                    )
+                    results["advanced_email"] = advanced_email_analyzer.analyze(domain)
 
             # Security Headers
             if self.check_headers.value and results.get("http"):
@@ -382,8 +385,8 @@ class DomainAnalyzerApp:
                             "check_content_type": self.config.security_headers.check_content_type,
                         }
                         headers_analyzer = SecurityHeadersAnalyzer(enabled_checks=enabled_checks)
-                        results["headers"] = await asyncio.to_thread(
-                            headers_analyzer.analyze, final_response.url, final_response.headers
+                        results["headers"] = headers_analyzer.analyze(
+                            final_response.url, final_response.headers
                         )
 
             # RBL Check
@@ -396,7 +399,7 @@ class DomainAnalyzerApp:
                         rbl_servers=self.config.email.rbl_servers,
                         timeout=self.config.dns.timeout,
                     )
-                    results["rbl"] = await asyncio.to_thread(rbl_checker.check_ips, domain, ips)
+                    results["rbl"] = rbl_checker.check_ips(domain, ips)
 
             # SEO Files
             if self.check_seo.value and results.get("http"):
@@ -411,9 +414,7 @@ class DomainAnalyzerApp:
                             check_llms_txt=self.config.seo.check_llms_txt,
                             check_sitemap=self.config.seo.check_sitemap,
                         )
-                        results["seo"] = await asyncio.to_thread(
-                            seo_analyzer.analyze, final_response.url
-                        )
+                        results["seo"] = seo_analyzer.analyze(final_response.url)
 
             # Favicon Detection
             if self.check_favicon.value and results.get("http"):
@@ -427,9 +428,7 @@ class DomainAnalyzerApp:
                             check_html=self.config.favicon.check_html,
                             check_defaults=self.config.favicon.check_defaults,
                         )
-                        results["favicon"] = await asyncio.to_thread(
-                            favicon_analyzer.analyze, final_response.url
-                        )
+                        results["favicon"] = favicon_analyzer.analyze(final_response.url)
 
             # Site Verification
             if self.check_site_verification.value:
@@ -462,8 +461,8 @@ class DomainAnalyzerApp:
                             if final_response.status_code == 200:
                                 verification_url = final_response.url
 
-                    results["site_verification"] = await asyncio.to_thread(
-                        site_verification_analyzer.analyze, domain, verification_url
+                    results["site_verification"] = site_verification_analyzer.analyze(
+                        domain, verification_url
                     )
 
             # CDN Detection
@@ -520,18 +519,35 @@ class DomainAnalyzerApp:
             if hasattr(result, "warnings"):
                 total_warnings += len(result.warnings)
 
+        # Determine status icon and color based on errors/warnings
+        if total_errors > 0:
+            status_icon = ft.Icons.ERROR
+            status_color = self.theme.error_color
+            status_bg = self.theme.error_bg
+            status_text = "Analysis completed with errors"
+        elif total_warnings > 0:
+            status_icon = ft.Icons.WARNING
+            status_color = "#FFA500"  # Orange
+            status_bg = "#FFF3CD"  # Light orange/yellow background
+            status_text = "Analysis completed with warnings"
+        else:
+            status_icon = ft.Icons.CHECK_CIRCLE
+            status_color = self.theme.success_color
+            status_bg = self.theme.success_bg
+            status_text = "Analysis completed successfully"
+
         summary_card = ft.Container(
             content=ft.Row(
                 [
                     ft.Icon(
-                        ft.Icons.CHECK_CIRCLE,
-                        color=self.theme.success_color,
+                        status_icon,
+                        color=status_color,
                         size=self.theme.icon_medium,
                     ),
                     ft.Column(
                         [
                             ft.Text(
-                                f"Analysis completed for: {domain}",
+                                f"{status_text}: {domain}",
                                 size=self.theme.text_subheading,
                                 weight="bold",
                             ),
@@ -542,11 +558,12 @@ class DomainAnalyzerApp:
                             ),
                         ],
                         spacing=self.theme.spacing_tiny,
+                        alignment=ft.MainAxisAlignment.START,
                     ),
                 ],
                 alignment=ft.MainAxisAlignment.START,
             ),
-            bgcolor=self.theme.success_bg,
+            bgcolor=status_bg,
             border_radius=self.theme.border_radius_large,
             padding=self.theme.padding_medium,
         )
@@ -655,16 +672,38 @@ class DomainAnalyzerApp:
                 content.append(self._create_warning_container(warning))
 
     def _create_expandable_panel(
-        self, title: str, icon: str, content: list[ft.Control], error_count: int = 0
+        self,
+        title: str,
+        icon: str,
+        content: list[ft.Control],
+        error_count: int = 0,
+        warning_count: int = 0,
     ) -> ft.ExpansionTile:
         """Create an expandable panel for results."""
-        title_color = self.theme.error_color if error_count > 0 else self.theme.text_primary
+        # Build title with error/warning counts
+        title_parts = [title]
+        if error_count > 0:
+            title_parts.append(f"({error_count} error{'s' if error_count > 1 else ''})")
+        if warning_count > 0:
+            title_parts.append(f"({warning_count} warning{'s' if warning_count > 1 else ''})")
+
+        full_title = " ".join(title_parts)
+
+        # Color based on severity: errors > warnings > normal
+        if error_count > 0:
+            title_color = self.theme.error_color
+        elif warning_count > 0:
+            title_color = "#FFA500"  # Orange for warnings
+        else:
+            title_color = self.theme.text_primary
 
         return ft.ExpansionTile(
-            title=ft.Text(title, size=self.theme.text_subheading, weight="bold", color=title_color),
+            title=ft.Text(
+                full_title, size=self.theme.text_subheading, weight="bold", color=title_color
+            ),
             leading=ft.Icon(icon, color=title_color),
             controls=content,
-            initially_expanded=error_count > 0,
+            initially_expanded=error_count > 0,  # Auto-expand if errors
         )
 
     def _create_whois_panel(self, result: Any) -> ft.ExpansionTile:
@@ -704,7 +743,7 @@ class DomainAnalyzerApp:
             content.append(ft.Text(f"Admin: {' / '.join(admin_parts)}"))
 
         return self._create_expandable_panel(
-            "WHOIS Information", ft.Icons.INFO, content, len(result.errors)
+            "WHOIS Information", ft.Icons.INFO, content, len(result.errors), len(result.warnings)
         )
 
     def _create_dns_panel(self, result: Any) -> ft.ExpansionTile:
@@ -729,7 +768,7 @@ class DomainAnalyzerApp:
                     content.append(ft.Text(f"  • {record.value}", size=self.theme.text_body))
 
         return self._create_expandable_panel(
-            "DNS Analysis", ft.Icons.DNS, content, len(result.errors)
+            "DNS Analysis", ft.Icons.DNS, content, len(result.errors), len(result.warnings)
         )
 
     def _create_http_panel(self, result: Any) -> ft.ExpansionTile:
@@ -742,7 +781,7 @@ class DomainAnalyzerApp:
         for i, chain in enumerate(result.chains, 1):
             content.append(
                 ft.Text(
-                    f"Chain {i}: {chain.starting_url}",
+                    f"Chain {i}: {chain.start_url}",
                     size=self.theme.text_label,
                     weight="bold",
                     color=self.theme.text_primary,
@@ -763,7 +802,7 @@ class DomainAnalyzerApp:
                 )
 
         return self._create_expandable_panel(
-            "HTTP/HTTPS Analysis", ft.Icons.HTTP, content, len(result.errors)
+            "HTTP/HTTPS Analysis", ft.Icons.HTTP, content, len(result.errors), len(result.warnings)
         )
 
     def _create_ssl_panel(self, result: Any) -> ft.ExpansionTile:
@@ -772,19 +811,27 @@ class DomainAnalyzerApp:
 
         self._add_errors_and_warnings(content, result)
 
-        if result.certificate:
-            cert = result.certificate
-            content.append(ft.Text(f"Issuer: {cert.issuer}", size=self.theme.text_body))
-            content.append(ft.Text(f"Subject: {cert.subject}", size=self.theme.text_body))
-            content.append(
-                ft.Text(f"Valid from: {cert.not_valid_before}", size=self.theme.text_body)
-            )
-            content.append(
-                ft.Text(f"Valid until: {cert.not_valid_after}", size=self.theme.text_body)
-            )
+        if result.certificates:
+            for hostname, cert in result.certificates.items():
+                content.append(
+                    ft.Text(
+                        f"Certificate for {hostname}:",
+                        size=self.theme.text_label,
+                        weight="bold",
+                        color=self.theme.text_primary,
+                    )
+                )
+                content.append(ft.Text(f"  Issuer: {cert.issuer}", size=self.theme.text_body))
+                content.append(ft.Text(f"  Subject: {cert.subject}", size=self.theme.text_body))
+                content.append(
+                    ft.Text(f"  Valid from: {cert.not_before}", size=self.theme.text_body)
+                )
+                content.append(
+                    ft.Text(f"  Valid until: {cert.not_after}", size=self.theme.text_body)
+                )
 
         return self._create_expandable_panel(
-            "SSL/TLS Analysis", ft.Icons.SECURITY, content, len(result.errors)
+            "SSL/TLS Analysis", ft.Icons.SECURITY, content, len(result.errors), len(result.warnings)
         )
 
     def _create_email_panel(self, result: Any, advanced_result: Any = None) -> ft.ExpansionTile:
@@ -794,7 +841,7 @@ class DomainAnalyzerApp:
         self._add_errors_and_warnings(content, result)
 
         # SPF
-        if result.spf_record:
+        if result.spf:
             content.append(
                 ft.Text(
                     "SPF Record:",
@@ -803,10 +850,10 @@ class DomainAnalyzerApp:
                     color=self.theme.text_primary,
                 )
             )
-            content.append(ft.Text(f"  {result.spf_record}", size=self.theme.text_body))
+            content.append(ft.Text(f"  {result.spf.record}", size=self.theme.text_body))
 
         # DMARC
-        if result.dmarc_record:
+        if result.dmarc:
             content.append(
                 ft.Text(
                     "DMARC Record:",
@@ -815,11 +862,11 @@ class DomainAnalyzerApp:
                     color=self.theme.text_primary,
                 )
             )
-            content.append(ft.Text(f"  {result.dmarc_record}", size=self.theme.text_body))
+            content.append(ft.Text(f"  {result.dmarc.record}", size=self.theme.text_body))
 
         # Advanced email (BIMI, MTA-STS, TLS-RPT)
         if advanced_result:
-            if advanced_result.bimi_record:
+            if advanced_result.bimi:
                 content.append(
                     ft.Text(
                         "BIMI Record:",
@@ -829,10 +876,10 @@ class DomainAnalyzerApp:
                     )
                 )
                 content.append(
-                    ft.Text(f"  {advanced_result.bimi_record}", size=self.theme.text_body)
+                    ft.Text(f"  {advanced_result.bimi.record_value}", size=self.theme.text_body)
                 )
 
-            if advanced_result.mta_sts_policy:
+            if advanced_result.mta_sts:
                 content.append(
                     ft.Text(
                         "MTA-STS:",
@@ -842,11 +889,22 @@ class DomainAnalyzerApp:
                     )
                 )
                 content.append(
-                    ft.Text(f"  Mode: {advanced_result.mta_sts_policy}", size=self.theme.text_body)
+                    ft.Text(
+                        f"  Mode: {advanced_result.mta_sts.policy_mode}", size=self.theme.text_body
+                    )
                 )
 
+        # Count warnings from both basic and advanced email results
+        warning_count = len(result.warnings)
+        if advanced_result and hasattr(advanced_result, "warnings"):
+            warning_count += len(advanced_result.warnings)
+
         return self._create_expandable_panel(
-            "Email Security", ft.Icons.EMAIL, content, len(result.errors)
+            "Email Security",
+            ft.Icons.EMAIL,
+            content,
+            len(result.errors),
+            warning_count,
         )
 
     def _create_headers_panel(self, result: Any) -> ft.ExpansionTile:
@@ -855,13 +913,16 @@ class DomainAnalyzerApp:
 
         self._add_errors_and_warnings(content, result)
 
-        # Present headers
-        for header_name, header_value in result.present_headers.items():
+        # Headers (dict of SecurityHeaderCheck objects)
+        for header_name, header_check in result.headers.items():
             content.append(ft.Text(f"{header_name}:", size=self.theme.text_label, weight="bold"))
-            content.append(ft.Text(f"  {header_value}", size=self.theme.text_body))
+            if header_check.present:
+                content.append(ft.Text("  ✓ Present", size=self.theme.text_body, color="green"))
+            else:
+                content.append(ft.Text("  ✗ Missing", size=self.theme.text_body, color="red"))
 
         return self._create_expandable_panel(
-            "Security Headers", ft.Icons.SHIELD, content, len(result.errors)
+            "Security Headers", ft.Icons.SHIELD, content, len(result.errors), len(result.warnings)
         )
 
     def _create_rbl_panel(self, result: Any) -> ft.ExpansionTile:
@@ -871,19 +932,22 @@ class DomainAnalyzerApp:
         self._add_errors_and_warnings(content, result)
 
         # Blacklist status
-        for ip, listings in result.blacklisted_ips.items():
-            content.append(
-                ft.Text(
-                    f"IP: {ip}",
-                    size=self.theme.text_label,
-                    weight="bold",
-                    color=self.theme.error_color,
+        for check in result.checks:
+            if check.listed:
+                content.append(
+                    ft.Text(
+                        f"IP: {check.ip}",
+                        size=self.theme.text_label,
+                        weight="bold",
+                        color=self.theme.error_color,
+                    )
                 )
-            )
-            for listing in listings:
-                content.append(ft.Text(f"  • Listed on: {listing}", size=self.theme.text_body))
+                for blacklist in check.blacklists:
+                    content.append(
+                        ft.Text(f"  • Listed on: {blacklist}", size=self.theme.text_body)
+                    )
 
-        if not result.blacklisted_ips:
+        if result.total_listed == 0:
             content.append(
                 ft.Container(
                     content=ft.Row(
@@ -903,7 +967,7 @@ class DomainAnalyzerApp:
             )
 
         return self._create_expandable_panel(
-            "RBL Check", ft.Icons.BLOCK, content, len(result.errors)
+            "RBL Check", ft.Icons.BLOCK, content, len(result.errors), len(result.warnings)
         )
 
     def _create_seo_panel(self, result: Any) -> ft.ExpansionTile:
@@ -913,7 +977,7 @@ class DomainAnalyzerApp:
         self._add_errors_and_warnings(content, result)
 
         # SEO files status
-        if result.robots_txt:
+        if result.robots:
             content.append(
                 ft.Container(
                     content=ft.Row(
@@ -932,7 +996,7 @@ class DomainAnalyzerApp:
                 )
             )
 
-        if result.sitemap_xml:
+        if result.sitemaps:
             content.append(
                 ft.Container(
                     content=ft.Row(
@@ -942,7 +1006,10 @@ class DomainAnalyzerApp:
                                 color=self.theme.success_color,
                                 size=self.theme.icon_small,
                             ),
-                            ft.Text("sitemap.xml found", color=self.theme.success_color),
+                            ft.Text(
+                                f"{len(result.sitemaps)} sitemap(s) found",
+                                color=self.theme.success_color,
+                            ),
                         ]
                     ),
                     bgcolor=self.theme.success_bg,
@@ -971,7 +1038,7 @@ class DomainAnalyzerApp:
             )
 
         return self._create_expandable_panel(
-            "SEO Files", ft.Icons.SEARCH, content, len(result.errors)
+            "SEO Files", ft.Icons.SEARCH, content, len(result.errors), len(result.warnings)
         )
 
     def _create_favicon_panel(self, result: Any) -> ft.ExpansionTile:
@@ -1002,7 +1069,7 @@ class DomainAnalyzerApp:
                     )
 
         return self._create_expandable_panel(
-            "Favicon Detection", ft.Icons.IMAGE, content, len(result.errors)
+            "Favicon Detection", ft.Icons.IMAGE, content, len(result.errors), len(result.warnings)
         )
 
     def _create_site_verification_panel(self, result: Any) -> ft.ExpansionTile:
@@ -1012,26 +1079,33 @@ class DomainAnalyzerApp:
         self._add_errors_and_warnings(content, result)
 
         # Verification findings
-        for service_name, verifications in result.verifications.items():
-            if verifications:
+        for service_result in result.service_results:
+            if service_result.detected_verification_ids:
                 content.append(
                     ft.Text(
-                        f"{service_name}:",
+                        f"{service_result.service}:",
                         size=self.theme.text_label,
                         weight="bold",
                         color=self.theme.text_primary,
                     )
                 )
-                for verification in verifications:
+                for verification in service_result.detected_verification_ids:
+                    methods_str = (
+                        ", ".join(verification.methods) if verification.methods else "unknown"
+                    )
                     content.append(
                         ft.Text(
-                            f"  • {verification.verification_id} ({verification.method})",
+                            f"  • {verification.verification_id} ({methods_str})",
                             size=self.theme.text_body,
                         )
                     )
 
         return self._create_expandable_panel(
-            "Site Verification", ft.Icons.VERIFIED, content, len(result.errors)
+            "Site Verification",
+            ft.Icons.VERIFIED,
+            content,
+            len(result.errors),
+            len(result.warnings),
         )
 
     def _create_cdn_panel(self, result: Any) -> ft.ExpansionTile:
@@ -1041,17 +1115,30 @@ class DomainAnalyzerApp:
         self._add_errors_and_warnings(content, result)
 
         # CDN detection
-        if result.detected_cdns:
+        if result.cdn_detected and result.cdn_provider:
             content.append(
                 ft.Text(
-                    "Detected CDNs:",
+                    "CDN Detected:",
                     size=self.theme.text_label,
                     weight="bold",
                     color=self.theme.text_primary,
                 )
             )
-            for cdn in result.detected_cdns:
-                content.append(ft.Text(f"  • {cdn}", size=self.theme.text_body))
+            content.append(ft.Text(f"  Provider: {result.cdn_provider}", size=self.theme.text_body))
+            if result.detection_method:
+                content.append(
+                    ft.Text(
+                        f"  Detection method: {result.detection_method}", size=self.theme.text_body
+                    )
+                )
+            if result.confidence:
+                content.append(
+                    ft.Text(f"  Confidence: {result.confidence}", size=self.theme.text_body)
+                )
+            if result.evidence:
+                content.append(ft.Text("  Evidence:", size=self.theme.text_body))
+                for evidence in result.evidence:
+                    content.append(ft.Text(f"    • {evidence}", size=self.theme.text_body))
         else:
             content.append(
                 ft.Text(
@@ -1060,7 +1147,7 @@ class DomainAnalyzerApp:
             )
 
         return self._create_expandable_panel(
-            "CDN Detection", ft.Icons.CLOUD, content, len(result.errors)
+            "CDN Detection", ft.Icons.CLOUD, content, len(result.errors), len(result.warnings)
         )
 
     def show_error(self, message: str) -> None:

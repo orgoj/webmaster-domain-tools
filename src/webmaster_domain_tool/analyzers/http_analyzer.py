@@ -111,10 +111,12 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
 
         # Add www variants unless skip_www is enabled
         if not self.skip_www:
-            urls_to_test.extend([
-                f"http://www.{domain}",
-                f"https://www.{domain}",
-            ])
+            urls_to_test.extend(
+                [
+                    f"http://www.{domain}",
+                    f"https://www.{domain}",
+                ]
+            )
 
         for url in urls_to_test:
             logger.debug(f"Testing URL: {url}")
@@ -199,7 +201,9 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
 
                 # Check if it's SSL-related error by looking at the error message
                 error_msg = str(e).lower()
-                is_ssl_error = any(ssl_term in error_msg for ssl_term in ['ssl', 'certificate', 'tls'])
+                is_ssl_error = any(
+                    ssl_term in error_msg for ssl_term in ["ssl", "certificate", "tls"]
+                )
 
                 http_response = HTTPResponse(
                     url=current_url,
@@ -255,21 +259,16 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
         # Check for HTTP on final URL (should use HTTPS)
         ends_on_http = chain.final_url.startswith("http://") and last_response.status_code == 200
         if ends_on_http:
-            result.warnings.append(
-                f"{chain.start_url} ends on HTTP (insecure): {chain.final_url}"
-            )
+            result.warnings.append(f"{chain.start_url} ends on HTTP (insecure): {chain.final_url}")
 
         # Check for mixed HTTP->HTTPS redirects
         # Skip if already warned about ending on HTTP
         if chain.start_url.startswith("http://") and not ends_on_http:
             https_redirected = any(
-                r.redirect_to and r.redirect_to.startswith("https://")
-                for r in chain.responses
+                r.redirect_to and r.redirect_to.startswith("https://") for r in chain.responses
             )
             if not https_redirected and last_response.status_code == 200:
-                result.warnings.append(
-                    f"{chain.start_url} does not redirect to HTTPS"
-                )
+                result.warnings.append(f"{chain.start_url} does not redirect to HTTPS")
 
         # Check for too many redirects
         if len(chain.responses) > MAX_REDIRECT_WARNING:
@@ -278,9 +277,7 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
             )
 
         # Check for 302 (temporary) when 301 (permanent) might be better
-        temp_redirects = [
-            r for r in chain.responses if r.status_code == 302
-        ]
+        temp_redirects = [r for r in chain.responses if r.status_code == 302]
         if temp_redirects:
             result.warnings.append(
                 f"{chain.start_url} uses 302 (temporary) redirects - consider 301 (permanent)"
@@ -298,18 +295,15 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
             PathCheckResult with status and content information
         """
         # Ensure path starts with /
-        if not path.startswith('/'):
-            path = '/' + path
+        if not path.startswith("/"):
+            path = "/" + path
 
         # Remove trailing slash from base_url
-        base_url = base_url.rstrip('/')
+        base_url = base_url.rstrip("/")
 
         full_url = f"{base_url}{path}"
 
-        result = PathCheckResult(
-            path=path,
-            full_url=full_url
-        )
+        result = PathCheckResult(path=path, full_url=full_url)
 
         try:
             start_time = datetime.now()
@@ -334,7 +328,9 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
                 # Check if content is not empty
                 if content and content.strip():
                     result.success = True
-                    logger.info(f"Path check successful: {full_url} ({result.content_length} bytes)")
+                    logger.info(
+                        f"Path check successful: {full_url} ({result.content_length} bytes)"
+                    )
                 else:
                     result.error = "Path returned 200 but content is empty"
                     logger.warning(f"Path check failed: {full_url} - empty content")

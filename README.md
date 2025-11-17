@@ -230,6 +230,34 @@ wdt-app
 uv run wdt-app
 ```
 
+**System Requirements for GUI:**
+
+The GUI application requires the `libmpv` multimedia library to be installed on your system:
+
+- **Ubuntu/Debian**: `sudo apt-get install libmpv-dev libmpv2`
+- **Fedora/RHEL/CentOS**: `sudo dnf install mpv-libs`
+- **Arch Linux**: `sudo pacman -S mpv`
+- **macOS**: `brew install mpv`
+
+**Ubuntu 24.04+ Compatibility (Official Flet Solution):**
+
+Ubuntu 24.04 ships with libmpv2, but Flet requires libmpv.so.1. This is a known issue documented in [Flet's official documentation](https://flet.dev/docs/getting-started/).
+
+**Official fix from Flet team:**
+
+```bash
+# Install libmpv packages
+sudo apt update
+sudo apt install libmpv-dev libmpv2
+
+# Create compatibility symlink (official Flet workaround)
+sudo ln -s /usr/lib/x86_64-linux-gnu/libmpv.so.2 /usr/lib/x86_64-linux-gnu/libmpv.so.1
+```
+
+This solution is officially documented by the Flet team and is the standard workaround until Flet releases native libmpv2 support.
+
+**Note**: The CLI version (`wdt`) does not require these system dependencies - only the GUI (`wdt-app`) needs them.
+
 **Features:**
 - ✅ **Modern, responsive UI** that adapts to desktop and mobile screens
 - ✅ **Interactive domain input** with validation

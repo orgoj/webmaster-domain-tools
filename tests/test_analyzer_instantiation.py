@@ -1,7 +1,5 @@
 """Test that all analyzers can be properly instantiated and have correct interfaces."""
 
-import pytest
-
 
 class TestAnalyzerInstantiation:
     """Test instantiation of all analyzers."""
@@ -81,9 +79,7 @@ class TestAnalyzerInstantiation:
         )
 
         analyzer = SiteVerificationAnalyzer()
-        assert hasattr(
-            analyzer, "analyze"
-        ), "SiteVerificationAnalyzer must have analyze() method"
+        assert hasattr(analyzer, "analyze"), "SiteVerificationAnalyzer must have analyze() method"
         assert callable(analyzer.analyze), "analyze() must be callable"
 
     def test_whois_analyzer(self):
@@ -99,9 +95,7 @@ class TestAnalyzerInstantiation:
         from webmaster_domain_tool.analyzers.security_headers import SecurityHeadersAnalyzer
 
         analyzer = SecurityHeadersAnalyzer()
-        assert hasattr(
-            analyzer, "analyze"
-        ), "SecurityHeadersAnalyzer must have analyze() method"
+        assert hasattr(analyzer, "analyze"), "SecurityHeadersAnalyzer must have analyze() method"
         assert callable(analyzer.analyze), "analyze() must be callable"
 
         # Test that analyze() works with URL parameter

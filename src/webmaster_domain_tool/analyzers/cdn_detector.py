@@ -146,7 +146,7 @@ class CDNDetector:
                         result.cdn_provider = provider
                         result.detection_method = "headers"
                         result.confidence = "medium"
-                        result.evidence.append(f"CDN pattern in Via header")
+                        result.evidence.append("CDN pattern in Via header")
                         return result
 
         # Check X-Cache headers (generic CDN indicator)

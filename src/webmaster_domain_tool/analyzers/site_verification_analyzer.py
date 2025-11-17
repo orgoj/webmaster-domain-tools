@@ -13,8 +13,8 @@ from ..constants import (
     DEFAULT_USER_AGENT,
     TRACKING_PATTERNS,
 )
-from .dns_utils import create_resolver
 from .base import BaseAnalysisResult, BaseAnalyzer
+from .dns_utils import create_resolver
 
 logger = logging.getLogger(__name__)
 
@@ -106,9 +106,7 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
         # Create DNS resolver using centralized utility
         self.resolver = create_resolver(nameservers=nameservers, timeout=timeout)
 
-    def analyze(
-        self, domain: str, url: str | None = None
-    ) -> SiteVerificationAnalysisResult:
+    def analyze(self, domain: str, url: str | None = None) -> SiteVerificationAnalysisResult:
         """
         Perform comprehensive site verification analysis for all configured services.
 
@@ -169,9 +167,7 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
 
         # Auto-detect verification IDs if enabled
         if service_config.auto_detect:
-            detected = self._detect_verification_ids(
-                domain, service_config, main_result
-            )
+            detected = self._detect_verification_ids(domain, service_config, main_result)
             service_result.detected_verification_ids = detected
 
         return service_result
@@ -196,8 +192,7 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
             VerificationResult with found methods
         """
         verification = VerificationResult(
-            service=service_config.name,
-            verification_id=verification_id
+            service=service_config.name, verification_id=verification_id
         )
 
         # Check DNS TXT record if pattern provided
@@ -212,7 +207,9 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
             if self._check_verification_file(domain, service_config.file_pattern, verification_id):
                 verification.found = True
                 verification.methods.append("HTML file")
-                logger.debug(f"{service_config.name} verification {verification_id} found via HTML file")
+                logger.debug(
+                    f"{service_config.name} verification {verification_id} found via HTML file"
+                )
 
         # Check meta tag in HTML if meta_name provided
         if service_config.meta_name and main_result.html_content:
@@ -221,7 +218,9 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
             ):
                 verification.found = True
                 verification.methods.append("Meta tag")
-                logger.debug(f"{service_config.name} verification {verification_id} found via meta tag")
+                logger.debug(
+                    f"{service_config.name} verification {verification_id} found via meta tag"
+                )
 
         if not verification.found:
             verification.errors.append(
@@ -230,9 +229,7 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
 
         return verification
 
-    def _check_verification_dns(
-        self, domain: str, dns_pattern: str, verification_id: str
-    ) -> bool:
+    def _check_verification_dns(self, domain: str, dns_pattern: str, verification_id: str) -> bool:
         """
         Check for verification via DNS TXT record.
 
@@ -323,7 +320,7 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
             + r'["\']\s+content=["\']'
             + re.escape(verification_id)
             + r'["\']',
-            re.IGNORECASE
+            re.IGNORECASE,
         )
 
         # Also check reversed attribute order
@@ -333,7 +330,7 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
             + r'["\']\s+name=["\']'
             + re.escape(meta_name)
             + r'["\']',
-            re.IGNORECASE
+            re.IGNORECASE,
         )
 
         return bool(pattern.search(html_content) or pattern_reversed.search(html_content))
@@ -395,14 +392,14 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
                 r'<meta\s+name=["\']'
                 + re.escape(service_config.meta_name)
                 + r'["\']\s+content=["\']([a-zA-Z0-9_-]+)["\']',
-                re.IGNORECASE
+                re.IGNORECASE,
             )
             # Also check reversed attribute order
             pattern_reversed = re.compile(
                 r'<meta\s+content=["\']([a-zA-Z0-9_-]+)["\']\s+name=["\']'
                 + re.escape(service_config.meta_name)
                 + r'["\']',
-                re.IGNORECASE
+                re.IGNORECASE,
             )
 
             for match in pattern.finditer(main_result.html_content):
@@ -547,9 +544,7 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
             result.html_fetch_error = error_msg
             logger.error(error_msg)
 
-    def _detect_tracking_codes(
-        self, result: SiteVerificationAnalysisResult
-    ) -> None:
+    def _detect_tracking_codes(self, result: SiteVerificationAnalysisResult) -> None:
         """
         Detect tracking codes in HTML content (Google specific - legacy).
 

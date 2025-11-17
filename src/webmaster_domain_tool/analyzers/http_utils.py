@@ -90,9 +90,7 @@ def safe_http_get(
     except httpx.ConnectError as e:
         # Check if it's SSL-related error
         error_msg = str(e).lower()
-        is_ssl_error = any(
-            ssl_term in error_msg for ssl_term in ["ssl", "certificate", "tls"]
-        )
+        is_ssl_error = any(ssl_term in error_msg for ssl_term in ["ssl", "certificate", "tls"])
 
         if is_ssl_error:
             return HTTPResult(

@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Pre-commit Hooks Configuration Updated and Automated**
+  - Updated all pre-commit hook versions to latest stable releases
+  - pre-commit-hooks: v4.5.0 → v5.0.0
+  - black: 24.1.1 → 25.11.0 (new 2025 stable style)
+  - ruff: v0.3.0 → v0.14.5 (migrated repo from charliermarsh to astral-sh)
+  - isort: 5.13.2 → 7.0.0
+  - Created SessionStart hook (.claude/hooks/SessionStart.md) for automatic pre-commit installation
+  - Pre-commit hooks now auto-install on every Claude Code session start
+  - All code formatted with Black 25.11.0 (new 2025 style)
+  - Fixed all ruff linting errors (unused variables, missing imports)
+  - Ensures consistent code quality across all commits
+
+- **Major Dependency Updates - All Packages Updated to Latest Stable Versions**
+  - Updated all dependencies to eliminate technical debt
+  - **Core dependencies:**
+    - dnspython: 2.6.1 → 2.8.0
+    - httpx: 0.27.0 → 0.28.1
+    - cryptography: 42.0.0 → 46.0.3 (major security updates)
+    - rich: 13.7.0 → 14.2.0
+    - typer: 0.12.0 → 0.20.0
+    - pydantic: 2.7.0 → 2.12.4
+    - pydantic-settings: 2.2.0 → 2.12.0
+    - tomli: 2.0.0 → 2.3.0
+    - python-whois: 0.9.0 → 0.9.6
+    - flet: 0.28.0 → 0.28.3
+    - flet-desktop: 0.28.0 → 0.28.3
+  - **Dev dependencies:**
+    - pytest: 8.0.0 → 9.0.1
+    - pytest-asyncio: 0.23.0 → 1.3.0
+    - black: 24.0.0 → 25.11.0 (new 2025 stable style)
+    - ruff: 0.3.0 → 0.14.1
+    - mypy: 1.9.0 → 1.18.2
+  - Removed duplicate dependency entries (pytest-cov, pre-commit) that conflicted between sections
+  - All packages tested and working with latest versions
+
 ### Added
 - **Enhanced WHOIS Information Display**
   - Added registrant email field extraction from WHOIS data
@@ -16,6 +52,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Both CLI and GUI updated to show new contact information
 
 ### Fixed
+- **GUI Application Launch Issue**
+  - Fixed `wdt-app` failing to launch with "No module named pip" error
+  - Added explicit `flet-desktop` dependency to prevent auto-installation issues
+  - The flet package was trying to auto-install flet-desktop using pip, which isn't available in uv virtual environments
+  - Now flet-desktop is installed directly by uv during package installation
+  - Documented system requirements for GUI (libmpv library) in README
+  - Added Ubuntu 24.04+ compatibility fix using official Flet team solution
+  - Ubuntu 24.04 ships with libmpv2, but Flet requires libmpv.so.1 (known Flet limitation)
+  - Solution: `sudo ln -s /usr/lib/x86_64-linux-gnu/libmpv.so.2 /usr/lib/x86_64-linux-gnu/libmpv.so.1`
+  - Corrected symlink command to point to actual libmpv.so.2 file
+  - Documented in README with link to official Flet documentation
+
 - **WHOIS Registrar Display for .cz Domains**
   - Fixed incorrect registrar extraction for .cz domains
   - Previously showed registrar from contact records instead of domain record

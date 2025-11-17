@@ -1,11 +1,10 @@
 """SEO files analyzer - robots.txt, llms.txt, sitemap.xml checker."""
 
 import logging
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
 from urllib.parse import urljoin, urlparse
-import xml.etree.ElementTree as ET
 
 import httpx
 
@@ -190,34 +189,34 @@ class SEOFilesAnalyzer(BaseAnalyzer[SEOFilesAnalysisResult]):
 
     def _parse_robots_txt(self, content: str, result: RobotsResult) -> None:
         """Parse robots.txt content."""
-        lines = content.split('\n')
+        lines = content.split("\n")
 
         for line in lines:
             line = line.strip()
 
             # Skip comments and empty lines
-            if not line or line.startswith('#'):
+            if not line or line.startswith("#"):
                 continue
 
             # Split on first colon
-            if ':' in line:
-                directive, value = line.split(':', 1)
+            if ":" in line:
+                directive, value = line.split(":", 1)
                 directive = directive.strip().lower()
                 value = value.strip()
 
-                if directive == 'user-agent':
+                if directive == "user-agent":
                     if value and value not in result.user_agents:
                         result.user_agents.append(value)
 
-                elif directive == 'disallow':
+                elif directive == "disallow":
                     if value and value not in result.disallow_rules:
                         result.disallow_rules.append(value)
 
-                elif directive == 'allow':
+                elif directive == "allow":
                     if value and value not in result.allow_rules:
                         result.allow_rules.append(value)
 
-                elif directive == 'sitemap':
+                elif directive == "sitemap":
                     if value and value not in result.sitemaps:
                         result.sitemaps.append(value)
 
@@ -267,26 +266,30 @@ class SEOFilesAnalyzer(BaseAnalyzer[SEOFilesAnalysisResult]):
                     root = ET.fromstring(response.content)
 
                     # Get namespace
-                    namespace = {'sm': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+                    namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 
                     # Check if it's a sitemap index
-                    if root.tag.endswith('sitemapindex'):
+                    if root.tag.endswith("sitemapindex"):
                         result.is_index = True
-                        sitemaps = root.findall('sm:sitemap', namespace)
+                        sitemaps = root.findall("sm:sitemap", namespace)
                         result.sitemap_count = len(sitemaps)
-                        logger.info(f"Sitemap index found: {sitemap_url} ({result.sitemap_count} sitemaps)")
+                        logger.info(
+                            f"Sitemap index found: {sitemap_url} ({result.sitemap_count} sitemaps)"
+                        )
 
                     # Regular sitemap
-                    elif root.tag.endswith('urlset'):
-                        urls = root.findall('sm:url', namespace)
+                    elif root.tag.endswith("urlset"):
+                        urls = root.findall("sm:url", namespace)
                         result.url_count = len(urls)
 
                         # Get last modification date
-                        lastmod_elements = root.findall('.//sm:lastmod', namespace)
+                        lastmod_elements = root.findall(".//sm:lastmod", namespace)
                         if lastmod_elements:
                             try:
                                 lastmod_text = lastmod_elements[0].text
-                                result.last_modified = datetime.fromisoformat(lastmod_text.replace('Z', '+00:00'))
+                                result.last_modified = datetime.fromisoformat(
+                                    lastmod_text.replace("Z", "+00:00")
+                                )
                             except Exception:
                                 pass
 
@@ -294,7 +297,9 @@ class SEOFilesAnalyzer(BaseAnalyzer[SEOFilesAnalysisResult]):
 
                         # Warn if sitemap is very large
                         if result.url_count > 50000:
-                            result.warnings.append(f"Sitemap has {result.url_count} URLs (max recommended: 50,000)")
+                            result.warnings.append(
+                                f"Sitemap has {result.url_count} URLs (max recommended: 50,000)"
+                            )
 
                     else:
                         result.errors.append(f"Unknown sitemap format: {root.tag}")

@@ -177,9 +177,7 @@ class OutputConfig(BaseModel):
 class ServiceVerificationConfig(BaseModel):
     """Configuration for a single service verification (Google, Facebook, Pinterest, etc)."""
 
-    name: str = Field(
-        description="Service name (e.g., 'Google', 'Facebook', 'Pinterest')"
-    )
+    name: str = Field(description="Service name (e.g., 'Google', 'Facebook', 'Pinterest')")
     ids: list[str] = Field(
         default_factory=list,
         description="Verification IDs to check for this service",
@@ -268,9 +266,13 @@ class AnalysisConfig(BaseModel):
         default=False,
         description="Skip testing www subdomain (useful for subdomains or domains without www)",
     )
-    skip_seo: bool = Field(default=False, description="Skip SEO files analysis (robots.txt, sitemap.xml)")
+    skip_seo: bool = Field(
+        default=False, description="Skip SEO files analysis (robots.txt, sitemap.xml)"
+    )
     skip_favicon: bool = Field(default=False, description="Skip favicon detection")
-    skip_advanced_email: bool = Field(default=False, description="Skip advanced email security (BIMI, MTA-STS, TLS-RPT)")
+    skip_advanced_email: bool = Field(
+        default=False, description="Skip advanced email security (BIMI, MTA-STS, TLS-RPT)"
+    )
     skip_cdn_detection: bool = Field(default=False, description="Skip CDN detection")
 
 

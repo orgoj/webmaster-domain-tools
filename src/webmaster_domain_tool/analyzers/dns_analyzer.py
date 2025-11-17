@@ -11,8 +11,8 @@ import dns.resolver
 import dns.reversename
 
 from ..constants import DEFAULT_DNS_TIMEOUT
-from .dns_utils import create_resolver
 from .base import BaseAnalysisResult, BaseAnalyzer
+from .dns_utils import create_resolver
 
 logger = logging.getLogger(__name__)
 

@@ -21,7 +21,27 @@
       "sourceFormat": "claude",
       "sourceSubtype": "skill",
       "installedPath": ".claude/skills/creating-skills-skill/SKILL.md"
+    },
+    "@wshobson/agents/python-development/python-pro": {
+      "version": "1.0.0",
+      "resolved": "https://registry.prpm.dev/api/v1/packages/%40wshobson%2Fagents%2Fpython-development%2Fpython-pro/1.0.0.tar.gz",
+      "integrity": "sha256-8b85bbd75d5564b1dbf85200d7a13f1a28a00dc0529c72c38c97ff60bdec1834",
+      "format": "claude",
+      "subtype": "agent",
+      "sourceFormat": "claude",
+      "sourceSubtype": "agent",
+      "installedPath": ".claude/agents/python-pro.md"
+    },
+    "@prpm/agent-builder-skill": {
+      "version": "1.0.3",
+      "resolved": "https://registry.prpm.dev/api/v1/packages/%40prpm%2Fagent-builder-skill/1.0.3.tar.gz",
+      "integrity": "sha256-0705011f4d56fad66974f4d5acfe9cc5a47e7d7b289f6aa269c6dd68bf0d3874",
+      "format": "claude",
+      "subtype": "skill",
+      "sourceFormat": "claude",
+      "sourceSubtype": "skill",
+      "installedPath": ".claude/skills/agent-builder-skill"
     }
   },
-  "generated": "2025-11-16T20:54:01.831Z"
+  "generated": "2025-11-17T11:35:32.474Z"
 }

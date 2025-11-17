@@ -282,8 +282,6 @@ class WhoisAnalyzer(BaseAnalyzer[WhoisAnalysisResult]):
         lines = raw_text.split("\n")
         in_domain_section = False  # Not in domain section yet
         in_contact_section = False
-        in_nsset_section = False
-        in_keyset_section = False
         current_contact = None
         registrant_handle = None
 
@@ -298,24 +296,18 @@ class WhoisAnalyzer(BaseAnalyzer[WhoisAnalysisResult]):
             if not line:
                 in_domain_section = False
                 in_contact_section = False
-                in_nsset_section = False
-                in_keyset_section = False
                 continue
 
             # Detect start of domain section
             if line.startswith("domain:"):
                 in_domain_section = True
                 in_contact_section = False
-                in_nsset_section = False
-                in_keyset_section = False
                 continue
 
             # Detect section boundaries - contact: always starts a new section
             if line.startswith("contact:"):
                 in_domain_section = False
                 in_contact_section = True
-                in_nsset_section = False
-                in_keyset_section = False
                 # Extract contact handle
                 parts = line.split(":", 1)
                 if len(parts) == 2:
@@ -325,16 +317,10 @@ class WhoisAnalyzer(BaseAnalyzer[WhoisAnalysisResult]):
             # nsset: and keyset: start new sections ONLY when not in domain section
             # In domain section, they are fields (nsset/keyset references), not section headers
             if not in_domain_section:
-                if line.startswith("nsset:"):
+                if line.startswith("nsset:") or line.startswith("keyset:"):
+                    # Exit contact section when entering nsset/keyset sections
+                    # (these sections are currently not parsed)
                     in_contact_section = False
-                    in_nsset_section = True
-                    in_keyset_section = False
-                    continue
-
-                if line.startswith("keyset:"):
-                    in_contact_section = False
-                    in_nsset_section = False
-                    in_keyset_section = True
                     continue
 
             # Parse domain section fields

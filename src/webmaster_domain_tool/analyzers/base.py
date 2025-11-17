@@ -20,7 +20,7 @@ class BaseAnalysisResult:
 
 
 # Type variable for generic analyzer result types
-TResult = TypeVar('TResult', bound=BaseAnalysisResult)
+TResult = TypeVar("TResult", bound=BaseAnalysisResult)
 
 
 class BaseAnalyzer(ABC, Generic[TResult]):
