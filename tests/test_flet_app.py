@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from webmaster_domain_tool.analyzers.ssl_analyzer import CertificateInfo, SSLAnalysisResult
 from webmaster_domain_tool.flet_app import DomainAnalyzerApp
 
 
@@ -129,22 +130,26 @@ class TestPanelCreation:
         This test specifically prevents regression of the bug:
         AttributeError: 'SSLAnalysisResult' object has no attribute 'certificate'. Did you mean: 'certificates'?
         """
-        result = Mock()
-        result.domain = "example.com"
-        result.errors = []
-        result.warnings = []
+        # Use REAL CertificateInfo object like the app does
+        cert = CertificateInfo(
+            subject={"CN": "example.com"},
+            issuer={"CN": "Let's Encrypt"},
+            version=3,
+            serial_number="123456789",
+            not_before=datetime(2024, 1, 1),
+            not_after=datetime(2025, 1, 1),
+        )
 
-        # Create mock certificate
-        cert = Mock()
-        cert.issuer = "CN=Let's Encrypt"
-        cert.subject = "CN=example.com"
-        cert.not_valid_before = datetime(2024, 1, 1)
-        cert.not_valid_after = datetime(2025, 1, 1)
+        # Use REAL SSLAnalysisResult object
+        result = SSLAnalysisResult(
+            domain="example.com",
+            certificates={"example.com": cert},
+        )
 
-        # Result should have certificates (plural), not certificate (singular)
-        result.certificates = {"example.com": cert}
-
-        # This should not raise AttributeError about 'certificate' (singular)
+        # This should not raise AttributeError about:
+        # - 'certificate' (should be 'certificates')
+        # - 'not_valid_before' (should be 'not_before')
+        # - 'not_valid_after' (should be 'not_after')
         panel = app._create_ssl_panel(result)
         assert panel is not None
 
