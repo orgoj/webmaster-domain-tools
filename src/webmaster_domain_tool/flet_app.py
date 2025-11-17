@@ -1,5 +1,6 @@
 """Flet multiplatform GUI application for webmaster-domain-tool."""
 
+import ipaddress
 import logging
 import re
 import sys
@@ -37,6 +38,9 @@ class UITheme:
     error_bg: str = ft.Colors.RED_50
     warning_color: str = ft.Colors.ORANGE
     warning_bg: str = ft.Colors.ORANGE_50
+    # Specific warning orange shades (previously hardcoded as hex)
+    warning_orange: str = "#FFA500"  # Orange for warnings
+    warning_orange_bg: str = "#FFF3CD"  # Light orange/yellow background
 
     # Icon sizes
     icon_large: int = 40
@@ -65,6 +69,9 @@ class UITheme:
     # Border radius
     border_radius_large: int = 10
     border_radius_small: int = 5
+
+    # Display limits
+    auto_display_max_items: int = 5  # Max items to show in auto-display lists/dicts
 
 
 class DomainAnalyzerApp:
@@ -115,17 +122,16 @@ class DomainAnalyzerApp:
             text_align=ft.TextAlign.LEFT,
         )
 
-        # Analysis options checkboxes
-        self.check_dns = ft.Checkbox(label="DNS Analysis", value=True)
-        self.check_http = ft.Checkbox(label="HTTP/HTTPS Analysis", value=True)
-        self.check_ssl = ft.Checkbox(label="SSL/TLS Analysis", value=True)
-        self.check_email = ft.Checkbox(label="Email Security (SPF/DKIM/DMARC)", value=True)
-        self.check_headers = ft.Checkbox(label="Security Headers", value=True)
-        self.check_whois = ft.Checkbox(label="WHOIS Info", value=True)
-        self.check_rbl = ft.Checkbox(label="RBL Blacklist Check", value=False)
-        self.check_seo = ft.Checkbox(label="SEO Files", value=True)
-        self.check_favicon = ft.Checkbox(label="Favicon Detection", value=True)
-        self.check_site_verification = ft.Checkbox(label="Site Verification", value=True)
+        # Analysis options checkboxes - generated dynamically from registry (DRY!)
+        # No more hardcoded checkboxes - uses ANALYZER_REGISTRY as single source of truth
+        self.analyzer_checkboxes: dict[str, ft.Checkbox] = {}
+        for analyzer_key, metadata in ANALYZER_REGISTRY.items():
+            if metadata.has_checkbox:
+                label = metadata.checkbox_label or metadata.title
+                self.analyzer_checkboxes[analyzer_key] = ft.Checkbox(
+                    label=label,
+                    value=metadata.checkbox_default,
+                )
 
         # Results container (aligned left, not centered)
         self.results_column = ft.Column(
@@ -231,25 +237,16 @@ class DomainAnalyzerApp:
             ],
         )
 
-        # Options section - using centralized helper
+        # Options section - using centralized helper with dynamic checkboxes (DRY!)
+        # Build checkbox grid dynamically from registry
+        checkbox_containers = [
+            ft.Container(checkbox, col={"sm": 6, "md": 4, "xl": 3})
+            for checkbox in self.analyzer_checkboxes.values()
+        ]
+
         options_section = self._create_section(
             title="Analysis Options",
-            controls=[
-                ft.ResponsiveRow(
-                    [
-                        ft.Container(self.check_dns, col={"sm": 6, "md": 4, "xl": 3}),
-                        ft.Container(self.check_http, col={"sm": 6, "md": 4, "xl": 3}),
-                        ft.Container(self.check_ssl, col={"sm": 6, "md": 4, "xl": 3}),
-                        ft.Container(self.check_email, col={"sm": 6, "md": 4, "xl": 3}),
-                        ft.Container(self.check_headers, col={"sm": 6, "md": 4, "xl": 3}),
-                        ft.Container(self.check_whois, col={"sm": 6, "md": 4, "xl": 3}),
-                        ft.Container(self.check_rbl, col={"sm": 6, "md": 4, "xl": 3}),
-                        ft.Container(self.check_seo, col={"sm": 6, "md": 4, "xl": 3}),
-                        ft.Container(self.check_favicon, col={"sm": 6, "md": 4, "xl": 3}),
-                        ft.Container(self.check_site_verification, col={"sm": 6, "md": 4, "xl": 3}),
-                    ],
-                ),
-            ],
+            controls=[ft.ResponsiveRow(checkbox_containers)],
             spacing=self.theme.spacing_medium,
         )
 
@@ -294,6 +291,33 @@ class DomainAnalyzerApp:
         domain = domain.replace("http://", "").replace("https://", "").rstrip("/")
         return domain
 
+    def _build_skip_params(self) -> dict[str, bool]:
+        """
+        Build skip parameters dynamically from checkbox states using registry.
+
+        Returns dict of skip parameter names to values, ready to pass to run_domain_analysis().
+        No more hardcoded mapping - uses ANALYZER_REGISTRY as single source of truth!
+        """
+        skip_params = {}
+
+        for analyzer_key, metadata in ANALYZER_REGISTRY.items():
+            if not metadata.has_checkbox or not metadata.skip_param_name:
+                continue
+
+            checkbox = self.analyzer_checkboxes.get(analyzer_key)
+            if not checkbox:
+                continue
+
+            # Build parameter value based on checkbox state
+            if metadata.skip_param_inverted:
+                # Inverted params like "do_rbl_check": checked=True means enable
+                skip_params[metadata.skip_param_name] = checkbox.value
+            else:
+                # Normal skip params: checked=True means enable, so skip=False
+                skip_params[metadata.skip_param_name] = not checkbox.value
+
+        return skip_params
+
     def run_analysis(self) -> None:
         """Run domain analysis."""
         domain = self.domain_input.value
@@ -326,46 +350,29 @@ class DomainAnalyzerApp:
             # Update status for user
             self.update_status(f"Analyzing {domain}...")
 
-            # Copy config to avoid side effects when modifying for checkbox overrides
+            # Copy config to avoid side effects
             config = self.config.model_copy(deep=True)
 
-            # Apply GUI checkbox overrides to config for features without skip parameters
-            if not self.check_seo.value:
-                config.analysis.skip_seo = True
-            if not self.check_favicon.value:
-                config.analysis.skip_favicon = True
-            # CDN detection doesn't have a checkbox, uses config default
+            # Build skip parameters dynamically from checkboxes (DRY!)
+            # No more hardcoded mapping - uses ANALYZER_REGISTRY
+            skip_params = self._build_skip_params()
 
-            # Call CORE analysis (same as CLI!) with progress callback
+            # Call CORE analysis (same as CLI!) with dynamic skip parameters
             results = run_domain_analysis(
                 domain,
                 config,
-                skip_whois=not self.check_whois.value,
-                skip_dns=not self.check_dns.value,
-                skip_http=not self.check_http.value,
-                skip_ssl=not self.check_ssl.value,
-                skip_email=not self.check_email.value,
-                skip_headers=not self.check_headers.value,
-                skip_site_verification=not self.check_site_verification.value,
-                do_rbl_check=self.check_rbl.value,
                 progress_callback=self.update_status,
+                **skip_params,  # Dynamic parameters from registry!
             )
 
-            # Convert to dict for display_results
-            results_dict = {
-                "whois": results.whois,
-                "dns": results.dns,
-                "http": results.http,
-                "ssl": results.ssl,
-                "email": results.email,
-                "advanced_email": results.advanced_email,
-                "headers": results.headers,
-                "rbl": results.rbl,
-                "seo": results.seo,
-                "favicon": results.favicon,
-                "site_verification": results.site_verification,
-                "cdn": results.cdn,
-            }
+            # Convert to dict for display_results - build dynamically from registry (DRY!)
+            results_dict = {}
+            for metadata in ANALYZER_REGISTRY.values():
+                field_name = metadata.result_field
+                results_dict[field_name] = getattr(results, field_name, None)
+
+            # Advanced email is special case (not in registry as standalone)
+            results_dict["advanced_email"] = results.advanced_email
 
             # Display results (existing method handles this)
             self.display_results(domain, results_dict)
@@ -416,8 +423,8 @@ class DomainAnalyzerApp:
             status_text = "Analysis completed with errors"
         elif total_warnings > 0:
             status_icon = ft.Icons.WARNING
-            status_color = "#FFA500"  # Orange
-            status_bg = "#FFF3CD"  # Light orange/yellow background
+            status_color = self.theme.warning_orange
+            status_bg = self.theme.warning_orange_bg
             status_text = "Analysis completed with warnings"
         else:
             status_icon = ft.Icons.CHECK_CIRCLE
@@ -478,12 +485,15 @@ class DomainAnalyzerApp:
                 renderer_method = getattr(self, renderer_method_name, None)
 
                 if renderer_method:
-                    # Special case for email analyzer (needs advanced_email too)
-                    if analyzer_key == "email":
-                        panel = renderer_method(result, results.get("advanced_email"))
-                    else:
-                        panel = renderer_method(result)
+                    # Build arguments dynamically from additional_result_fields (DRY!)
+                    # No more hardcoded "if analyzer_key == 'email'" checks
+                    renderer_args = [result]
+                    if metadata.additional_result_fields:
+                        for additional_field in metadata.additional_result_fields:
+                            additional_result = results.get(additional_field)
+                            renderer_args.append(additional_result)
 
+                    panel = renderer_method(*renderer_args)
                     self.results_column.controls.append(panel)
                 else:
                     logger.warning(
@@ -676,8 +686,6 @@ class DomainAnalyzerApp:
         Returns:
             True if value is an IP address
         """
-        import ipaddress
-
         try:
             ipaddress.ip_address(value)
             return True
@@ -706,7 +714,7 @@ class DomainAnalyzerApp:
         if error_count > 0:
             title_color = self.theme.error_color
         elif warning_count > 0:
-            title_color = "#FFA500"  # Orange for warnings
+            title_color = self.theme.warning_orange
         else:
             title_color = self.theme.text_primary
 
@@ -1235,7 +1243,7 @@ class DomainAnalyzerApp:
                                 for sitemap in result.sitemaps
                             ],
                         ],
-                        spacing=5,
+                        spacing=self.theme.spacing_tiny,
                         horizontal_alignment=ft.CrossAxisAlignment.START,
                     ),
                     bgcolor=self.theme.success_bg,
@@ -1512,12 +1520,12 @@ class DomainAnalyzerApp:
                                 size=self.theme.text_label,
                             )
                         )
-                        for item in value[:5]:  # Show first 5
+                        for item in value[: self.theme.auto_display_max_items]:
                             content.append(self._text(f"  • {item}", size=self.theme.text_body))
-                        if len(value) > 5:
+                        if len(value) > self.theme.auto_display_max_items:
                             content.append(
                                 self._text(
-                                    f"  ... and {len(value) - 5} more",
+                                    f"  ... and {len(value) - self.theme.auto_display_max_items} more",
                                     size=self.theme.text_small,
                                     color=self.theme.text_secondary,
                                 )
@@ -1533,12 +1541,12 @@ class DomainAnalyzerApp:
                                 size=self.theme.text_label,
                             )
                         )
-                        for key, val in list(value.items())[:5]:
+                        for key, val in list(value.items())[: self.theme.auto_display_max_items]:
                             content.append(self._text(f"  {key}: {val}", size=self.theme.text_body))
-                        if len(value) > 5:
+                        if len(value) > self.theme.auto_display_max_items:
                             content.append(
                                 self._text(
-                                    f"  ... and {len(value) - 5} more",
+                                    f"  ... and {len(value) - self.theme.auto_display_max_items} more",
                                     size=self.theme.text_small,
                                     color=self.theme.text_secondary,
                                 )

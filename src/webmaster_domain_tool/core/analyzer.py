@@ -45,10 +45,20 @@ class AnalyzerMetadata:
 
     # Rendering
     custom_renderer: str | None = None  # None = use auto-display, else specify renderer name
+    additional_result_fields: list[str] | None = (
+        None  # Additional results needed (e.g., ["advanced_email"])
+    )
 
     # Optional metadata
     category: str = "general"  # "general", "security", "seo", "advanced"
     description: str = ""  # Optional description for documentation
+
+    # GUI Checkbox configuration
+    has_checkbox: bool = True  # Whether to show checkbox in GUI
+    checkbox_label: str | None = None  # Override label (defaults to title)
+    checkbox_default: bool = True  # Default checked state
+    skip_param_name: str | None = None  # Parameter name: "skip_dns", "do_rbl_check", etc.
+    skip_param_inverted: bool = False  # True for "do_*" params (checked=True means enable)
 
 
 # Analyzer Registry - Single source of truth for all analyzers
@@ -64,6 +74,9 @@ ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
         custom_renderer="whois",  # Has custom links
         category="general",
         description="Domain registration and ownership information",
+        # Checkbox config
+        checkbox_label="WHOIS Info",
+        skip_param_name="skip_whois",
     ),
     "dns": AnalyzerMetadata(
         title="DNS Analysis",
@@ -72,6 +85,8 @@ ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
         custom_renderer="dns",  # Has clickable IPs
         category="general",
         description="DNS records and DNSSEC validation",
+        # Checkbox config
+        skip_param_name="skip_dns",
     ),
     "http": AnalyzerMetadata(
         title="HTTP/HTTPS Analysis",
@@ -80,6 +95,8 @@ ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
         custom_renderer="http",  # Special chain format
         category="general",
         description="HTTP/HTTPS redirects and response analysis",
+        # Checkbox config
+        skip_param_name="skip_http",
     ),
     "ssl": AnalyzerMetadata(
         title="SSL/TLS Analysis",
@@ -88,14 +105,21 @@ ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
         custom_renderer="ssl",  # Has SSL Labs link
         category="security",
         description="SSL/TLS certificates and security",
+        # Checkbox config
+        checkbox_label="SSL/TLS Analysis",
+        skip_param_name="skip_ssl",
     ),
     "email": AnalyzerMetadata(
         title="Email Security",
         icon="EMAIL",
         result_field="email",
         custom_renderer="email",  # Combined with advanced_email
+        additional_result_fields=["advanced_email"],  # Needs advanced_email too
         category="security",
         description="SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT",
+        # Checkbox config
+        checkbox_label="Email Security (SPF/DKIM/DMARC)",
+        skip_param_name="skip_email",
     ),
     "headers": AnalyzerMetadata(
         title="Security Headers",
@@ -104,6 +128,8 @@ ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
         custom_renderer="headers",  # List format
         category="security",
         description="HTTP security headers validation",
+        # Checkbox config
+        skip_param_name="skip_headers",
     ),
     "rbl": AnalyzerMetadata(
         title="RBL Blacklist Check",
@@ -112,6 +138,10 @@ ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
         custom_renderer="rbl",  # Has clickable IPs
         category="security",
         description="IP blacklist reputation check",
+        # Checkbox config
+        checkbox_default=False,  # Disabled by default (slow)
+        skip_param_name="do_rbl_check",
+        skip_param_inverted=True,  # Inverted: checked=enable
     ),
     "seo": AnalyzerMetadata(
         title="SEO Files",
@@ -120,6 +150,8 @@ ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
         custom_renderer="seo",  # Has clickable file URLs
         category="seo",
         description="robots.txt, sitemap.xml, llms.txt detection",
+        # Checkbox config
+        skip_param_name="skip_seo",
     ),
     "favicon": AnalyzerMetadata(
         title="Favicon Detection",
@@ -128,6 +160,8 @@ ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
         custom_renderer="favicon",  # Has clickable favicon URLs
         category="seo",
         description="Favicon file detection and sizes",
+        # Checkbox config
+        skip_param_name="skip_favicon",
     ),
     "site_verification": AnalyzerMetadata(
         title="Site Verification",
@@ -136,6 +170,8 @@ ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
         custom_renderer=None,  # Can use auto-display
         category="seo",
         description="Google, Facebook, Pinterest verification codes",
+        # Checkbox config
+        skip_param_name="skip_site_verification",
     ),
     "cdn": AnalyzerMetadata(
         title="CDN Detection",
@@ -144,6 +180,8 @@ ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
         custom_renderer=None,  # Can use auto-display
         category="advanced",
         description="Content Delivery Network detection",
+        # No checkbox in GUI - always runs
+        has_checkbox=False,
     ),
 }
 
