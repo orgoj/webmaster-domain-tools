@@ -920,41 +920,39 @@ class DomainAnalyzerApp:
 
         self._add_errors_and_warnings(content, result)
 
-        # Redirect chains
-        for i, chain in enumerate(result.chains, 1):
-            content.append(
-                self._row(
-                    [
-                        self._text(
-                            f"Chain {i}: ",
-                            size=self.theme.text_label,
-                            weight="bold",
-                            color=self.theme.text_primary,
-                        ),
-                        self._create_clickable_url(chain.start_url),
-                    ],
-                    spacing=5,
+        # Redirect chains - format: URL (CODE) → URL (CODE) → URL (CODE)
+        for chain in result.chains:
+            if not chain.responses:
+                continue
+
+            # Build chain components
+            chain_parts = []
+            last_response = chain.responses[-1]
+
+            # Determine overall status color
+            if last_response.status_code == 200:
+                status_color = self.theme.success_color
+            else:
+                status_color = self.theme.warning_color
+
+            # Build each part: URL (CODE)
+            for resp in chain.responses:
+                url_button = self._create_clickable_url(resp.url)
+                code_text = self._text(
+                    f" ({resp.status_code})",
+                    size=self.theme.text_body,
+                    color=status_color,
                 )
-            )
-            for response in chain.responses:
-                status_color = (
-                    self.theme.success_color
-                    if response.status_code == 200
-                    else self.theme.warning_color
-                )
-                content.append(
-                    self._row(
-                        [
-                            self._text(
-                                f"  → {response.status_code} ",
-                                size=self.theme.text_body,
-                                color=status_color,
-                            ),
-                            self._create_clickable_url(response.url),
-                        ],
-                        spacing=0,
-                    )
-                )
+                chain_parts.append(url_button)
+                chain_parts.append(code_text)
+
+                # Add arrow between responses (but not after last one)
+                if resp != chain.responses[-1]:
+                    arrow = self._text(" → ", size=self.theme.text_body)
+                    chain_parts.append(arrow)
+
+            # Create single row with all parts
+            content.append(self._row(chain_parts, spacing=0))
 
         return self._create_expandable_panel(
             "HTTP/HTTPS Analysis", ft.Icons.HTTP, content, len(result.errors), len(result.warnings)
