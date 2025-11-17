@@ -625,8 +625,9 @@ class DomainAnalyzerApp:
                     ft.Icon(
                         ft.Icons.ERROR, color=self.theme.error_color, size=self.theme.icon_small
                     ),
-                    ft.Text(message, color=self.theme.error_color),
-                ]
+                    ft.Text(message, color=self.theme.error_color, text_align=ft.TextAlign.LEFT),
+                ],
+                alignment=ft.MainAxisAlignment.START,
             ),
             bgcolor=self.theme.error_bg,
             border_radius=self.theme.border_radius_small,
@@ -648,8 +649,9 @@ class DomainAnalyzerApp:
                     ft.Icon(
                         ft.Icons.WARNING, color=self.theme.warning_color, size=self.theme.icon_small
                     ),
-                    ft.Text(message, color=self.theme.warning_color),
-                ]
+                    ft.Text(message, color=self.theme.warning_color, text_align=ft.TextAlign.LEFT),
+                ],
+                alignment=ft.MainAxisAlignment.START,
             ),
             bgcolor=self.theme.warning_bg,
             border_radius=self.theme.border_radius_small,
@@ -670,6 +672,100 @@ class DomainAnalyzerApp:
         if hasattr(result, "warnings") and result.warnings:
             for warning in result.warnings:
                 content.append(self._create_warning_container(warning))
+
+    def _create_clickable_url(self, url: str, display_text: str | None = None) -> ft.TextButton:
+        """Create a clickable URL link.
+
+        Args:
+            url: URL to open
+            display_text: Optional display text (defaults to url)
+
+        Returns:
+            Clickable TextButton
+        """
+        return ft.TextButton(
+            text=display_text or url,
+            url=url,
+            style=ft.ButtonStyle(
+                color=ft.Colors.BLUE,
+                padding=0,
+            ),
+        )
+
+    def _create_clickable_ip(self, ip: str) -> ft.TextButton:
+        """Create a clickable IP address link to IP info service.
+
+        Args:
+            ip: IP address
+
+        Returns:
+            Clickable TextButton linking to IP lookup service
+        """
+        return ft.TextButton(
+            text=ip,
+            url=f"https://ipinfo.io/{ip}",
+            style=ft.ButtonStyle(
+                color=ft.Colors.BLUE,
+                padding=0,
+            ),
+            tooltip=f"Lookup {ip} on ipinfo.io",
+        )
+
+    def _create_clickable_whois(self, domain: str) -> ft.TextButton:
+        """Create a clickable WHOIS lookup link.
+
+        Args:
+            domain: Domain name
+
+        Returns:
+            Clickable TextButton linking to WHOIS service
+        """
+        return ft.TextButton(
+            text="View full WHOIS",
+            url=f"https://www.whois.com/whois/{domain}",
+            icon=ft.Icons.OPEN_IN_NEW,
+            style=ft.ButtonStyle(
+                color=ft.Colors.BLUE,
+                padding=0,
+            ),
+            tooltip=f"Open WHOIS lookup for {domain}",
+        )
+
+    def _create_ssl_labs_link(self, domain: str) -> ft.TextButton:
+        """Create a clickable SSL Labs link.
+
+        Args:
+            domain: Domain name
+
+        Returns:
+            Clickable TextButton linking to SSL Labs
+        """
+        return ft.TextButton(
+            text="Check on SSL Labs",
+            url=f"https://www.ssllabs.com/ssltest/analyze.html?d={domain}",
+            icon=ft.Icons.OPEN_IN_NEW,
+            style=ft.ButtonStyle(
+                color=ft.Colors.BLUE,
+                padding=0,
+            ),
+            tooltip=f"Analyze {domain} on SSL Labs",
+        )
+
+    def _is_ip_address(self, value: str) -> bool:
+        """Check if a string is an IP address (IPv4 or IPv6).
+
+        Args:
+            value: String to check
+
+        Returns:
+            True if value is an IP address
+        """
+        import ipaddress
+        try:
+            ipaddress.ip_address(value)
+            return True
+        except ValueError:
+            return False
 
     def _create_expandable_panel(
         self,
@@ -712,13 +808,13 @@ class DomainAnalyzerApp:
         self._add_errors_and_warnings(content, result)
 
         if result.registrar:
-            content.append(ft.Text(f"Registrar: {result.registrar}"))
+            content.append(ft.Text(f"Registrar: {result.registrar}", text_align=ft.TextAlign.LEFT))
         if result.creation_date:
-            content.append(ft.Text(f"Created: {result.creation_date}"))
+            content.append(ft.Text(f"Created: {result.creation_date}", text_align=ft.TextAlign.LEFT))
         if result.expiration_date:
-            content.append(ft.Text(f"Expires: {result.expiration_date}"))
+            content.append(ft.Text(f"Expires: {result.expiration_date}", text_align=ft.TextAlign.LEFT))
         if result.updated_date:
-            content.append(ft.Text(f"Updated: {result.updated_date}"))
+            content.append(ft.Text(f"Updated: {result.updated_date}", text_align=ft.TextAlign.LEFT))
 
         # Owner/Registrant information
         if result.registrant_name or result.registrant_organization or result.registrant_email:
@@ -729,7 +825,7 @@ class DomainAnalyzerApp:
                 owner_parts.append(result.registrant_name)
             if result.registrant_email:
                 owner_parts.append(result.registrant_email)
-            content.append(ft.Text(f"Owner: {' / '.join(owner_parts)}"))
+            content.append(ft.Text(f"Owner: {' / '.join(owner_parts)}", text_align=ft.TextAlign.LEFT))
 
         # Admin contact information
         if result.admin_name or result.admin_email or result.admin_contact:
@@ -740,7 +836,11 @@ class DomainAnalyzerApp:
                 admin_parts.append(result.admin_name)
             if result.admin_email:
                 admin_parts.append(result.admin_email)
-            content.append(ft.Text(f"Admin: {' / '.join(admin_parts)}"))
+            content.append(ft.Text(f"Admin: {' / '.join(admin_parts)}", text_align=ft.TextAlign.LEFT))
+
+        # Add clickable WHOIS lookup link
+        content.append(ft.Divider())
+        content.append(self._create_clickable_whois(result.domain))
 
         return self._create_expandable_panel(
             "WHOIS Information", ft.Icons.INFO, content, len(result.errors), len(result.warnings)
@@ -762,10 +862,29 @@ class DomainAnalyzerApp:
                         size=self.theme.text_label,
                         weight="bold",
                         color=self.theme.text_primary,
+                        text_align=ft.TextAlign.LEFT,
                     )
                 )
                 for record in records:
-                    content.append(ft.Text(f"  • {record.value}", size=self.theme.text_body))
+                    # Make IPs clickable
+                    if self._is_ip_address(record.value):
+                        content.append(
+                            ft.Row(
+                                [
+                                    ft.Text("  • ", size=self.theme.text_body),
+                                    self._create_clickable_ip(record.value),
+                                ],
+                                spacing=0,
+                            )
+                        )
+                    else:
+                        content.append(
+                            ft.Text(
+                                f"  • {record.value}",
+                                size=self.theme.text_body,
+                                text_align=ft.TextAlign.LEFT,
+                            )
+                        )
 
         return self._create_expandable_panel(
             "DNS Analysis", ft.Icons.DNS, content, len(result.errors), len(result.warnings)
@@ -780,11 +899,17 @@ class DomainAnalyzerApp:
         # Redirect chains
         for i, chain in enumerate(result.chains, 1):
             content.append(
-                ft.Text(
-                    f"Chain {i}: {chain.start_url}",
-                    size=self.theme.text_label,
-                    weight="bold",
-                    color=self.theme.text_primary,
+                ft.Row(
+                    [
+                        ft.Text(
+                            f"Chain {i}: ",
+                            size=self.theme.text_label,
+                            weight="bold",
+                            color=self.theme.text_primary,
+                        ),
+                        self._create_clickable_url(chain.start_url),
+                    ],
+                    spacing=5,
                 )
             )
             for response in chain.responses:
@@ -794,10 +919,16 @@ class DomainAnalyzerApp:
                     else self.theme.warning_color
                 )
                 content.append(
-                    ft.Text(
-                        f"  → {response.status_code} {response.url}",
-                        size=self.theme.text_body,
-                        color=status_color,
+                    ft.Row(
+                        [
+                            ft.Text(
+                                f"  → {response.status_code} ",
+                                size=self.theme.text_body,
+                                color=status_color,
+                            ),
+                            self._create_clickable_url(response.url),
+                        ],
+                        spacing=0,
                     )
                 )
 
@@ -819,16 +950,41 @@ class DomainAnalyzerApp:
                         size=self.theme.text_label,
                         weight="bold",
                         color=self.theme.text_primary,
+                        text_align=ft.TextAlign.LEFT,
                     )
                 )
-                content.append(ft.Text(f"  Issuer: {cert.issuer}", size=self.theme.text_body))
-                content.append(ft.Text(f"  Subject: {cert.subject}", size=self.theme.text_body))
                 content.append(
-                    ft.Text(f"  Valid from: {cert.not_before}", size=self.theme.text_body)
+                    ft.Text(
+                        f"  Issuer: {cert.issuer}",
+                        size=self.theme.text_body,
+                        text_align=ft.TextAlign.LEFT,
+                    )
                 )
                 content.append(
-                    ft.Text(f"  Valid until: {cert.not_after}", size=self.theme.text_body)
+                    ft.Text(
+                        f"  Subject: {cert.subject}",
+                        size=self.theme.text_body,
+                        text_align=ft.TextAlign.LEFT,
+                    )
                 )
+                content.append(
+                    ft.Text(
+                        f"  Valid from: {cert.not_before}",
+                        size=self.theme.text_body,
+                        text_align=ft.TextAlign.LEFT,
+                    )
+                )
+                content.append(
+                    ft.Text(
+                        f"  Valid until: {cert.not_after}",
+                        size=self.theme.text_body,
+                        text_align=ft.TextAlign.LEFT,
+                    )
+                )
+
+            # Add SSL Labs check link
+            content.append(ft.Divider())
+            content.append(self._create_ssl_labs_link(result.domain))
 
         return self._create_expandable_panel(
             "SSL/TLS Analysis", ft.Icons.SECURITY, content, len(result.errors), len(result.warnings)
@@ -848,9 +1004,16 @@ class DomainAnalyzerApp:
                     size=self.theme.text_label,
                     weight="bold",
                     color=self.theme.text_primary,
+                    text_align=ft.TextAlign.LEFT,
                 )
             )
-            content.append(ft.Text(f"  {result.spf.record}", size=self.theme.text_body))
+            content.append(
+                ft.Text(
+                    f"  {result.spf.record}",
+                    size=self.theme.text_body,
+                    text_align=ft.TextAlign.LEFT,
+                )
+            )
 
         # DMARC
         if result.dmarc:
@@ -860,9 +1023,16 @@ class DomainAnalyzerApp:
                     size=self.theme.text_label,
                     weight="bold",
                     color=self.theme.text_primary,
+                    text_align=ft.TextAlign.LEFT,
                 )
             )
-            content.append(ft.Text(f"  {result.dmarc.record}", size=self.theme.text_body))
+            content.append(
+                ft.Text(
+                    f"  {result.dmarc.record}",
+                    size=self.theme.text_body,
+                    text_align=ft.TextAlign.LEFT,
+                )
+            )
 
         # Advanced email (BIMI, MTA-STS, TLS-RPT)
         if advanced_result:
@@ -873,10 +1043,15 @@ class DomainAnalyzerApp:
                         size=self.theme.text_label,
                         weight="bold",
                         color=self.theme.text_primary,
+                        text_align=ft.TextAlign.LEFT,
                     )
                 )
                 content.append(
-                    ft.Text(f"  {advanced_result.bimi.record_value}", size=self.theme.text_body)
+                    ft.Text(
+                        f"  {advanced_result.bimi.record_value}",
+                        size=self.theme.text_body,
+                        text_align=ft.TextAlign.LEFT,
+                    )
                 )
 
             if advanced_result.mta_sts:
@@ -886,11 +1061,14 @@ class DomainAnalyzerApp:
                         size=self.theme.text_label,
                         weight="bold",
                         color=self.theme.text_primary,
+                        text_align=ft.TextAlign.LEFT,
                     )
                 )
                 content.append(
                     ft.Text(
-                        f"  Mode: {advanced_result.mta_sts.policy_mode}", size=self.theme.text_body
+                        f"  Mode: {advanced_result.mta_sts.policy_mode}",
+                        size=self.theme.text_body,
+                        text_align=ft.TextAlign.LEFT,
                     )
                 )
 
@@ -915,11 +1093,32 @@ class DomainAnalyzerApp:
 
         # Headers (dict of SecurityHeaderCheck objects)
         for header_name, header_check in result.headers.items():
-            content.append(ft.Text(f"{header_name}:", size=self.theme.text_label, weight="bold"))
+            content.append(
+                ft.Text(
+                    f"{header_name}:",
+                    size=self.theme.text_label,
+                    weight="bold",
+                    text_align=ft.TextAlign.LEFT,
+                )
+            )
             if header_check.present:
-                content.append(ft.Text("  ✓ Present", size=self.theme.text_body, color="green"))
+                content.append(
+                    ft.Text(
+                        "  ✓ Present",
+                        size=self.theme.text_body,
+                        color="green",
+                        text_align=ft.TextAlign.LEFT,
+                    )
+                )
             else:
-                content.append(ft.Text("  ✗ Missing", size=self.theme.text_body, color="red"))
+                content.append(
+                    ft.Text(
+                        "  ✗ Missing",
+                        size=self.theme.text_body,
+                        color="red",
+                        text_align=ft.TextAlign.LEFT,
+                    )
+                )
 
         return self._create_expandable_panel(
             "Security Headers", ft.Icons.SHIELD, content, len(result.errors), len(result.warnings)
@@ -935,16 +1134,26 @@ class DomainAnalyzerApp:
         for check in result.checks:
             if check.listed:
                 content.append(
-                    ft.Text(
-                        f"IP: {check.ip}",
-                        size=self.theme.text_label,
-                        weight="bold",
-                        color=self.theme.error_color,
+                    ft.Row(
+                        [
+                            ft.Text(
+                                "IP: ",
+                                size=self.theme.text_label,
+                                weight="bold",
+                                color=self.theme.error_color,
+                            ),
+                            self._create_clickable_ip(check.ip),
+                        ],
+                        spacing=0,
                     )
                 )
                 for blacklist in check.blacklists:
                     content.append(
-                        ft.Text(f"  • Listed on: {blacklist}", size=self.theme.text_body)
+                        ft.Text(
+                            f"  • Listed on: {blacklist}",
+                            size=self.theme.text_body,
+                            text_align=ft.TextAlign.LEFT,
+                        )
                     )
 
         if result.total_listed == 0:
@@ -987,7 +1196,8 @@ class DomainAnalyzerApp:
                                 color=self.theme.success_color,
                                 size=self.theme.icon_small,
                             ),
-                            ft.Text("robots.txt found", color=self.theme.success_color),
+                            ft.Text("robots.txt found: ", color=self.theme.success_color),
+                            self._create_clickable_url(result.robots.url, "View"),
                         ]
                     ),
                     bgcolor=self.theme.success_bg,
@@ -999,18 +1209,33 @@ class DomainAnalyzerApp:
         if result.sitemaps:
             content.append(
                 ft.Container(
-                    content=ft.Row(
+                    content=ft.Column(
                         [
-                            ft.Icon(
-                                ft.Icons.CHECK_CIRCLE,
-                                color=self.theme.success_color,
-                                size=self.theme.icon_small,
+                            ft.Row(
+                                [
+                                    ft.Icon(
+                                        ft.Icons.CHECK_CIRCLE,
+                                        color=self.theme.success_color,
+                                        size=self.theme.icon_small,
+                                    ),
+                                    ft.Text(
+                                        f"{len(result.sitemaps)} sitemap(s) found:",
+                                        color=self.theme.success_color,
+                                    ),
+                                ]
                             ),
-                            ft.Text(
-                                f"{len(result.sitemaps)} sitemap(s) found",
-                                color=self.theme.success_color,
-                            ),
-                        ]
+                            *[
+                                ft.Row(
+                                    [
+                                        ft.Text("  • "),
+                                        self._create_clickable_url(sitemap.url),
+                                    ],
+                                    spacing=0,
+                                )
+                                for sitemap in result.sitemaps
+                            ],
+                        ],
+                        spacing=5,
                     ),
                     bgcolor=self.theme.success_bg,
                     border_radius=self.theme.border_radius_small,
@@ -1028,7 +1253,8 @@ class DomainAnalyzerApp:
                                 color=self.theme.success_color,
                                 size=self.theme.icon_small,
                             ),
-                            ft.Text("llms.txt found", color=self.theme.success_color),
+                            ft.Text("llms.txt found: ", color=self.theme.success_color),
+                            self._create_clickable_url(result.llms_txt.url, "View"),
                         ]
                     ),
                     bgcolor=self.theme.success_bg,
@@ -1055,16 +1281,26 @@ class DomainAnalyzerApp:
                     size=self.theme.text_label,
                     weight="bold",
                     color=self.theme.text_primary,
+                    text_align=ft.TextAlign.LEFT,
                 )
             )
             for favicon in result.favicons:
-                content.append(ft.Text(f"  • {favicon.url}", size=self.theme.text_body))
+                content.append(
+                    ft.Row(
+                        [
+                            ft.Text("  • ", size=self.theme.text_body),
+                            self._create_clickable_url(favicon.url),
+                        ],
+                        spacing=0,
+                    )
+                )
                 if favicon.sizes:
                     content.append(
                         ft.Text(
                             f"    Sizes: {favicon.sizes}",
                             size=self.theme.text_small,
                             color=self.theme.text_secondary,
+                            text_align=ft.TextAlign.LEFT,
                         )
                     )
 
@@ -1087,6 +1323,7 @@ class DomainAnalyzerApp:
                         size=self.theme.text_label,
                         weight="bold",
                         color=self.theme.text_primary,
+                        text_align=ft.TextAlign.LEFT,
                     )
                 )
                 for verification in service_result.detected_verification_ids:
@@ -1097,6 +1334,7 @@ class DomainAnalyzerApp:
                         ft.Text(
                             f"  • {verification.verification_id} ({methods_str})",
                             size=self.theme.text_body,
+                            text_align=ft.TextAlign.LEFT,
                         )
                     )
 
@@ -1122,27 +1360,55 @@ class DomainAnalyzerApp:
                     size=self.theme.text_label,
                     weight="bold",
                     color=self.theme.text_primary,
+                    text_align=ft.TextAlign.LEFT,
                 )
             )
-            content.append(ft.Text(f"  Provider: {result.cdn_provider}", size=self.theme.text_body))
+            content.append(
+                ft.Text(
+                    f"  Provider: {result.cdn_provider}",
+                    size=self.theme.text_body,
+                    text_align=ft.TextAlign.LEFT,
+                )
+            )
             if result.detection_method:
                 content.append(
                     ft.Text(
-                        f"  Detection method: {result.detection_method}", size=self.theme.text_body
+                        f"  Detection method: {result.detection_method}",
+                        size=self.theme.text_body,
+                        text_align=ft.TextAlign.LEFT,
                     )
                 )
             if result.confidence:
                 content.append(
-                    ft.Text(f"  Confidence: {result.confidence}", size=self.theme.text_body)
+                    ft.Text(
+                        f"  Confidence: {result.confidence}",
+                        size=self.theme.text_body,
+                        text_align=ft.TextAlign.LEFT,
+                    )
                 )
             if result.evidence:
-                content.append(ft.Text("  Evidence:", size=self.theme.text_body))
+                content.append(
+                    ft.Text(
+                        "  Evidence:",
+                        size=self.theme.text_body,
+                        text_align=ft.TextAlign.LEFT,
+                    )
+                )
                 for evidence in result.evidence:
-                    content.append(ft.Text(f"    • {evidence}", size=self.theme.text_body))
+                    content.append(
+                        ft.Text(
+                            f"    • {evidence}",
+                            size=self.theme.text_body,
+                            text_align=ft.TextAlign.LEFT,
+                        )
+                    )
         else:
             content.append(
                 ft.Text(
-                    "No CDN detected", size=self.theme.text_body, color=self.theme.text_secondary
+                    "No CDN detected",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                    text_align=ft.TextAlign.LEFT,
                 )
             )
 
