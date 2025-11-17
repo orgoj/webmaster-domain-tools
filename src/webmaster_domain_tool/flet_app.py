@@ -1,26 +1,20 @@
 """Flet multiplatform GUI application for webmaster-domain-tool."""
 
+import ipaddress
 import logging
 import re
+import sys
 import threading
 from dataclasses import dataclass
 from typing import Any
 
 import flet as ft
 
-from .analyzers.advanced_email_security import AdvancedEmailSecurityAnalyzer
-from .analyzers.cdn_detector import CDNDetector
-from .analyzers.dns_analyzer import DNSAnalyzer
-from .analyzers.email_security import EmailSecurityAnalyzer
-from .analyzers.favicon_analyzer import FaviconAnalyzer
-from .analyzers.http_analyzer import HTTPAnalyzer
-from .analyzers.rbl_checker import RBLChecker, extract_ips_from_dns_result
-from .analyzers.security_headers import SecurityHeadersAnalyzer
-from .analyzers.seo_files_analyzer import SEOFilesAnalyzer
-from .analyzers.site_verification_analyzer import ServiceConfig, SiteVerificationAnalyzer
-from .analyzers.ssl_analyzer import SSLAnalyzer
-from .analyzers.whois_analyzer import WhoisAnalyzer
 from .config import load_config
+from .core.analyzer import (
+    ANALYZER_REGISTRY,
+    run_domain_analysis,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +38,9 @@ class UITheme:
     error_bg: str = ft.Colors.RED_50
     warning_color: str = ft.Colors.ORANGE
     warning_bg: str = ft.Colors.ORANGE_50
+    # Specific warning orange shades (previously hardcoded as hex)
+    warning_orange: str = "#FFA500"  # Orange for warnings
+    warning_orange_bg: str = "#FFF3CD"  # Light orange/yellow background
 
     # Icon sizes
     icon_large: int = 40
@@ -73,6 +70,9 @@ class UITheme:
     border_radius_large: int = 10
     border_radius_small: int = 5
 
+    # Display limits
+    auto_display_max_items: int = 5  # Max items to show in auto-display lists/dicts
+
 
 class DomainAnalyzerApp:
     """Main Flet application for domain analysis."""
@@ -83,6 +83,9 @@ class DomainAnalyzerApp:
         self.page.title = "Webmaster Domain Tool"
         self.page.theme_mode = ft.ThemeMode.LIGHT
         self.page.scroll = ft.ScrollMode.AUTO
+
+        # Handle window close event to prevent Flutter embedder error
+        self.page.on_window_event = self._on_window_event
 
         # Initialize theme
         self.theme = UITheme()
@@ -112,19 +115,23 @@ class DomainAnalyzerApp:
         )
 
         self.progress_bar = ft.ProgressBar(visible=False)
-        self.status_text = ft.Text("", size=self.theme.text_label, color=self.theme.text_secondary)
+        self.status_text = ft.Text(
+            "",
+            size=self.theme.text_label,
+            color=self.theme.text_secondary,
+            text_align=ft.TextAlign.LEFT,
+        )
 
-        # Analysis options checkboxes
-        self.check_dns = ft.Checkbox(label="DNS Analysis", value=True)
-        self.check_http = ft.Checkbox(label="HTTP/HTTPS Analysis", value=True)
-        self.check_ssl = ft.Checkbox(label="SSL/TLS Analysis", value=True)
-        self.check_email = ft.Checkbox(label="Email Security (SPF/DKIM/DMARC)", value=True)
-        self.check_headers = ft.Checkbox(label="Security Headers", value=True)
-        self.check_whois = ft.Checkbox(label="WHOIS Info", value=True)
-        self.check_rbl = ft.Checkbox(label="RBL Blacklist Check", value=False)
-        self.check_seo = ft.Checkbox(label="SEO Files", value=True)
-        self.check_favicon = ft.Checkbox(label="Favicon Detection", value=True)
-        self.check_site_verification = ft.Checkbox(label="Site Verification", value=True)
+        # Analysis options checkboxes - generated dynamically from registry (DRY!)
+        # No more hardcoded checkboxes - uses ANALYZER_REGISTRY as single source of truth
+        self.analyzer_checkboxes: dict[str, ft.Checkbox] = {}
+        for analyzer_key, metadata in ANALYZER_REGISTRY.items():
+            if metadata.has_checkbox:
+                label = metadata.checkbox_label or metadata.title
+                self.analyzer_checkboxes[analyzer_key] = ft.Checkbox(
+                    label=label,
+                    value=metadata.checkbox_default,
+                )
 
         # Results container (aligned left, not centered)
         self.results_column = ft.Column(
@@ -135,6 +142,50 @@ class DomainAnalyzerApp:
 
         # Build UI
         self._build_ui()
+
+    def _create_section(
+        self,
+        title: str,
+        controls: list[ft.Control],
+        visible: bool = True,
+        spacing: int | None = None,
+    ) -> ft.Card:
+        """
+        Create a consistently styled section card with left alignment.
+
+        This is a centralized helper to ensure all sections have proper
+        left alignment and consistent styling (DRY principle).
+
+        Args:
+            title: Section heading text
+            controls: List of controls to display in the section
+            visible: Whether the section is initially visible
+            spacing: Spacing between controls (uses theme default if None)
+
+        Returns:
+            Styled Card with left-aligned content
+        """
+        return ft.Card(
+            content=ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            title,
+                            size=self.theme.text_heading,
+                            weight=ft.FontWeight.BOLD,
+                            text_align=ft.TextAlign.LEFT,
+                        ),
+                        *controls,
+                    ],
+                    spacing=spacing or self.theme.spacing_small,
+                    horizontal_alignment=ft.CrossAxisAlignment.START,
+                ),
+                padding=self.theme.padding_large,
+                alignment=ft.alignment.top_left,  # ← KEY FIX: Container alignment
+            ),
+            elevation=2,
+            visible=visible,
+        )
 
     def _build_ui(self) -> None:
         """Build the user interface."""
@@ -170,78 +221,39 @@ class DomainAnalyzerApp:
             padding=ft.padding.only(bottom=self.theme.padding_large),
         )
 
-        # Input section
-        input_section = ft.Card(
-            content=ft.Container(
-                content=ft.Column(
+        # Input section - using centralized helper
+        input_section = self._create_section(
+            title="Enter Domain",
+            controls=[
+                ft.Row(
                     [
-                        ft.Text(
-                            "Enter Domain", size=self.theme.text_heading, weight=ft.FontWeight.BOLD
-                        ),
-                        ft.Row(
-                            [
-                                self.domain_input,
-                                self.analyze_button,
-                            ],
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        ),
-                        self.progress_bar,
-                        self.status_text,
+                        self.domain_input,
+                        self.analyze_button,
                     ],
-                    spacing=self.theme.spacing_small,
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
-                padding=self.theme.padding_large,
-            ),
-            elevation=2,
+                self.progress_bar,
+                self.status_text,
+            ],
         )
 
-        # Options section
-        options_section = ft.Card(
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Text(
-                            "Analysis Options",
-                            size=self.theme.text_heading,
-                            weight=ft.FontWeight.BOLD,
-                        ),
-                        ft.ResponsiveRow(
-                            [
-                                ft.Container(self.check_dns, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_http, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_ssl, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_email, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_headers, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_whois, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_rbl, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_seo, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_favicon, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(
-                                    self.check_site_verification, col={"sm": 6, "md": 4, "xl": 3}
-                                ),
-                            ],
-                        ),
-                    ],
-                    spacing=self.theme.spacing_medium,
-                ),
-                padding=self.theme.padding_large,
-            ),
-            elevation=2,
+        # Options section - using centralized helper with dynamic checkboxes (DRY!)
+        # Build checkbox grid dynamically from registry
+        checkbox_containers = [
+            ft.Container(checkbox, col={"sm": 6, "md": 4, "xl": 3})
+            for checkbox in self.analyzer_checkboxes.values()
+        ]
+
+        options_section = self._create_section(
+            title="Analysis Options",
+            controls=[ft.ResponsiveRow(checkbox_containers)],
+            spacing=self.theme.spacing_medium,
         )
 
-        # Results section
-        results_section = ft.Card(
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Text("Results", size=self.theme.text_heading, weight=ft.FontWeight.BOLD),
-                        self.results_column,
-                    ],
-                    spacing=self.theme.spacing_small,
-                ),
-                padding=self.theme.padding_large,
-            ),
-            elevation=2,
+        # Results section - using centralized helper
+        results_section = self._create_section(
+            title="Results",
+            controls=[self.results_column],
             visible=False,
         )
 
@@ -279,6 +291,33 @@ class DomainAnalyzerApp:
         domain = domain.replace("http://", "").replace("https://", "").rstrip("/")
         return domain
 
+    def _build_skip_params(self) -> dict[str, bool]:
+        """
+        Build skip parameters dynamically from checkbox states using registry.
+
+        Returns dict of skip parameter names to values, ready to pass to run_domain_analysis().
+        No more hardcoded mapping - uses ANALYZER_REGISTRY as single source of truth!
+        """
+        skip_params = {}
+
+        for analyzer_key, metadata in ANALYZER_REGISTRY.items():
+            if not metadata.has_checkbox or not metadata.skip_param_name:
+                continue
+
+            checkbox = self.analyzer_checkboxes.get(analyzer_key)
+            if not checkbox:
+                continue
+
+            # Build parameter value based on checkbox state
+            if metadata.skip_param_inverted:
+                # Inverted params like "do_rbl_check": checked=True means enable
+                skip_params[metadata.skip_param_name] = checkbox.value
+            else:
+                # Normal skip params: checked=True means enable, so skip=False
+                skip_params[metadata.skip_param_name] = not checkbox.value
+
+        return skip_params
+
     def run_analysis(self) -> None:
         """Run domain analysis."""
         domain = self.domain_input.value
@@ -308,188 +347,35 @@ class DomainAnalyzerApp:
     def _run_analysis_sync(self, domain: str) -> None:
         """Run analysis synchronously in background thread."""
         try:
-            results: dict[str, Any] = {}
+            # Update status for user
+            self.update_status(f"Analyzing {domain}...")
 
-            # WHOIS Analysis
-            if self.check_whois.value:
-                self.update_status("Checking WHOIS information...")
-                whois_analyzer = WhoisAnalyzer(
-                    expiry_warning_days=self.config.whois.expiry_warning_days,
-                    expiry_critical_days=self.config.whois.expiry_critical_days,
-                )
-                results["whois"] = whois_analyzer.analyze(domain)
+            # Copy config to avoid side effects
+            config = self.config.model_copy(deep=True)
 
-            # DNS Analysis
-            if self.check_dns.value:
-                self.update_status("Analyzing DNS records...")
-                dns_analyzer = DNSAnalyzer(
-                    nameservers=self.config.dns.nameservers,
-                    check_dnssec=self.config.dns.check_dnssec,
-                    warn_www_not_cname=self.config.dns.warn_www_not_cname,
-                )
-                results["dns"] = dns_analyzer.analyze(domain)
+            # Build skip parameters dynamically from checkboxes (DRY!)
+            # No more hardcoded mapping - uses ANALYZER_REGISTRY
+            skip_params = self._build_skip_params()
 
-            # HTTP/HTTPS Analysis
-            if self.check_http.value:
-                self.update_status("Analyzing HTTP/HTTPS...")
-                http_analyzer = HTTPAnalyzer(
-                    timeout=self.config.http.timeout,
-                    max_redirects=self.config.http.max_redirects,
-                )
-                results["http"] = http_analyzer.analyze(domain)
+            # Call CORE analysis (same as CLI!) with dynamic skip parameters
+            results = run_domain_analysis(
+                domain,
+                config,
+                progress_callback=self.update_status,
+                **skip_params,  # Dynamic parameters from registry!
+            )
 
-            # SSL/TLS Analysis
-            if self.check_ssl.value:
-                self.update_status("Analyzing SSL/TLS certificates...")
-                ssl_analyzer = SSLAnalyzer(
-                    timeout=self.config.http.timeout,
-                    cert_expiry_warning_days=self.config.ssl.cert_expiry_warning_days,
-                    cert_expiry_critical_days=self.config.ssl.cert_expiry_critical_days,
-                )
-                results["ssl"] = ssl_analyzer.analyze(domain)
+            # Convert to dict for display_results - build dynamically from registry (DRY!)
+            results_dict = {}
+            for metadata in ANALYZER_REGISTRY.values():
+                field_name = metadata.result_field
+                results_dict[field_name] = getattr(results, field_name, None)
 
-            # Email Security
-            if self.check_email.value:
-                self.update_status("Checking email security (SPF/DKIM/DMARC)...")
-                email_analyzer = EmailSecurityAnalyzer(
-                    dkim_selectors=self.config.email.dkim_selectors
-                )
-                results["email"] = email_analyzer.analyze(domain)
+            # Advanced email is special case (not in registry as standalone)
+            results_dict["advanced_email"] = results.advanced_email
 
-                # Advanced Email Security
-                if not self.config.analysis.skip_advanced_email:
-                    advanced_email_analyzer = AdvancedEmailSecurityAnalyzer(
-                        nameservers=self.config.dns.nameservers,
-                        check_bimi=self.config.advanced_email.check_bimi,
-                        check_mta_sts=self.config.advanced_email.check_mta_sts,
-                        check_tls_rpt=self.config.advanced_email.check_tls_rpt,
-                        timeout=self.config.http.timeout,
-                    )
-                    results["advanced_email"] = advanced_email_analyzer.analyze(domain)
-
-            # Security Headers
-            if self.check_headers.value and results.get("http"):
-                self.update_status("Checking security headers...")
-                http_result = results["http"]
-                if http_result.chains and http_result.chains[0].responses:
-                    final_response = http_result.chains[0].responses[-1]
-                    if final_response.status_code == 200:
-                        enabled_checks = {
-                            "check_strict_transport_security": self.config.security_headers.check_strict_transport_security,
-                            "check_content_security_policy": self.config.security_headers.check_content_security_policy,
-                            "check_x_frame_options": self.config.security_headers.check_x_frame_options,
-                            "check_x_content_type_options": self.config.security_headers.check_x_content_type_options,
-                            "check_referrer_policy": self.config.security_headers.check_referrer_policy,
-                            "check_permissions_policy": self.config.security_headers.check_permissions_policy,
-                            "check_x_xss_protection": self.config.security_headers.check_x_xss_protection,
-                            "check_content_type": self.config.security_headers.check_content_type,
-                        }
-                        headers_analyzer = SecurityHeadersAnalyzer(enabled_checks=enabled_checks)
-                        results["headers"] = headers_analyzer.analyze(
-                            final_response.url, final_response.headers
-                        )
-
-            # RBL Check
-            if self.check_rbl.value and results.get("dns"):
-                self.update_status("Checking RBL blacklists...")
-                dns_result = results["dns"]
-                ips = extract_ips_from_dns_result(dns_result)
-                if ips:
-                    rbl_checker = RBLChecker(
-                        rbl_servers=self.config.email.rbl_servers,
-                        timeout=self.config.dns.timeout,
-                    )
-                    results["rbl"] = rbl_checker.check_ips(domain, ips)
-
-            # SEO Files
-            if self.check_seo.value and results.get("http"):
-                self.update_status("Checking SEO files...")
-                http_result = results["http"]
-                if http_result.chains and http_result.chains[0].responses:
-                    final_response = http_result.chains[0].responses[-1]
-                    if final_response.status_code == 200:
-                        seo_analyzer = SEOFilesAnalyzer(
-                            timeout=self.config.http.timeout,
-                            check_robots=self.config.seo.check_robots,
-                            check_llms_txt=self.config.seo.check_llms_txt,
-                            check_sitemap=self.config.seo.check_sitemap,
-                        )
-                        results["seo"] = seo_analyzer.analyze(final_response.url)
-
-            # Favicon Detection
-            if self.check_favicon.value and results.get("http"):
-                self.update_status("Detecting favicon...")
-                http_result = results["http"]
-                if http_result.chains and http_result.chains[0].responses:
-                    final_response = http_result.chains[0].responses[-1]
-                    if final_response.status_code == 200:
-                        favicon_analyzer = FaviconAnalyzer(
-                            timeout=self.config.http.timeout,
-                            check_html=self.config.favicon.check_html,
-                            check_defaults=self.config.favicon.check_defaults,
-                        )
-                        results["favicon"] = favicon_analyzer.analyze(final_response.url)
-
-            # Site Verification
-            if self.check_site_verification.value:
-                self.update_status("Checking site verification...")
-                services = []
-                for service_cfg in self.config.site_verification.services:
-                    services.append(
-                        ServiceConfig(
-                            name=service_cfg.name,
-                            ids=list(service_cfg.ids),
-                            dns_pattern=service_cfg.dns_pattern,
-                            file_pattern=service_cfg.file_pattern,
-                            meta_name=service_cfg.meta_name,
-                            auto_detect=service_cfg.auto_detect,
-                        )
-                    )
-
-                if services:
-                    site_verification_analyzer = SiteVerificationAnalyzer(
-                        services=services,
-                        timeout=self.config.http.timeout,
-                        nameservers=self.config.dns.nameservers,
-                    )
-
-                    verification_url = None
-                    if results.get("http"):
-                        http_result = results["http"]
-                        if http_result.chains and http_result.chains[0].responses:
-                            final_response = http_result.chains[0].responses[-1]
-                            if final_response.status_code == 200:
-                                verification_url = final_response.url
-
-                    results["site_verification"] = site_verification_analyzer.analyze(
-                        domain, verification_url
-                    )
-
-            # CDN Detection
-            if results.get("http") and results.get("dns"):
-                self.update_status("Detecting CDN...")
-                cdn_detector = CDNDetector()
-                http_result = results["http"]
-                dns_result = results["dns"]
-
-                if http_result.chains and http_result.chains[0].responses:
-                    final_response = http_result.chains[0].responses[-1]
-                    if final_response.status_code == 200 and final_response.headers:
-                        header_result = cdn_detector.detect_from_headers(final_response.headers)
-                        header_result.domain = domain
-
-                        cname_result = cdn_detector.detect_from_cname([])
-                        cname_key = f"{domain}:CNAME"
-                        if cname_key in dns_result.records:
-                            cname_values = [r.value for r in dns_result.records[cname_key]]
-                            cname_result = cdn_detector.detect_from_cname(cname_values)
-
-                        results["cdn"] = cdn_detector.combine_results(
-                            domain, header_result, cname_result
-                        )
-
-            # Display results
-            self.display_results(domain, results)
+            # Display results (existing method handles this)
+            self.display_results(domain, results_dict)
 
         except Exception as e:
             logger.error(f"Analysis error: {e}", exc_info=True)
@@ -504,6 +390,16 @@ class DomainAnalyzerApp:
         """Update status message."""
         self.status_text.value = message
         self.page.update()
+
+    def _on_window_event(self, e: ft.ControlEvent) -> None:
+        """Handle window events to prevent Flutter embedder error on close.
+
+        Using sys.exit(0) instead of window_destroy() to avoid Flutter
+        'FlutterEngineRemoveView' error when closing the window.
+        """
+        if e.data == "close":
+            # Clean exit without calling window_destroy() which causes Flutter error
+            sys.exit(0)
 
     def display_results(self, domain: str, results: dict[str, Any]) -> None:
         """Display analysis results."""
@@ -527,8 +423,8 @@ class DomainAnalyzerApp:
             status_text = "Analysis completed with errors"
         elif total_warnings > 0:
             status_icon = ft.Icons.WARNING
-            status_color = "#FFA500"  # Orange
-            status_bg = "#FFF3CD"  # Light orange/yellow background
+            status_color = self.theme.warning_orange
+            status_bg = self.theme.warning_orange_bg
             status_text = "Analysis completed with warnings"
         else:
             status_icon = ft.Icons.CHECK_CIRCLE
@@ -550,11 +446,13 @@ class DomainAnalyzerApp:
                                 f"{status_text}: {domain}",
                                 size=self.theme.text_subheading,
                                 weight="bold",
+                                text_align=ft.TextAlign.LEFT,
                             ),
                             ft.Text(
                                 f"Errors: {total_errors} | Warnings: {total_warnings}",
                                 size=self.theme.text_body,
                                 color=self.theme.text_secondary,
+                                text_align=ft.TextAlign.LEFT,
                             ),
                         ],
                         spacing=self.theme.spacing_tiny,
@@ -569,43 +467,42 @@ class DomainAnalyzerApp:
         )
         self.results_column.controls.append(summary_card)
 
-        # Individual results
-        if "whois" in results:
-            self.results_column.controls.append(self._create_whois_panel(results["whois"]))
+        # Individual results - iterate through analyzer registry (DRY)
+        # No hardcoded if statements! Uses ANALYZER_REGISTRY as single source of truth
+        for analyzer_key, metadata in ANALYZER_REGISTRY.items():
+            result_field = metadata.result_field
 
-        if "dns" in results:
-            self.results_column.controls.append(self._create_dns_panel(results["dns"]))
+            # Skip if analyzer not in results or result is None (disabled)
+            if result_field not in results or results[result_field] is None:
+                continue
 
-        if "http" in results:
-            self.results_column.controls.append(self._create_http_panel(results["http"]))
+            result = results[result_field]
 
-        if "ssl" in results:
-            self.results_column.controls.append(self._create_ssl_panel(results["ssl"]))
+            # Route to appropriate renderer based on custom_renderer metadata
+            if metadata.custom_renderer:
+                # Use custom renderer method
+                renderer_method_name = f"_create_{metadata.custom_renderer}_panel"
+                renderer_method = getattr(self, renderer_method_name, None)
 
-        if "email" in results:
-            self.results_column.controls.append(
-                self._create_email_panel(results["email"], results.get("advanced_email"))
-            )
+                if renderer_method:
+                    # Build arguments dynamically from additional_result_fields (DRY!)
+                    # No more hardcoded "if analyzer_key == 'email'" checks
+                    renderer_args = [result]
+                    if metadata.additional_result_fields:
+                        for additional_field in metadata.additional_result_fields:
+                            additional_result = results.get(additional_field)
+                            renderer_args.append(additional_result)
 
-        if "headers" in results:
-            self.results_column.controls.append(self._create_headers_panel(results["headers"]))
-
-        if "rbl" in results:
-            self.results_column.controls.append(self._create_rbl_panel(results["rbl"]))
-
-        if "seo" in results:
-            self.results_column.controls.append(self._create_seo_panel(results["seo"]))
-
-        if "favicon" in results:
-            self.results_column.controls.append(self._create_favicon_panel(results["favicon"]))
-
-        if "site_verification" in results:
-            self.results_column.controls.append(
-                self._create_site_verification_panel(results["site_verification"])
-            )
-
-        if "cdn" in results:
-            self.results_column.controls.append(self._create_cdn_panel(results["cdn"]))
+                    panel = renderer_method(*renderer_args)
+                    self.results_column.controls.append(panel)
+                else:
+                    logger.warning(
+                        f"Custom renderer {renderer_method_name} not found for {analyzer_key}"
+                    )
+            else:
+                # Use default auto-display renderer
+                panel = self._create_default_auto_display_panel(metadata, result)
+                self.results_column.controls.append(panel)
 
         self.results_card.visible = True
         self.page.update()
@@ -620,13 +517,13 @@ class DomainAnalyzerApp:
             Formatted Container widget with error styling
         """
         return ft.Container(
-            content=ft.Row(
+            content=self._row(
                 [
                     ft.Icon(
                         ft.Icons.ERROR, color=self.theme.error_color, size=self.theme.icon_small
                     ),
-                    ft.Text(message, color=self.theme.error_color),
-                ]
+                    self._text(message, color=self.theme.error_color),
+                ],
             ),
             bgcolor=self.theme.error_bg,
             border_radius=self.theme.border_radius_small,
@@ -643,13 +540,13 @@ class DomainAnalyzerApp:
             Formatted Container widget with warning styling
         """
         return ft.Container(
-            content=ft.Row(
+            content=self._row(
                 [
                     ft.Icon(
                         ft.Icons.WARNING, color=self.theme.warning_color, size=self.theme.icon_small
                     ),
-                    ft.Text(message, color=self.theme.warning_color),
-                ]
+                    self._text(message, color=self.theme.warning_color),
+                ],
             ),
             bgcolor=self.theme.warning_bg,
             border_radius=self.theme.border_radius_small,
@@ -671,6 +568,130 @@ class DomainAnalyzerApp:
             for warning in result.warnings:
                 content.append(self._create_warning_container(warning))
 
+    def _text(self, text: str, **kwargs) -> ft.Text:
+        """Create a left-aligned, selectable text widget with defaults.
+
+        Args:
+            text: Text content
+            **kwargs: Additional Text properties (can override defaults)
+
+        Returns:
+            Text widget with left alignment and text selection enabled
+        """
+        # Set defaults (can be overridden by kwargs)
+        if "text_align" not in kwargs:
+            kwargs["text_align"] = ft.TextAlign.LEFT
+        if "selectable" not in kwargs:
+            kwargs["selectable"] = True  # ← ENABLE TEXT SELECTION for copy/paste
+        return ft.Text(text, **kwargs)
+
+    def _row(self, controls: list[ft.Control], **kwargs) -> ft.Row:
+        """Create a left-aligned row widget with defaults.
+
+        Args:
+            controls: List of controls
+            **kwargs: Additional Row properties
+
+        Returns:
+            Row widget with left alignment
+        """
+        if "alignment" not in kwargs:
+            kwargs["alignment"] = ft.MainAxisAlignment.START
+        return ft.Row(controls, **kwargs)
+
+    def _create_clickable_url(self, url: str, display_text: str | None = None) -> ft.TextButton:
+        """Create a clickable URL link.
+
+        Args:
+            url: URL to open
+            display_text: Optional display text (defaults to url)
+
+        Returns:
+            Clickable TextButton
+        """
+        return ft.TextButton(
+            text=display_text or url,
+            url=url,
+            style=ft.ButtonStyle(
+                color=ft.Colors.BLUE,
+                padding=0,
+            ),
+        )
+
+    def _create_clickable_ip(self, ip: str) -> ft.TextButton:
+        """Create a clickable IP address link to IP info service.
+
+        Args:
+            ip: IP address
+
+        Returns:
+            Clickable TextButton linking to IP lookup service
+        """
+        return ft.TextButton(
+            text=ip,
+            url=f"https://ipinfo.io/{ip}",
+            style=ft.ButtonStyle(
+                color=ft.Colors.BLUE,
+                padding=0,
+            ),
+            tooltip=f"Lookup {ip} on ipinfo.io",
+        )
+
+    def _create_clickable_whois(self, domain: str) -> ft.TextButton:
+        """Create a clickable WHOIS lookup link.
+
+        Args:
+            domain: Domain name
+
+        Returns:
+            Clickable TextButton linking to WHOIS service
+        """
+        return ft.TextButton(
+            text="View full WHOIS",
+            url=f"https://www.whois.com/whois/{domain}",
+            icon=ft.Icons.OPEN_IN_NEW,
+            style=ft.ButtonStyle(
+                color=ft.Colors.BLUE,
+                padding=0,
+            ),
+            tooltip=f"Open WHOIS lookup for {domain}",
+        )
+
+    def _create_ssl_labs_link(self, domain: str) -> ft.TextButton:
+        """Create a clickable SSL Labs link.
+
+        Args:
+            domain: Domain name
+
+        Returns:
+            Clickable TextButton linking to SSL Labs
+        """
+        return ft.TextButton(
+            text="Check on SSL Labs",
+            url=f"https://www.ssllabs.com/ssltest/analyze.html?d={domain}",
+            icon=ft.Icons.OPEN_IN_NEW,
+            style=ft.ButtonStyle(
+                color=ft.Colors.BLUE,
+                padding=0,
+            ),
+            tooltip=f"Analyze {domain} on SSL Labs",
+        )
+
+    def _is_ip_address(self, value: str) -> bool:
+        """Check if a string is an IP address (IPv4 or IPv6).
+
+        Args:
+            value: String to check
+
+        Returns:
+            True if value is an IP address
+        """
+        try:
+            ipaddress.ip_address(value)
+            return True
+        except ValueError:
+            return False
+
     def _create_expandable_panel(
         self,
         title: str,
@@ -679,7 +700,7 @@ class DomainAnalyzerApp:
         error_count: int = 0,
         warning_count: int = 0,
     ) -> ft.ExpansionTile:
-        """Create an expandable panel for results."""
+        """Create an expandable panel with multi-line text selection support."""
         # Build title with error/warning counts
         title_parts = [title]
         if error_count > 0:
@@ -693,32 +714,72 @@ class DomainAnalyzerApp:
         if error_count > 0:
             title_color = self.theme.error_color
         elif warning_count > 0:
-            title_color = "#FFA500"  # Orange for warnings
+            title_color = self.theme.warning_orange
         else:
             title_color = self.theme.text_primary
 
-        return ft.ExpansionTile(
-            title=ft.Text(
-                full_title, size=self.theme.text_subheading, weight="bold", color=title_color
+        # Wrap content in SelectionArea to allow selecting across multiple lines
+        # This enables drag-to-select across all text/controls in the panel
+        selectable_content = ft.SelectionArea(
+            content=ft.Column(
+                controls=content,
+                spacing=self.theme.spacing_small,
+                horizontal_alignment=ft.CrossAxisAlignment.START,
+            )
+        )
+
+        # Wrap title + icon in Container with gray background (only header, not expanded content)
+        title_widget = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(icon, color=title_color, size=self.theme.icon_medium),
+                    ft.Text(
+                        full_title,
+                        size=self.theme.text_subheading,
+                        weight="bold",
+                        color=title_color,
+                    ),
+                ],
+                spacing=self.theme.spacing_small,
             ),
-            leading=ft.Icon(icon, color=title_color),
-            controls=content,
+            bgcolor=ft.Colors.GREY_200,
+            padding=self.theme.padding_small,
+            border_radius=self.theme.border_radius_small,
+        )
+
+        return ft.ExpansionTile(
+            title=title_widget,
+            controls=[selectable_content],  # Wrap in list since it's now a single SelectionArea
             initially_expanded=error_count > 0,  # Auto-expand if errors
+            # ← KEY FIX: ExpansionTile defaults to CENTER, must set to START!
+            expanded_cross_axis_alignment=ft.CrossAxisAlignment.START,
         )
 
     def _create_whois_panel(self, result: Any) -> ft.ExpansionTile:
         """Create WHOIS results panel."""
         content: list[ft.Control] = []
+
+        # Handle None result (WHOIS disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "WHOIS check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("WHOIS Information", ft.Icons.INFO, content, 0, 0)
+
         self._add_errors_and_warnings(content, result)
 
         if result.registrar:
-            content.append(ft.Text(f"Registrar: {result.registrar}"))
+            content.append(self._text(f"Registrar: {result.registrar}"))
         if result.creation_date:
-            content.append(ft.Text(f"Created: {result.creation_date}"))
+            content.append(self._text(f"Created: {result.creation_date}"))
         if result.expiration_date:
-            content.append(ft.Text(f"Expires: {result.expiration_date}"))
+            content.append(self._text(f"Expires: {result.expiration_date}"))
         if result.updated_date:
-            content.append(ft.Text(f"Updated: {result.updated_date}"))
+            content.append(self._text(f"Updated: {result.updated_date}"))
 
         # Owner/Registrant information
         if result.registrant_name or result.registrant_organization or result.registrant_email:
@@ -729,7 +790,7 @@ class DomainAnalyzerApp:
                 owner_parts.append(result.registrant_name)
             if result.registrant_email:
                 owner_parts.append(result.registrant_email)
-            content.append(ft.Text(f"Owner: {' / '.join(owner_parts)}"))
+            content.append(self._text(f"Owner: {' / '.join(owner_parts)}"))
 
         # Admin contact information
         if result.admin_name or result.admin_email or result.admin_contact:
@@ -740,7 +801,11 @@ class DomainAnalyzerApp:
                 admin_parts.append(result.admin_name)
             if result.admin_email:
                 admin_parts.append(result.admin_email)
-            content.append(ft.Text(f"Admin: {' / '.join(admin_parts)}"))
+            content.append(self._text(f"Admin: {' / '.join(admin_parts)}"))
+
+        # Add clickable WHOIS lookup link
+        content.append(ft.Divider())
+        content.append(self._create_clickable_whois(result.domain))
 
         return self._create_expandable_panel(
             "WHOIS Information", ft.Icons.INFO, content, len(result.errors), len(result.warnings)
@@ -750,6 +815,17 @@ class DomainAnalyzerApp:
         """Create DNS results panel."""
         content: list[ft.Control] = []
 
+        # Handle None result (DNS disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "DNS check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("DNS Analysis", ft.Icons.DNS, content, 0, 0)
+
         self._add_errors_and_warnings(content, result)
 
         # DNS records
@@ -757,7 +833,7 @@ class DomainAnalyzerApp:
             if records:
                 record_type = record_key.split(":")[-1]
                 content.append(
-                    ft.Text(
+                    self._text(
                         f"{record_type} Records:",
                         size=self.theme.text_label,
                         weight="bold",
@@ -765,7 +841,24 @@ class DomainAnalyzerApp:
                     )
                 )
                 for record in records:
-                    content.append(ft.Text(f"  • {record.value}", size=self.theme.text_body))
+                    # Make IPs clickable
+                    if self._is_ip_address(record.value):
+                        content.append(
+                            self._row(
+                                [
+                                    self._text("  • ", size=self.theme.text_body),
+                                    self._create_clickable_ip(record.value),
+                                ],
+                                spacing=0,
+                            )
+                        )
+                    else:
+                        content.append(
+                            self._text(
+                                f"  • {record.value}",
+                                size=self.theme.text_body,
+                            )
+                        )
 
         return self._create_expandable_panel(
             "DNS Analysis", ft.Icons.DNS, content, len(result.errors), len(result.warnings)
@@ -775,31 +868,52 @@ class DomainAnalyzerApp:
         """Create HTTP results panel."""
         content: list[ft.Control] = []
 
-        self._add_errors_and_warnings(content, result)
-
-        # Redirect chains
-        for i, chain in enumerate(result.chains, 1):
+        # Handle None result (HTTP disabled)
+        if result is None:
             content.append(
-                ft.Text(
-                    f"Chain {i}: {chain.start_url}",
-                    size=self.theme.text_label,
-                    weight="bold",
-                    color=self.theme.text_primary,
+                self._text(
+                    "HTTP check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
                 )
             )
-            for response in chain.responses:
-                status_color = (
-                    self.theme.success_color
-                    if response.status_code == 200
-                    else self.theme.warning_color
+            return self._create_expandable_panel("HTTP/HTTPS", ft.Icons.HTTP, content, 0, 0)
+
+        self._add_errors_and_warnings(content, result)
+
+        # Redirect chains - format: URL (CODE) → URL (CODE) → URL (CODE)
+        for chain in result.chains:
+            if not chain.responses:
+                continue
+
+            # Build chain components
+            chain_parts = []
+            last_response = chain.responses[-1]
+
+            # Determine overall status color
+            if last_response.status_code == 200:
+                status_color = self.theme.success_color
+            else:
+                status_color = self.theme.warning_color
+
+            # Build each part: URL (CODE)
+            for resp in chain.responses:
+                url_button = self._create_clickable_url(resp.url)
+                code_text = self._text(
+                    f" ({resp.status_code})",
+                    size=self.theme.text_body,
+                    color=status_color,
                 )
-                content.append(
-                    ft.Text(
-                        f"  → {response.status_code} {response.url}",
-                        size=self.theme.text_body,
-                        color=status_color,
-                    )
-                )
+                chain_parts.append(url_button)
+                chain_parts.append(code_text)
+
+                # Add arrow between responses (but not after last one)
+                if resp != chain.responses[-1]:
+                    arrow = self._text(" → ", size=self.theme.text_body)
+                    chain_parts.append(arrow)
+
+            # Create single row with all parts
+            content.append(self._row(chain_parts, spacing=0))
 
         return self._create_expandable_panel(
             "HTTP/HTTPS Analysis", ft.Icons.HTTP, content, len(result.errors), len(result.warnings)
@@ -809,26 +923,57 @@ class DomainAnalyzerApp:
         """Create SSL results panel."""
         content: list[ft.Control] = []
 
+        # Handle None result (SSL disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "SSL check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("SSL/TLS", ft.Icons.LOCK, content, 0, 0)
+
         self._add_errors_and_warnings(content, result)
 
         if result.certificates:
             for hostname, cert in result.certificates.items():
                 content.append(
-                    ft.Text(
+                    self._text(
                         f"Certificate for {hostname}:",
                         size=self.theme.text_label,
                         weight="bold",
                         color=self.theme.text_primary,
                     )
                 )
-                content.append(ft.Text(f"  Issuer: {cert.issuer}", size=self.theme.text_body))
-                content.append(ft.Text(f"  Subject: {cert.subject}", size=self.theme.text_body))
                 content.append(
-                    ft.Text(f"  Valid from: {cert.not_before}", size=self.theme.text_body)
+                    self._text(
+                        f"  Issuer: {cert.issuer}",
+                        size=self.theme.text_body,
+                    )
                 )
                 content.append(
-                    ft.Text(f"  Valid until: {cert.not_after}", size=self.theme.text_body)
+                    self._text(
+                        f"  Subject: {cert.subject}",
+                        size=self.theme.text_body,
+                    )
                 )
+                content.append(
+                    self._text(
+                        f"  Valid from: {cert.not_before}",
+                        size=self.theme.text_body,
+                    )
+                )
+                content.append(
+                    self._text(
+                        f"  Valid until: {cert.not_after}",
+                        size=self.theme.text_body,
+                    )
+                )
+
+            # Add SSL Labs check link
+            content.append(ft.Divider())
+            content.append(self._create_ssl_labs_link(result.domain))
 
         return self._create_expandable_panel(
             "SSL/TLS Analysis", ft.Icons.SECURITY, content, len(result.errors), len(result.warnings)
@@ -838,37 +983,58 @@ class DomainAnalyzerApp:
         """Create email security results panel."""
         content: list[ft.Control] = []
 
+        # Handle None result (email check disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "Email security check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("Email Security", ft.Icons.EMAIL, content, 0, 0)
+
         self._add_errors_and_warnings(content, result)
 
         # SPF
         if result.spf:
             content.append(
-                ft.Text(
+                self._text(
                     "SPF Record:",
                     size=self.theme.text_label,
                     weight="bold",
                     color=self.theme.text_primary,
                 )
             )
-            content.append(ft.Text(f"  {result.spf.record}", size=self.theme.text_body))
+            content.append(
+                self._text(
+                    f"  {result.spf.record}",
+                    size=self.theme.text_body,
+                )
+            )
 
         # DMARC
         if result.dmarc:
             content.append(
-                ft.Text(
+                self._text(
                     "DMARC Record:",
                     size=self.theme.text_label,
                     weight="bold",
                     color=self.theme.text_primary,
                 )
             )
-            content.append(ft.Text(f"  {result.dmarc.record}", size=self.theme.text_body))
+            content.append(
+                self._text(
+                    f"  {result.dmarc.record}",
+                    size=self.theme.text_body,
+                )
+            )
 
         # Advanced email (BIMI, MTA-STS, TLS-RPT)
         if advanced_result:
             if advanced_result.bimi:
                 content.append(
-                    ft.Text(
+                    self._text(
                         "BIMI Record:",
                         size=self.theme.text_label,
                         weight="bold",
@@ -876,12 +1042,15 @@ class DomainAnalyzerApp:
                     )
                 )
                 content.append(
-                    ft.Text(f"  {advanced_result.bimi.record_value}", size=self.theme.text_body)
+                    self._text(
+                        f"  {advanced_result.bimi.record_value}",
+                        size=self.theme.text_body,
+                    )
                 )
 
             if advanced_result.mta_sts:
                 content.append(
-                    ft.Text(
+                    self._text(
                         "MTA-STS:",
                         size=self.theme.text_label,
                         weight="bold",
@@ -889,8 +1058,9 @@ class DomainAnalyzerApp:
                     )
                 )
                 content.append(
-                    ft.Text(
-                        f"  Mode: {advanced_result.mta_sts.policy_mode}", size=self.theme.text_body
+                    self._text(
+                        f"  Mode: {advanced_result.mta_sts.policy_mode}",
+                        size=self.theme.text_body,
                     )
                 )
 
@@ -907,19 +1077,45 @@ class DomainAnalyzerApp:
             warning_count,
         )
 
-    def _create_headers_panel(self, result: Any) -> ft.ExpansionTile:
+    def _create_headers_panel(self, results: Any) -> ft.ExpansionTile:
         """Create security headers results panel."""
         content: list[ft.Control] = []
+
+        # Handle list input (core returns list of results)
+        if isinstance(results, list):
+            if not results:
+                return self._create_expandable_panel("Security Headers", ft.Icons.SHIELD, [], 0, 0)
+            result = results[0]  # Usually just one result
+        else:
+            result = results
 
         self._add_errors_and_warnings(content, result)
 
         # Headers (dict of SecurityHeaderCheck objects)
         for header_name, header_check in result.headers.items():
-            content.append(ft.Text(f"{header_name}:", size=self.theme.text_label, weight="bold"))
+            content.append(
+                self._text(
+                    f"{header_name}:",
+                    size=self.theme.text_label,
+                    weight="bold",
+                )
+            )
             if header_check.present:
-                content.append(ft.Text("  ✓ Present", size=self.theme.text_body, color="green"))
+                content.append(
+                    self._text(
+                        "  ✓ Present",
+                        size=self.theme.text_body,
+                        color="green",
+                    )
+                )
             else:
-                content.append(ft.Text("  ✗ Missing", size=self.theme.text_body, color="red"))
+                content.append(
+                    self._text(
+                        "  ✗ Missing",
+                        size=self.theme.text_body,
+                        color="red",
+                    )
+                )
 
         return self._create_expandable_panel(
             "Security Headers", ft.Icons.SHIELD, content, len(result.errors), len(result.warnings)
@@ -929,22 +1125,44 @@ class DomainAnalyzerApp:
         """Create RBL results panel."""
         content: list[ft.Control] = []
 
+        # Handle None result (RBL check disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "RBL check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel(
+                "RBL Check", ft.Icons.SHIELD_OUTLINED, content, 0, 0
+            )
+
         self._add_errors_and_warnings(content, result)
 
         # Blacklist status
         for check in result.checks:
             if check.listed:
                 content.append(
-                    ft.Text(
-                        f"IP: {check.ip}",
-                        size=self.theme.text_label,
-                        weight="bold",
-                        color=self.theme.error_color,
+                    self._row(
+                        [
+                            self._text(
+                                "IP: ",
+                                size=self.theme.text_label,
+                                weight="bold",
+                                color=self.theme.error_color,
+                            ),
+                            self._create_clickable_ip(check.ip),
+                        ],
+                        spacing=0,
                     )
                 )
                 for blacklist in check.blacklists:
                     content.append(
-                        ft.Text(f"  • Listed on: {blacklist}", size=self.theme.text_body)
+                        self._text(
+                            f"  • Listed on: {blacklist}",
+                            size=self.theme.text_body,
+                        )
                     )
 
         if result.total_listed == 0:
@@ -957,7 +1175,11 @@ class DomainAnalyzerApp:
                                 color=self.theme.success_color,
                                 size=self.theme.icon_small,
                             ),
-                            ft.Text("No blacklist listings found", color=self.theme.success_color),
+                            ft.Text(
+                                "No blacklist listings found",
+                                color=self.theme.success_color,
+                                text_align=ft.TextAlign.LEFT,
+                            ),
                         ]
                     ),
                     bgcolor=self.theme.success_bg,
@@ -974,20 +1196,32 @@ class DomainAnalyzerApp:
         """Create SEO files results panel."""
         content: list[ft.Control] = []
 
+        # Handle None result (SEO check disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "SEO files check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("SEO Files", ft.Icons.SEARCH, content, 0, 0)
+
         self._add_errors_and_warnings(content, result)
 
         # SEO files status
         if result.robots:
             content.append(
                 ft.Container(
-                    content=ft.Row(
+                    content=self._row(
                         [
                             ft.Icon(
                                 ft.Icons.CHECK_CIRCLE,
                                 color=self.theme.success_color,
                                 size=self.theme.icon_small,
                             ),
-                            ft.Text("robots.txt found", color=self.theme.success_color),
+                            self._text("robots.txt found: ", color=self.theme.success_color),
+                            self._create_clickable_url(result.robots.url, "View"),
                         ]
                     ),
                     bgcolor=self.theme.success_bg,
@@ -999,18 +1233,34 @@ class DomainAnalyzerApp:
         if result.sitemaps:
             content.append(
                 ft.Container(
-                    content=ft.Row(
+                    content=ft.Column(
                         [
-                            ft.Icon(
-                                ft.Icons.CHECK_CIRCLE,
-                                color=self.theme.success_color,
-                                size=self.theme.icon_small,
+                            self._row(
+                                [
+                                    ft.Icon(
+                                        ft.Icons.CHECK_CIRCLE,
+                                        color=self.theme.success_color,
+                                        size=self.theme.icon_small,
+                                    ),
+                                    self._text(
+                                        f"{len(result.sitemaps)} sitemap(s) found:",
+                                        color=self.theme.success_color,
+                                    ),
+                                ],
                             ),
-                            ft.Text(
-                                f"{len(result.sitemaps)} sitemap(s) found",
-                                color=self.theme.success_color,
-                            ),
-                        ]
+                            *[
+                                self._row(
+                                    [
+                                        self._text("  • "),
+                                        self._create_clickable_url(sitemap.url),
+                                    ],
+                                    spacing=0,
+                                )
+                                for sitemap in result.sitemaps
+                            ],
+                        ],
+                        spacing=self.theme.spacing_tiny,
+                        horizontal_alignment=ft.CrossAxisAlignment.START,
                     ),
                     bgcolor=self.theme.success_bg,
                     border_radius=self.theme.border_radius_small,
@@ -1021,14 +1271,15 @@ class DomainAnalyzerApp:
         if result.llms_txt:
             content.append(
                 ft.Container(
-                    content=ft.Row(
+                    content=self._row(
                         [
                             ft.Icon(
                                 ft.Icons.CHECK_CIRCLE,
                                 color=self.theme.success_color,
                                 size=self.theme.icon_small,
                             ),
-                            ft.Text("llms.txt found", color=self.theme.success_color),
+                            self._text("llms.txt found: ", color=self.theme.success_color),
+                            self._create_clickable_url(result.llms_txt.url, "View"),
                         ]
                     ),
                     bgcolor=self.theme.success_bg,
@@ -1045,12 +1296,23 @@ class DomainAnalyzerApp:
         """Create favicon detection results panel."""
         content: list[ft.Control] = []
 
+        # Handle None result (favicon check disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "Favicon check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("Favicon", ft.Icons.IMAGE, content, 0, 0)
+
         self._add_errors_and_warnings(content, result)
 
         # Favicon findings
         if result.favicons:
             content.append(
-                ft.Text(
+                self._text(
                     "Found favicons:",
                     size=self.theme.text_label,
                     weight="bold",
@@ -1058,10 +1320,18 @@ class DomainAnalyzerApp:
                 )
             )
             for favicon in result.favicons:
-                content.append(ft.Text(f"  • {favicon.url}", size=self.theme.text_body))
+                content.append(
+                    self._row(
+                        [
+                            self._text("  • ", size=self.theme.text_body),
+                            self._create_clickable_url(favicon.url),
+                        ],
+                        spacing=0,
+                    )
+                )
                 if favicon.sizes:
                     content.append(
-                        ft.Text(
+                        self._text(
                             f"    Sizes: {favicon.sizes}",
                             size=self.theme.text_small,
                             color=self.theme.text_secondary,
@@ -1076,13 +1346,26 @@ class DomainAnalyzerApp:
         """Create site verification results panel."""
         content: list[ft.Control] = []
 
+        # Handle None result (site verification check disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "Site verification check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel(
+                "Site Verification", ft.Icons.VERIFIED, content, 0, 0
+            )
+
         self._add_errors_and_warnings(content, result)
 
         # Verification findings
         for service_result in result.service_results:
             if service_result.detected_verification_ids:
                 content.append(
-                    ft.Text(
+                    self._text(
                         f"{service_result.service}:",
                         size=self.theme.text_label,
                         weight="bold",
@@ -1094,7 +1377,7 @@ class DomainAnalyzerApp:
                         ", ".join(verification.methods) if verification.methods else "unknown"
                     )
                     content.append(
-                        ft.Text(
+                        self._text(
                             f"  • {verification.verification_id} ({methods_str})",
                             size=self.theme.text_body,
                         )
@@ -1112,42 +1395,204 @@ class DomainAnalyzerApp:
         """Create CDN detection results panel."""
         content: list[ft.Control] = []
 
+        # Handle None result (CDN check disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "CDN detection disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("CDN Detection", ft.Icons.CLOUD, content, 0, 0)
+
         self._add_errors_and_warnings(content, result)
 
         # CDN detection
         if result.cdn_detected and result.cdn_provider:
             content.append(
-                ft.Text(
+                self._text(
                     "CDN Detected:",
                     size=self.theme.text_label,
                     weight="bold",
                     color=self.theme.text_primary,
                 )
             )
-            content.append(ft.Text(f"  Provider: {result.cdn_provider}", size=self.theme.text_body))
+            content.append(
+                self._text(
+                    f"  Provider: {result.cdn_provider}",
+                    size=self.theme.text_body,
+                )
+            )
             if result.detection_method:
                 content.append(
-                    ft.Text(
-                        f"  Detection method: {result.detection_method}", size=self.theme.text_body
+                    self._text(
+                        f"  Detection method: {result.detection_method}",
+                        size=self.theme.text_body,
                     )
                 )
             if result.confidence:
                 content.append(
-                    ft.Text(f"  Confidence: {result.confidence}", size=self.theme.text_body)
+                    self._text(
+                        f"  Confidence: {result.confidence}",
+                        size=self.theme.text_body,
+                    )
                 )
             if result.evidence:
-                content.append(ft.Text("  Evidence:", size=self.theme.text_body))
+                content.append(
+                    self._text(
+                        "  Evidence:",
+                        size=self.theme.text_body,
+                    )
+                )
                 for evidence in result.evidence:
-                    content.append(ft.Text(f"    • {evidence}", size=self.theme.text_body))
+                    content.append(
+                        self._text(
+                            f"    • {evidence}",
+                            size=self.theme.text_body,
+                        )
+                    )
         else:
             content.append(
-                ft.Text(
-                    "No CDN detected", size=self.theme.text_body, color=self.theme.text_secondary
+                self._text(
+                    "No CDN detected",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
                 )
             )
 
         return self._create_expandable_panel(
             "CDN Detection", ft.Icons.CLOUD, content, len(result.errors), len(result.warnings)
+        )
+
+    def _create_default_auto_display_panel(self, metadata: Any, result: Any) -> ft.ExpansionTile:
+        """
+        Default auto-display panel for any analyzer result.
+
+        This is called when an analyzer doesn't have a custom renderer.
+        It automatically displays all fields from the result object
+        using reflection.
+
+        Args:
+            metadata: AnalyzerMetadata with display configuration
+            result: Any analyzer result object (with errors/warnings)
+
+        Returns:
+            Expansion panel with auto-generated content
+        """
+        content: list[ft.Control] = []
+
+        # Handle None result (analyzer disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    f"{metadata.title} disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel(metadata.title, metadata.icon, content, 0, 0)
+
+        # Add errors and warnings
+        self._add_errors_and_warnings(content, result)
+
+        # Auto-display all other fields (skip domain, errors, warnings)
+        skip_fields = {"domain", "errors", "warnings"}
+
+        if hasattr(result, "__dict__"):
+            displayed_any = False
+            for field_name, value in result.__dict__.items():
+                if field_name in skip_fields or value is None:
+                    continue
+
+                # Format field name nicely
+                field_label = field_name.replace("_", " ").title()
+
+                # Display based on type
+                if isinstance(value, bool):
+                    # Boolean: show as ✓/✗ with color
+                    icon = ft.Icons.CHECK_CIRCLE if value else ft.Icons.CANCEL
+                    color = self.theme.success_color if value else self.theme.error_color
+                    content.append(
+                        self._row(
+                            [
+                                ft.Icon(icon, color=color, size=self.theme.icon_small),
+                                self._text(field_label, color=color),
+                            ]
+                        )
+                    )
+                    displayed_any = True
+                elif isinstance(value, (str, int, float)):
+                    # Simple types: just display
+                    content.append(self._text(f"{field_label}: {value}"))
+                    displayed_any = True
+                elif isinstance(value, list):
+                    # Lists: show count and items
+                    if value:
+                        content.append(
+                            self._text(
+                                f"{field_label}: ({len(value)} items)",
+                                weight="bold",
+                                size=self.theme.text_label,
+                            )
+                        )
+                        for item in value[: self.theme.auto_display_max_items]:
+                            content.append(self._text(f"  • {item}", size=self.theme.text_body))
+                        if len(value) > self.theme.auto_display_max_items:
+                            content.append(
+                                self._text(
+                                    f"  ... and {len(value) - self.theme.auto_display_max_items} more",
+                                    size=self.theme.text_small,
+                                    color=self.theme.text_secondary,
+                                )
+                            )
+                        displayed_any = True
+                elif isinstance(value, dict):
+                    # Dicts: show count and keys
+                    if value:
+                        content.append(
+                            self._text(
+                                f"{field_label}: ({len(value)} items)",
+                                weight="bold",
+                                size=self.theme.text_label,
+                            )
+                        )
+                        for key, val in list(value.items())[: self.theme.auto_display_max_items]:
+                            content.append(self._text(f"  {key}: {val}", size=self.theme.text_body))
+                        if len(value) > self.theme.auto_display_max_items:
+                            content.append(
+                                self._text(
+                                    f"  ... and {len(value) - self.theme.auto_display_max_items} more",
+                                    size=self.theme.text_small,
+                                    color=self.theme.text_secondary,
+                                )
+                            )
+                        displayed_any = True
+                else:
+                    # Complex objects: try str()
+                    content.append(
+                        self._text(f"{field_label}: {str(value)}", size=self.theme.text_small)
+                    )
+                    displayed_any = True
+
+            if not displayed_any and not result.errors and not result.warnings:
+                content.append(
+                    self._text(
+                        "No data available",
+                        color=self.theme.text_secondary,
+                        size=self.theme.text_small,
+                    )
+                )
+
+        # Get icon from metadata
+        icon = getattr(ft.Icons, metadata.icon, ft.Icons.INFO)
+
+        # Count errors and warnings
+        error_count = len(result.errors) if hasattr(result, "errors") else 0
+        warning_count = len(result.warnings) if hasattr(result, "warnings") else 0
+
+        return self._create_expandable_panel(
+            metadata.title, icon, content, error_count, warning_count
         )
 
     def show_error(self, message: str) -> None:
@@ -1156,7 +1601,7 @@ class DomainAnalyzerApp:
             content=ft.Row(
                 [
                     ft.Icon(ft.Icons.ERROR, color=self.theme.error_color),
-                    ft.Text(message, color=self.theme.error_color),
+                    ft.Text(message, color=self.theme.error_color, text_align=ft.TextAlign.LEFT),
                 ],
             ),
             bgcolor=self.theme.error_bg,

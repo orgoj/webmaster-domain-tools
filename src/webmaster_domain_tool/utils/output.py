@@ -1741,3 +1741,90 @@ class OutputFormatter:
         for warning in result.warnings:
             self.all_warnings.append(("CDN", warning))
             self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
+
+    def print_default_auto_display(self, metadata, result) -> None:
+        """
+        Default auto-display renderer for any analyzer result.
+
+        This is called when an analyzer doesn't have a custom renderer.
+        It automatically displays all fields from the result object
+        using reflection.
+
+        Args:
+            metadata: AnalyzerMetadata with display configuration
+            result: Any analyzer result object (with errors/warnings)
+        """
+        if self.verbosity == "quiet":
+            # Quiet mode: just status line
+            if hasattr(result, "errors") and result.errors:
+                status = f"[red]✗ {metadata.title}: {len(result.errors)} errors[/red]"
+            elif hasattr(result, "warnings") and result.warnings:
+                status = f"[yellow]⚠ {metadata.title}: {len(result.warnings)} warnings[/yellow]"
+            else:
+                status = f"[green]✓ {metadata.title}[/green]"
+            self.console.print(status)
+            return
+
+        # Normal/verbose/debug mode
+        self.console.print(f"[bold blue]{metadata.title}[/bold blue]")
+
+        # Display errors
+        if hasattr(result, "errors") and result.errors:
+            for error in result.errors:
+                self.all_errors.append((metadata.title, error))
+                self.console.print(f"  [red]✗ {error}[/red]")
+
+        # Display warnings
+        if hasattr(result, "warnings") and result.warnings:
+            for warning in result.warnings:
+                self.all_warnings.append((metadata.title, warning))
+                self.console.print(f"  [yellow]⚠ {warning}[/yellow]")
+
+        # Auto-display all other fields (skip domain, errors, warnings)
+        skip_fields = {"domain", "errors", "warnings"}
+
+        if hasattr(result, "__dict__"):
+            displayed_any = False
+            for field_name, value in result.__dict__.items():
+                if field_name in skip_fields or value is None:
+                    continue
+
+                # Format field name nicely
+                field_label = field_name.replace("_", " ").title()
+
+                # Display based on type
+                if isinstance(value, bool):
+                    # Boolean: show as ✓/✗
+                    symbol = "[green]✓[/green]" if value else "[red]✗[/red]"
+                    self.console.print(f"  {field_label}: {symbol}")
+                    displayed_any = True
+                elif isinstance(value, (str, int, float)):
+                    # Simple types: just display
+                    self.console.print(f"  {field_label}: {value}")
+                    displayed_any = True
+                elif isinstance(value, list):
+                    # Lists: show count and items
+                    if value:
+                        self.console.print(f"  {field_label}: ({len(value)} items)")
+                        for item in value[:5]:  # Show first 5
+                            self.console.print(f"    • {item}")
+                        if len(value) > 5:
+                            self.console.print(f"    [dim]... and {len(value) - 5} more[/dim]")
+                        displayed_any = True
+                elif isinstance(value, dict):
+                    # Dicts: show count and keys
+                    if value:
+                        self.console.print(f"  {field_label}: ({len(value)} items)")
+                        for key, val in list(value.items())[:5]:
+                            self.console.print(f"    {key}: {val}")
+                        if len(value) > 5:
+                            self.console.print(f"    [dim]... and {len(value) - 5} more[/dim]")
+                        displayed_any = True
+                else:
+                    # Complex objects: try str()
+                    if self.verbosity in ["verbose", "debug"]:
+                        self.console.print(f"  {field_label}: {value}")
+                        displayed_any = True
+
+            if not displayed_any and not result.errors and not result.warnings:
+                self.console.print("  [dim]No data available[/dim]")

@@ -173,17 +173,17 @@ class SEOFilesAnalyzer(BaseAnalyzer[SEOFilesAnalysisResult]):
                 logger.info(f"robots.txt found: {robots_url} ({result.size} bytes)")
             elif response.status_code == 404:
                 result.warnings.append("robots.txt not found (consider creating one)")
-                logger.warning(f"robots.txt not found: {robots_url}")
+                logger.debug(f"robots.txt not found: {robots_url}")
             else:
                 result.errors.append(f"robots.txt returned HTTP {response.status_code}")
-                logger.error(f"robots.txt error: {robots_url} - status {response.status_code}")
+                logger.debug(f"robots.txt error: {robots_url} - status {response.status_code}")
 
         except httpx.TimeoutException:
             result.errors.append(f"Timeout fetching robots.txt ({self.timeout}s)")
-            logger.error(f"Timeout fetching robots.txt: {robots_url}")
+            logger.debug(f"Timeout fetching robots.txt: {robots_url}")
         except Exception as e:
             result.errors.append(f"Error fetching robots.txt: {str(e)}")
-            logger.error(f"Error fetching robots.txt: {robots_url} - {e}")
+            logger.debug(f"Error fetching robots.txt: {robots_url} - {e}")
 
         return result
 
@@ -239,14 +239,14 @@ class SEOFilesAnalyzer(BaseAnalyzer[SEOFilesAnalysisResult]):
                 logger.debug(f"llms.txt not found: {llms_url}")
             else:
                 result.warnings.append(f"llms.txt returned HTTP {response.status_code}")
-                logger.warning(f"llms.txt warning: {llms_url} - status {response.status_code}")
+                logger.debug(f"llms.txt warning: {llms_url} - status {response.status_code}")
 
         except httpx.TimeoutException:
             result.warnings.append(f"Timeout fetching llms.txt ({self.timeout}s)")
-            logger.warning(f"Timeout fetching llms.txt: {llms_url}")
+            logger.debug(f"Timeout fetching llms.txt: {llms_url}")
         except Exception as e:
             result.warnings.append(f"Error fetching llms.txt: {str(e)}")
-            logger.warning(f"Error fetching llms.txt: {llms_url} - {e}")
+            logger.debug(f"Error fetching llms.txt: {llms_url} - {e}")
 
         return result
 
@@ -295,8 +295,11 @@ class SEOFilesAnalyzer(BaseAnalyzer[SEOFilesAnalysisResult]):
 
                         logger.info(f"Sitemap found: {sitemap_url} ({result.url_count} URLs)")
 
+                        # Error if sitemap is empty
+                        if result.url_count == 0:
+                            result.errors.append("Sitemap is empty (0 URLs)")
                         # Warn if sitemap is very large
-                        if result.url_count > 50000:
+                        elif result.url_count > 50000:
                             result.warnings.append(
                                 f"Sitemap has {result.url_count} URLs (max recommended: 50,000)"
                             )
@@ -306,20 +309,20 @@ class SEOFilesAnalyzer(BaseAnalyzer[SEOFilesAnalysisResult]):
 
                 except ET.ParseError as e:
                     result.errors.append(f"Failed to parse sitemap XML: {str(e)}")
-                    logger.error(f"Sitemap XML parse error: {sitemap_url} - {e}")
+                    logger.debug(f"Sitemap XML parse error: {sitemap_url} - {e}")
 
             elif response.status_code == 404:
                 # Not necessarily an error if it's a default location
                 logger.debug(f"Sitemap not found: {sitemap_url}")
             else:
                 result.errors.append(f"Sitemap returned HTTP {response.status_code}")
-                logger.error(f"Sitemap error: {sitemap_url} - status {response.status_code}")
+                logger.debug(f"Sitemap error: {sitemap_url} - status {response.status_code}")
 
         except httpx.TimeoutException:
             result.errors.append(f"Timeout fetching sitemap ({self.timeout}s)")
-            logger.error(f"Timeout fetching sitemap: {sitemap_url}")
+            logger.debug(f"Timeout fetching sitemap: {sitemap_url}")
         except Exception as e:
             result.errors.append(f"Error fetching sitemap: {str(e)}")
-            logger.error(f"Error fetching sitemap: {sitemap_url} - {e}")
+            logger.debug(f"Error fetching sitemap: {sitemap_url} - {e}")
 
         return result

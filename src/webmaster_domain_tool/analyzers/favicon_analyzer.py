@@ -341,7 +341,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                 response = client.get(base_url, headers={"User-Agent": self.user_agent})
 
             if response.status_code != 200:
-                logger.warning(f"Failed to fetch HTML: {base_url} - status {response.status_code}")
+                logger.debug(f"Failed to fetch HTML: {base_url} - status {response.status_code}")
                 return favicons
 
             html = response.text
@@ -416,9 +416,9 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                 favicons.extend(manifest_favicons)
 
         except httpx.TimeoutException:
-            logger.error(f"Timeout fetching HTML for favicon detection: {base_url}")
+            logger.debug(f"Timeout fetching HTML for favicon detection: {base_url}")
         except Exception as e:
-            logger.error(f"Error parsing HTML for favicons: {base_url} - {e}")
+            logger.debug(f"Error parsing HTML for favicons: {base_url} - {e}")
 
         return favicons
 
@@ -439,13 +439,13 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
             try:
                 manifest = response.json()
             except json.JSONDecodeError as e:
-                logger.warning(f"Invalid JSON in manifest {manifest_url}: {e}")
+                logger.debug(f"Invalid JSON in manifest {manifest_url}: {e}")
                 return favicons
 
             # Parse icons array
             icons = manifest.get("icons", [])
             if not isinstance(icons, list):
-                logger.warning(f"Manifest icons is not an array: {manifest_url}")
+                logger.debug(f"Manifest icons is not an array: {manifest_url}")
                 return favicons
 
             for icon in icons:
@@ -475,7 +475,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
         except httpx.TimeoutException:
             logger.debug(f"Timeout fetching manifest: {manifest_url}")
         except Exception as e:
-            logger.warning(f"Error parsing manifest {manifest_url}: {e}")
+            logger.debug(f"Error parsing manifest {manifest_url}: {e}")
 
         return favicons
 
@@ -518,7 +518,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                 # Download the image to get dimensions
                 # Only download if size is reasonable (< 5MB)
                 if favicon.size_bytes and favicon.size_bytes > 5 * 1024 * 1024:
-                    logger.warning(
+                    logger.debug(
                         f"Favicon too large to download for dimension check: {favicon.url}"
                     )
                 else:

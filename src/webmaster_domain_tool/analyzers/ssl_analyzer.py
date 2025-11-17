@@ -181,15 +181,15 @@ class SSLAnalyzer(BaseAnalyzer[SSLAnalysisResult]):
             return cert_info
 
         except TimeoutError:
-            logger.error(f"Connection timeout for {domain}:{port}")
+            logger.debug(f"Connection timeout for {domain}:{port}")
             return None
 
         except socket.gaierror as e:
-            logger.error(f"DNS resolution failed for {domain}: {e}")
+            logger.debug(f"DNS resolution failed for {domain}: {e}")
             return None
 
         except Exception as e:
-            logger.error(f"Unexpected error getting certificate for {domain}:{port}: {e}")
+            logger.debug(f"Unexpected error getting certificate for {domain}:{port}: {e}")
             cert_info = CertificateInfo(
                 subject={},
                 issuer={},
@@ -292,5 +292,5 @@ class SSLAnalyzer(BaseAnalyzer[SSLAnalysisResult]):
                 result.warnings.append("TLSv1.3 is not supported (recommended)")
 
         except Exception as e:
-            logger.error(f"Error checking SSL configuration for {domain}:{port}: {e}")
+            logger.debug(f"Error checking SSL configuration for {domain}:{port}: {e}")
             result.errors.append(f"Error checking SSL configuration: {str(e)}")

@@ -204,14 +204,14 @@ class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
             except dns.resolver.NoAnswer:
                 logger.debug(f"No {record_type} records found for {domain}")
             except dns.resolver.NoNameservers:
-                logger.warning(f"No nameservers available for {domain}")
+                logger.debug(f"No nameservers available for {domain}")
                 result.errors.append(f"No nameservers available for {domain}")
                 break
             except dns.exception.Timeout:
-                logger.warning(f"DNS query timeout for {domain} {record_type}")
+                logger.debug(f"DNS query timeout for {domain} {record_type}")
                 result.warnings.append(f"DNS query timeout for {domain} {record_type}")
             except Exception as e:
-                logger.error(f"Error querying {record_type} for {domain}: {e}")
+                logger.debug(f"Error querying {record_type} for {domain}: {e}")
                 result.errors.append(f"Error querying {record_type} for {domain}: {str(e)}")
 
         # DNS rule: if domain has CNAME, it cannot have A/AAAA records
@@ -275,7 +275,7 @@ class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
 
             return DNSRecord(record_type=record_type, name=name, value=value, ttl=ttl)
         except Exception as e:
-            logger.error(f"Error creating DNS record: {e}")
+            logger.debug(f"Error creating DNS record: {e}")
             return None
 
     def _validate_mx_records(self, result: DNSAnalysisResult) -> None:
@@ -404,7 +404,7 @@ class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
                 )
 
         except Exception as e:
-            logger.error(f"Error checking DNSSEC for {domain}: {e}")
+            logger.debug(f"Error checking DNSSEC for {domain}: {e}")
             dnssec_info.errors.append(f"Error checking DNSSEC: {str(e)}")
 
         return dnssec_info

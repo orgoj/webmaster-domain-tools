@@ -9,13 +9,13 @@ from webmaster_domain_tool.analyzers.http_analyzer import (
     RedirectChain,
 )
 from webmaster_domain_tool.cli import (
-    get_preferred_final_url,
     validate_config_file,
     validate_domain,
     validate_max_redirects,
     validate_nameservers,
     validate_timeout,
 )
+from webmaster_domain_tool.core.analyzer import get_preferred_final_url
 
 
 class TestDomainValidation:

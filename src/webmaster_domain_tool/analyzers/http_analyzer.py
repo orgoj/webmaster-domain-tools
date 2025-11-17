@@ -216,7 +216,7 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
                 break
 
             except httpx.TimeoutException:
-                logger.warning(f"Timeout for {current_url}")
+                logger.debug(f"Timeout for {current_url}")
                 http_response = HTTPResponse(
                     url=current_url,
                     status_code=0,
@@ -227,7 +227,7 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
                 break
 
             except Exception as e:
-                logger.error(f"Unexpected error for {current_url}: {e}")
+                logger.debug(f"Unexpected error for {current_url}: {e}")
                 http_response = HTTPResponse(
                     url=current_url,
                     status_code=0,
@@ -333,21 +333,21 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
                     )
                 else:
                     result.error = "Path returned 200 but content is empty"
-                    logger.warning(f"Path check failed: {full_url} - empty content")
+                    logger.debug(f"Path check failed: {full_url} - empty content")
             else:
                 result.error = f"HTTP {response.status_code}"
-                logger.warning(f"Path check failed: {full_url} - status {response.status_code}")
+                logger.debug(f"Path check failed: {full_url} - status {response.status_code}")
 
         except httpx.ConnectError as e:
             result.error = f"Connection error: {str(e)}"
-            logger.error(f"Path check connection error for {full_url}: {e}")
+            logger.debug(f"Path check connection error for {full_url}: {e}")
 
         except httpx.TimeoutException:
             result.error = f"Request timeout ({self.timeout}s)"
-            logger.error(f"Path check timeout for {full_url}")
+            logger.debug(f"Path check timeout for {full_url}")
 
         except Exception as e:
             result.error = f"Unexpected error: {str(e)}"
-            logger.error(f"Path check unexpected error for {full_url}: {e}")
+            logger.debug(f"Path check unexpected error for {full_url}: {e}")
 
         return result

@@ -242,6 +242,32 @@ class TestPanelCreation:
         panel = app._create_headers_panel(result)
         assert panel is not None
 
+    def test_create_headers_panel_list_input(self, app):
+        """Test security headers panel with list input (regression test for GUI crash)."""
+        # Create mock result
+        result = Mock()
+        result.domain = "example.com"
+        result.errors = []
+        result.warnings = []
+
+        header_check = Mock()
+        header_check.present = True
+        header_check.value = "max-age=31536000"
+
+        result.headers = {
+            "Strict-Transport-Security": header_check,
+        }
+
+        # Test with list input (how core/analyzer.py returns it)
+        panel = app._create_headers_panel([result])
+        assert panel is not None
+
+    def test_create_headers_panel_empty_list(self, app):
+        """Test security headers panel with empty list."""
+        # Test with empty list
+        panel = app._create_headers_panel([])
+        assert panel is not None
+
     def test_create_rbl_panel_clean(self, app):
         """Test RBL panel with no blacklists."""
         result = Mock()
@@ -292,7 +318,11 @@ class TestPanelCreation:
         sitemap_result.url_count = 100
         result.sitemaps = [sitemap_result]
 
-        result.llms_txt = "# AI Crawler Instructions"
+        # llms_txt is LLMsTxtResult object
+        llms_txt_result = Mock()
+        llms_txt_result.url = "https://example.com/llms.txt"
+        llms_txt_result.content = "# AI Crawler Instructions"
+        result.llms_txt = llms_txt_result
 
         panel = app._create_seo_panel(result)
         assert panel is not None
@@ -665,3 +695,76 @@ class TestDisplayResults:
         # Verify results are displayed
         assert app.results_card.visible is True
         assert len(app.results_column.controls) > 0
+
+
+class TestPanelNoneHandling:
+    """Test that all panel methods handle None input gracefully (regression tests for GUI crashes)."""
+
+    def test_whois_panel_none(self, app):
+        """Test WHOIS panel with None result (analyzer disabled)."""
+        panel = app._create_whois_panel(None)
+        assert panel is not None
+        assert "disabled" in str(panel).lower() or panel.title.value == "WHOIS Information"
+
+    def test_dns_panel_none(self, app):
+        """Test DNS panel with None result (analyzer disabled)."""
+        panel = app._create_dns_panel(None)
+        assert panel is not None
+        assert "disabled" in str(panel).lower() or panel.title.value == "DNS Analysis"
+
+    def test_http_panel_none(self, app):
+        """Test HTTP panel with None result (analyzer disabled)."""
+        panel = app._create_http_panel(None)
+        assert panel is not None
+        assert "disabled" in str(panel).lower() or panel.title.value == "HTTP/HTTPS"
+
+    def test_ssl_panel_none(self, app):
+        """Test SSL panel with None result (analyzer disabled)."""
+        panel = app._create_ssl_panel(None)
+        assert panel is not None
+        assert "disabled" in str(panel).lower() or panel.title.value == "SSL/TLS"
+
+    def test_email_panel_none(self, app):
+        """Test email panel with None result (analyzer disabled)."""
+        panel = app._create_email_panel(None)
+        assert panel is not None
+        assert "disabled" in str(panel).lower() or panel.title.value == "Email Security"
+
+    def test_rbl_panel_none(self, app):
+        """Test RBL panel with None result (RBL check disabled)."""
+        panel = app._create_rbl_panel(None)
+        assert panel is not None
+        assert "disabled" in str(panel).lower() or panel.title.value == "RBL Check"
+
+    def test_seo_panel_none(self, app):
+        """Test SEO panel with None result (SEO check disabled)."""
+        panel = app._create_seo_panel(None)
+        assert panel is not None
+        assert "disabled" in str(panel).lower() or panel.title.value == "SEO Files"
+
+    def test_favicon_panel_none(self, app):
+        """Test favicon panel with None result (favicon check disabled)."""
+        panel = app._create_favicon_panel(None)
+        assert panel is not None
+        assert "disabled" in str(panel).lower() or panel.title.value == "Favicon"
+
+    def test_site_verification_panel_none(self, app):
+        """Test site verification panel with None result (check disabled)."""
+        panel = app._create_site_verification_panel(None)
+        assert panel is not None
+        assert "disabled" in str(panel).lower() or panel.title.value == "Site Verification"
+
+    def test_cdn_panel_none(self, app):
+        """Test CDN panel with None result (CDN detection disabled)."""
+        panel = app._create_cdn_panel(None)
+        assert panel is not None
+        assert "disabled" in str(panel).lower() or panel.title.value == "CDN Detection"
+
+    def test_default_auto_display_panel_none(self, app):
+        """Test default auto-display panel with None result (analyzer disabled)."""
+        from webmaster_domain_tool.core import ANALYZER_REGISTRY
+
+        metadata = ANALYZER_REGISTRY["cdn"]
+        panel = app._create_default_auto_display_panel(metadata, None)
+        assert panel is not None
+        assert "disabled" in str(panel).lower() or panel.title.value == metadata.title

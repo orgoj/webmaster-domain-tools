@@ -175,15 +175,15 @@ class WhoisAnalyzer(BaseAnalyzer[WhoisAnalysisResult]):
                 or "no entries found" in error_msg
             ):
                 result.errors.append("Domain not found in WHOIS database")
-                logger.error(f"WHOIS domain not found: {domain}")
+                logger.debug(f"WHOIS domain not found: {domain}")
             # Check if it's a connection/timeout error
             elif "timed out" in error_msg or "connection" in error_msg:
                 result.warnings.append("WHOIS query timed out or connection failed")
-                logger.warning(f"WHOIS connection error for {domain}: {e}")
+                logger.debug(f"WHOIS connection error for {domain}: {e}")
             # Other errors
             else:
                 result.errors.append(f"WHOIS analysis failed: {e}")
-                logger.error(f"Unexpected error in WHOIS analysis for {domain}: {e}")
+                logger.debug(f"Unexpected error in WHOIS analysis for {domain}: {e}")
 
         return result
 
@@ -245,7 +245,7 @@ class WhoisAnalyzer(BaseAnalyzer[WhoisAnalysisResult]):
             try:
                 return datetime.fromisoformat(value)
             except ValueError:
-                logger.warning(f"Could not parse date string: {value}")
+                logger.debug(f"Could not parse date string: {value}")
                 return None
 
         return None

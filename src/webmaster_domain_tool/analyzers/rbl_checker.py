@@ -94,10 +94,10 @@ class RBLChecker(BaseAnalyzer[RBLAnalysisResult]):
                 result.not_listed.append(rbl_server)
                 logger.debug(f"IP {ip} is not listed on {rbl_server}")
             except dns.exception.Timeout:
-                logger.warning(f"Timeout checking {ip} on {rbl_server}")
+                logger.debug(f"Timeout checking {ip} on {rbl_server}")
                 result.errors.append(f"Timeout checking {rbl_server}")
             except Exception as e:
-                logger.warning(f"Error checking {ip} on {rbl_server}: {e}")
+                logger.debug(f"Error checking {ip} on {rbl_server}: {e}")
                 result.errors.append(f"Error checking {rbl_server}: {str(e)}")
 
         return result
