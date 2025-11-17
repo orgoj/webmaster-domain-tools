@@ -321,7 +321,7 @@ class TestPanelCreation:
         # service_results is list of ServiceResult objects
         verification_id = Mock()
         verification_id.verification_id = "ABC123"
-        verification_id.method = "dns"
+        verification_id.methods = ["dns"]  # methods is a list!
 
         service_result = Mock()
         service_result.service = "Google"

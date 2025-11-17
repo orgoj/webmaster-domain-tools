@@ -1037,9 +1037,12 @@ class DomainAnalyzerApp:
                     )
                 )
                 for verification in service_result.detected_verification_ids:
+                    methods_str = (
+                        ", ".join(verification.methods) if verification.methods else "unknown"
+                    )
                     content.append(
                         ft.Text(
-                            f"  • {verification.verification_id} ({verification.method})",
+                            f"  • {verification.verification_id} ({methods_str})",
                             size=self.theme.text_body,
                         )
                     )
