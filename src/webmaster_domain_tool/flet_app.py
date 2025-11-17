@@ -949,9 +949,17 @@ class DomainAnalyzerApp:
             warning_count,
         )
 
-    def _create_headers_panel(self, result: Any) -> ft.ExpansionTile:
+    def _create_headers_panel(self, results: Any) -> ft.ExpansionTile:
         """Create security headers results panel."""
         content: list[ft.Control] = []
+
+        # Handle list input (core returns list of results)
+        if isinstance(results, list):
+            if not results:
+                return self._create_expandable_panel("Security Headers", ft.Icons.SHIELD, [], 0, 0)
+            result = results[0]  # Usually just one result
+        else:
+            result = results
 
         self._add_errors_and_warnings(content, result)
 

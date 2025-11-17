@@ -295,8 +295,11 @@ class SEOFilesAnalyzer(BaseAnalyzer[SEOFilesAnalysisResult]):
 
                         logger.info(f"Sitemap found: {sitemap_url} ({result.url_count} URLs)")
 
+                        # Error if sitemap is empty
+                        if result.url_count == 0:
+                            result.errors.append("Sitemap is empty (0 URLs)")
                         # Warn if sitemap is very large
-                        if result.url_count > 50000:
+                        elif result.url_count > 50000:
                             result.warnings.append(
                                 f"Sitemap has {result.url_count} URLs (max recommended: 50,000)"
                             )
