@@ -65,9 +65,7 @@ export function ResultSection({ result }: ResultSectionProps) {
       {/* Summary Header */}
       <div className="card">
         <h2 className="text-2xl font-bold mb-2">{result.domain}</h2>
-        <p className="text-gray-500 text-sm">
-          Analyzed at {result.timestamp.toLocaleString()}
-        </p>
+        <p className="text-gray-500 text-sm">Analyzed at {result.timestamp.toLocaleString()}</p>
 
         {/* Errors and Warnings */}
         {result.errors.length > 0 && (
@@ -153,8 +151,8 @@ export function ResultSection({ result }: ResultSectionProps) {
           </p>
           {!result.dnssec.validated && (
             <p className="text-sm text-gray-600">
-              DNSSEC provides cryptographic authentication of DNS data. Consider enabling it
-              for improved security.
+              DNSSEC provides cryptographic authentication of DNS data. Consider enabling it for
+              improved security.
             </p>
           )}
         </div>

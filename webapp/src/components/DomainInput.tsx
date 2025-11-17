@@ -32,11 +32,7 @@ export function DomainInput({ onAnalyze, isLoading }: DomainInputProps) {
           disabled={isLoading}
           autoFocus
         />
-        <button
-          type="submit"
-          disabled={isLoading || !domain.trim()}
-          className="btn-primary"
-        >
+        <button type="submit" disabled={isLoading || !domain.trim()} className="btn-primary">
           {isLoading ? 'Analyzing...' : 'Analyze'}
         </button>
       </div>

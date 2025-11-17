@@ -27,10 +27,7 @@ const DNS_TYPE_MAP: Record<DNSRecordType, number> = {
 /**
  * Query Google DoH API for DNS records
  */
-async function queryDNS(
-  domain: string,
-  recordType: DNSRecordType
-): Promise<GoogleDohResponse> {
+async function queryDNS(domain: string, recordType: DNSRecordType): Promise<GoogleDohResponse> {
   const url = `${GOOGLE_DOH_API}?name=${encodeURIComponent(domain)}&type=${recordType}`;
 
   const response = await fetch(url, {
@@ -49,17 +46,12 @@ async function queryDNS(
 /**
  * Parse Google DoH response to DNSRecord array
  */
-function parseRecords(
-  response: GoogleDohResponse,
-  type: DNSRecordType
-): DNSRecord[] {
+function parseRecords(response: GoogleDohResponse, type: DNSRecordType): DNSRecord[] {
   if (!response.Answer) {
     return [];
   }
 
-  return response.Answer.filter(
-    (answer) => answer.type === DNS_TYPE_MAP[type]
-  ).map((answer) => ({
+  return response.Answer.filter((answer) => answer.type === DNS_TYPE_MAP[type]).map((answer) => ({
     type,
     name: answer.name,
     value: answer.data,
@@ -159,17 +151,16 @@ export async function analyzeDomain(domain: string): Promise<DomainAnalysisResul
 
   try {
     // Query all DNS record types in parallel
-    const [aRes, aaaaRes, mxRes, txtRes, nsRes, cnameRes, soaRes, caaRes] =
-      await Promise.all([
-        queryDNS(normalizedDomain, 'A'),
-        queryDNS(normalizedDomain, 'AAAA'),
-        queryDNS(normalizedDomain, 'MX'),
-        queryDNS(normalizedDomain, 'TXT'),
-        queryDNS(normalizedDomain, 'NS'),
-        queryDNS(normalizedDomain, 'CNAME'),
-        queryDNS(normalizedDomain, 'SOA'),
-        queryDNS(normalizedDomain, 'CAA'),
-      ]);
+    const [aRes, aaaaRes, mxRes, txtRes, nsRes, cnameRes, soaRes, caaRes] = await Promise.all([
+      queryDNS(normalizedDomain, 'A'),
+      queryDNS(normalizedDomain, 'AAAA'),
+      queryDNS(normalizedDomain, 'MX'),
+      queryDNS(normalizedDomain, 'TXT'),
+      queryDNS(normalizedDomain, 'NS'),
+      queryDNS(normalizedDomain, 'CNAME'),
+      queryDNS(normalizedDomain, 'SOA'),
+      queryDNS(normalizedDomain, 'CAA'),
+    ]);
 
     // Check for NXDOMAIN (domain doesn't exist)
     if (aRes.Status === 3) {
@@ -262,11 +253,8 @@ export async function analyzeDomain(domain: string): Promise<DomainAnalysisResul
     if (result.dnsRecords.NS.length === 0) {
       errors.push('No nameserver (NS) records found');
     }
-
   } catch (error) {
-    errors.push(
-      error instanceof Error ? error.message : 'Unknown error during analysis'
-    );
+    errors.push(error instanceof Error ? error.message : 'Unknown error during analysis');
   }
 
   return result;

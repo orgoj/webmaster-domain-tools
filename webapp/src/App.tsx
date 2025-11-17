@@ -67,9 +67,7 @@ function App() {
               Google DNS-over-HTTPS
             </a>
           </p>
-          <p className="mt-2">
-            Free domain analysis tool • No data stored • Privacy-friendly
-          </p>
+          <p className="mt-2">Free domain analysis tool • No data stored • Privacy-friendly</p>
           {/* Placeholder for Google Ads */}
           <div className="mt-6 p-4 bg-gray-100 rounded-lg">
             <p className="text-gray-400">[ Google Ads Placeholder ]</p>
