@@ -164,7 +164,7 @@ class AdvancedEmailSecurityAnalyzer(BaseAnalyzer[AdvancedEmailSecurityResult]):
             result.warnings.append(f"DNS timeout checking BIMI for {domain}")
         except Exception as e:
             result.warnings.append(f"Error checking BIMI: {str(e)}")
-            logger.error(f"Error checking BIMI for {domain}: {e}")
+            logger.debug(f"Error checking BIMI for {domain}: {e}")
 
         return result
 
@@ -196,7 +196,7 @@ class AdvancedEmailSecurityAnalyzer(BaseAnalyzer[AdvancedEmailSecurityResult]):
             result.warnings.append(f"DNS timeout checking MTA-STS for {domain}")
         except Exception as e:
             result.warnings.append(f"Error checking MTA-STS DNS: {str(e)}")
-            logger.error(f"Error checking MTA-STS DNS for {domain}: {e}")
+            logger.debug(f"Error checking MTA-STS DNS for {domain}: {e}")
 
         # If DNS record found, check policy file
         if result.record_found:
@@ -234,7 +234,7 @@ class AdvancedEmailSecurityAnalyzer(BaseAnalyzer[AdvancedEmailSecurityResult]):
                 result.errors.append("Timeout fetching MTA-STS policy")
             except Exception as e:
                 result.errors.append(f"Error fetching MTA-STS policy: {str(e)}")
-                logger.error(f"Error fetching MTA-STS policy for {domain}: {e}")
+                logger.debug(f"Error fetching MTA-STS policy for {domain}: {e}")
 
         return result
 
@@ -275,6 +275,6 @@ class AdvancedEmailSecurityAnalyzer(BaseAnalyzer[AdvancedEmailSecurityResult]):
             result.warnings.append(f"DNS timeout checking TLS-RPT for {domain}")
         except Exception as e:
             result.warnings.append(f"Error checking TLS-RPT: {str(e)}")
-            logger.error(f"Error checking TLS-RPT for {domain}: {e}")
+            logger.debug(f"Error checking TLS-RPT for {domain}: {e}")
 
         return result

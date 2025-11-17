@@ -175,7 +175,7 @@ class EmailSecurityAnalyzer(BaseAnalyzer[EmailSecurityResult]):
             logger.debug(f"No TXT records found for {domain}")
             return None
         except Exception as e:
-            logger.error(f"Error checking SPF for {domain}: {e}")
+            logger.debug(f"Error checking SPF for {domain}: {e}")
             spf = SPFRecord(record="", is_valid=False)
             spf.errors.append(f"Error checking SPF: {str(e)}")
             return spf
@@ -352,7 +352,7 @@ class EmailSecurityAnalyzer(BaseAnalyzer[EmailSecurityResult]):
             logger.debug(f"No DMARC record found for {domain}")
             return None
         except Exception as e:
-            logger.error(f"Error checking DMARC for {domain}: {e}")
+            logger.debug(f"Error checking DMARC for {domain}: {e}")
             dmarc = DMARCRecord(record="", is_valid=False)
             dmarc.errors.append(f"Error checking DMARC: {str(e)}")
             return dmarc

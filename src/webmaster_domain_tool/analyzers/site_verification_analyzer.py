@@ -463,13 +463,13 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
                     else:
                         error_msg = f"HTTP {response.status_code}"
                         result.html_fetch_error = error_msg
-                        logger.warning(f"Failed to fetch HTML from {preferred_url}: {error_msg}")
+                        logger.debug(f"Failed to fetch HTML from {preferred_url}: {error_msg}")
                         return
 
             except Exception as e:
                 error_msg = f"Failed to fetch: {str(e)}"
                 result.html_fetch_error = error_msg
-                logger.warning(f"Error fetching HTML from {preferred_url}: {e}")
+                logger.debug(f"Error fetching HTML from {preferred_url}: {e}")
                 return
 
         # No preferred URL - try HTTPS first, then HTTP
@@ -527,22 +527,22 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
                 else:
                     error_msg = f"HTTP {response.status_code} (HTTPS: {https_error})"
                     result.html_fetch_error = error_msg
-                    logger.warning(error_msg)
+                    logger.debug(error_msg)
 
         except httpx.ConnectError as e:
             error_msg = f"Connection error on both HTTPS and HTTP: {str(e)}"
             result.html_fetch_error = error_msg
-            logger.warning(error_msg)
+            logger.debug(error_msg)
 
         except httpx.TimeoutException:
             error_msg = "Timeout on both HTTPS and HTTP"
             result.html_fetch_error = error_msg
-            logger.warning(error_msg)
+            logger.debug(error_msg)
 
         except Exception as e:
             error_msg = f"Error fetching HTML (HTTPS: {https_error}, HTTP: {str(e)})"
             result.html_fetch_error = error_msg
-            logger.error(error_msg)
+            logger.debug(error_msg)
 
     def _detect_tracking_codes(self, result: SiteVerificationAnalysisResult) -> None:
         """
