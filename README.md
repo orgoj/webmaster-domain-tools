@@ -234,20 +234,27 @@ uv run wdt-app
 
 The GUI application requires the `libmpv` multimedia library to be installed on your system:
 
-- **Ubuntu/Debian**: `sudo apt-get install libmpv2`
+- **Ubuntu/Debian**: `sudo apt-get install libmpv-dev libmpv2`
 - **Fedora/RHEL/CentOS**: `sudo dnf install mpv-libs`
 - **Arch Linux**: `sudo pacman -S mpv`
 - **macOS**: `brew install mpv`
 
-**Ubuntu 24.04+ Compatibility Fix:**
+**Ubuntu 24.04+ Compatibility (Official Flet Solution):**
 
-If you get "error while loading shared libraries: libmpv.so.1" on Ubuntu 24.04+, you need to create a symlink because Flet expects the older libmpv.so.1 but Ubuntu 24.04 ships with libmpv.so.2:
+Ubuntu 24.04 ships with libmpv2, but Flet requires libmpv.so.1. This is a known issue documented in [Flet's official documentation](https://flet.dev/docs/getting-started/).
+
+**Official fix from Flet team:**
 
 ```bash
-# Create compatibility symlink
-sudo ln -s /usr/lib/x86_64-linux-gnu/libmpv.so.2 /usr/lib/x86_64-linux-gnu/libmpv.so.1
-sudo ldconfig
+# Install libmpv packages
+sudo apt update
+sudo apt install libmpv-dev libmpv2
+
+# Create compatibility symlink (official Flet workaround)
+sudo ln -s /usr/lib/x86_64-linux-gnu/libmpv.so /usr/lib/libmpv.so.1
 ```
+
+This solution is officially documented by the Flet team and is the standard workaround until Flet releases native libmpv2 support.
 
 **Note**: The CLI version (`wdt`) does not require these system dependencies - only the GUI (`wdt-app`) needs them.
 

@@ -58,7 +58,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The flet package was trying to auto-install flet-desktop using pip, which isn't available in uv virtual environments
   - Now flet-desktop is installed directly by uv during package installation
   - Documented system requirements for GUI (libmpv library) in README
-  - Added Ubuntu 24.04+ compatibility workaround for libmpv.so.1/libmpv.so.2 version mismatch
+  - Added Ubuntu 24.04+ compatibility fix using official Flet team solution
+  - Ubuntu 24.04 ships with libmpv2, but Flet requires libmpv.so.1 (known Flet limitation)
+  - Solution: `sudo apt install libmpv-dev libmpv2` + symlink (official Flet workaround)
+  - Documented in README with link to official Flet documentation
 
 - **WHOIS Registrar Display for .cz Domains**
   - Fixed incorrect registrar extraction for .cz domains
