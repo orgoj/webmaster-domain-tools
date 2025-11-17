@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added explicit `flet-desktop` dependency to prevent auto-installation issues
   - The flet package was trying to auto-install flet-desktop using pip, which isn't available in uv virtual environments
   - Now flet-desktop is installed directly by uv during package installation
+  - Documented system requirements for GUI (libmpv library) in README
 
 - **WHOIS Registrar Display for .cz Domains**
   - Fixed incorrect registrar extraction for .cz domains

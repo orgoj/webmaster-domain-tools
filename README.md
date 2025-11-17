@@ -230,6 +230,17 @@ wdt-app
 uv run wdt-app
 ```
 
+**System Requirements for GUI:**
+
+The GUI application requires the `libmpv` multimedia library to be installed on your system:
+
+- **Ubuntu/Debian**: `sudo apt-get install libmpv2`
+- **Fedora/RHEL/CentOS**: `sudo dnf install mpv-libs`
+- **Arch Linux**: `sudo pacman -S mpv`
+- **macOS**: `brew install mpv`
+
+**Note**: The CLI version (`wdt`) does not require these system dependencies - only the GUI (`wdt-app`) needs them.
+
 **Features:**
 - ✅ **Modern, responsive UI** that adapts to desktop and mobile screens
 - ✅ **Interactive domain input** with validation
