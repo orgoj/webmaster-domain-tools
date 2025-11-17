@@ -728,11 +728,27 @@ class DomainAnalyzerApp:
             )
         )
 
-        return ft.ExpansionTile(
-            title=ft.Text(
-                full_title, size=self.theme.text_subheading, weight="bold", color=title_color
+        # Wrap title + icon in Container with gray background (only header, not expanded content)
+        title_widget = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(icon, color=title_color, size=self.theme.icon_medium),
+                    ft.Text(
+                        full_title,
+                        size=self.theme.text_subheading,
+                        weight="bold",
+                        color=title_color,
+                    ),
+                ],
+                spacing=self.theme.spacing_small,
             ),
-            leading=ft.Icon(icon, color=title_color),
+            bgcolor=ft.Colors.GREY_200,
+            padding=self.theme.padding_small,
+            border_radius=self.theme.border_radius_small,
+        )
+
+        return ft.ExpansionTile(
+            title=title_widget,
             controls=[selectable_content],  # Wrap in list since it's now a single SelectionArea
             initially_expanded=error_count > 0,  # Auto-expand if errors
             # ← KEY FIX: ExpansionTile defaults to CENTER, must set to START!
