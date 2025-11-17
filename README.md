@@ -196,7 +196,7 @@ uv run webmaster-domain-tool analyze example.com
 
 ## Usage
 
-### Basic Usage
+### CLI Usage (Command Line)
 
 ```bash
 webmaster-domain-tool analyze example.com
@@ -207,6 +207,54 @@ Or shortened command:
 ```bash
 wdt analyze example.com
 ```
+
+### GUI Application (Desktop & Mobile) 📱
+
+The tool now includes a **cross-platform graphical application** built with [Flet](https://flet.dev), providing a modern, user-friendly interface for desktop and mobile platforms.
+
+**Supported Platforms:**
+- 🖥️ **Desktop**: Windows, macOS, Linux
+- 📱 **Mobile**: Android, iOS (via Flet packaging)
+
+**Launch the GUI:**
+
+```bash
+# Run the GUI application
+wdt-app
+
+# Or if running from source
+uv run wdt-app
+```
+
+**Features:**
+- ✅ **Modern, responsive UI** that adapts to desktop and mobile screens
+- ✅ **Interactive domain input** with validation
+- ✅ **Configurable analysis options** via checkboxes (enable/disable specific checks)
+- ✅ **Real-time progress** with status updates during analysis
+- ✅ **Expandable result panels** organized by category (DNS, HTTP, SSL, Email, etc.)
+- ✅ **Color-coded errors and warnings** for easy identification
+- ✅ **All analyzers available** - same functionality as CLI
+- ✅ **Uses existing configuration** from config files
+
+**Why GUI?**
+- Perfect for webmasters who prefer graphical interfaces
+- Easier to visualize complex results with expandable sections
+- Mobile-friendly for on-the-go domain analysis
+- No need to remember CLI flags and options
+
+**Building for Mobile:**
+
+To build standalone apps for Android/iOS, use Flet's packaging tools:
+
+```bash
+# Android
+flet build apk
+
+# iOS
+flet build ipa
+```
+
+See [Flet documentation](https://flet.dev/docs/guides/python/packaging-desktop-app) for detailed packaging instructions.
 
 ### Configuration
 
