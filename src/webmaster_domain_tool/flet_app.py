@@ -2,6 +2,7 @@
 
 import logging
 import re
+import sys
 import threading
 from dataclasses import dataclass
 from typing import Any
@@ -135,6 +136,50 @@ class DomainAnalyzerApp:
         # Build UI
         self._build_ui()
 
+    def _create_section(
+        self,
+        title: str,
+        controls: list[ft.Control],
+        visible: bool = True,
+        spacing: int | None = None,
+    ) -> ft.Card:
+        """
+        Create a consistently styled section card with left alignment.
+
+        This is a centralized helper to ensure all sections have proper
+        left alignment and consistent styling (DRY principle).
+
+        Args:
+            title: Section heading text
+            controls: List of controls to display in the section
+            visible: Whether the section is initially visible
+            spacing: Spacing between controls (uses theme default if None)
+
+        Returns:
+            Styled Card with left-aligned content
+        """
+        return ft.Card(
+            content=ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            title,
+                            size=self.theme.text_heading,
+                            weight=ft.FontWeight.BOLD,
+                            text_align=ft.TextAlign.LEFT,
+                        ),
+                        *controls,
+                    ],
+                    spacing=spacing or self.theme.spacing_small,
+                    horizontal_alignment=ft.CrossAxisAlignment.START,
+                ),
+                padding=self.theme.padding_large,
+                alignment=ft.alignment.top_left,  # ← KEY FIX: Container alignment
+            ),
+            elevation=2,
+            visible=visible,
+        )
+
     def _build_ui(self) -> None:
         """Build the user interface."""
         # Header
@@ -169,87 +214,48 @@ class DomainAnalyzerApp:
             padding=ft.padding.only(bottom=self.theme.padding_large),
         )
 
-        # Input section
-        input_section = ft.Card(
-            content=ft.Container(
-                content=ft.Column(
+        # Input section - using centralized helper
+        input_section = self._create_section(
+            title="Enter Domain",
+            controls=[
+                ft.Row(
                     [
-                        ft.Text(
-                            "Enter Domain",
-                            size=self.theme.text_heading,
-                            weight=ft.FontWeight.BOLD,
-                            text_align=ft.TextAlign.LEFT,
-                        ),
-                        ft.Row(
-                            [
-                                self.domain_input,
-                                self.analyze_button,
-                            ],
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        ),
-                        self.progress_bar,
-                        self.status_text,
+                        self.domain_input,
+                        self.analyze_button,
                     ],
-                    spacing=self.theme.spacing_small,
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
-                padding=self.theme.padding_large,
-            ),
-            elevation=2,
+                self.progress_bar,
+                self.status_text,
+            ],
         )
 
-        # Options section
-        options_section = ft.Card(
-            content=ft.Container(
-                content=ft.Column(
+        # Options section - using centralized helper
+        options_section = self._create_section(
+            title="Analysis Options",
+            controls=[
+                ft.ResponsiveRow(
                     [
-                        ft.Text(
-                            "Analysis Options",
-                            size=self.theme.text_heading,
-                            weight=ft.FontWeight.BOLD,
-                            text_align=ft.TextAlign.LEFT,
-                        ),
-                        ft.ResponsiveRow(
-                            [
-                                ft.Container(self.check_dns, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_http, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_ssl, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_email, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_headers, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_whois, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_rbl, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_seo, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(self.check_favicon, col={"sm": 6, "md": 4, "xl": 3}),
-                                ft.Container(
-                                    self.check_site_verification, col={"sm": 6, "md": 4, "xl": 3}
-                                ),
-                            ],
-                        ),
+                        ft.Container(self.check_dns, col={"sm": 6, "md": 4, "xl": 3}),
+                        ft.Container(self.check_http, col={"sm": 6, "md": 4, "xl": 3}),
+                        ft.Container(self.check_ssl, col={"sm": 6, "md": 4, "xl": 3}),
+                        ft.Container(self.check_email, col={"sm": 6, "md": 4, "xl": 3}),
+                        ft.Container(self.check_headers, col={"sm": 6, "md": 4, "xl": 3}),
+                        ft.Container(self.check_whois, col={"sm": 6, "md": 4, "xl": 3}),
+                        ft.Container(self.check_rbl, col={"sm": 6, "md": 4, "xl": 3}),
+                        ft.Container(self.check_seo, col={"sm": 6, "md": 4, "xl": 3}),
+                        ft.Container(self.check_favicon, col={"sm": 6, "md": 4, "xl": 3}),
+                        ft.Container(self.check_site_verification, col={"sm": 6, "md": 4, "xl": 3}),
                     ],
-                    spacing=self.theme.spacing_medium,
                 ),
-                padding=self.theme.padding_large,
-            ),
-            elevation=2,
+            ],
+            spacing=self.theme.spacing_medium,
         )
 
-        # Results section
-        results_section = ft.Card(
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Text(
-                            "Results",
-                            size=self.theme.text_heading,
-                            weight=ft.FontWeight.BOLD,
-                            text_align=ft.TextAlign.LEFT,
-                        ),
-                        self.results_column,
-                    ],
-                    spacing=self.theme.spacing_small,
-                ),
-                padding=self.theme.padding_large,
-            ),
-            elevation=2,
+        # Results section - using centralized helper
+        results_section = self._create_section(
+            title="Results",
+            controls=[self.results_column],
             visible=False,
         )
 
@@ -378,10 +384,14 @@ class DomainAnalyzerApp:
         self.page.update()
 
     def _on_window_event(self, e: ft.ControlEvent) -> None:
-        """Handle window events to prevent Flutter embedder error on close."""
+        """Handle window events to prevent Flutter embedder error on close.
+
+        Using sys.exit(0) instead of window_destroy() to avoid Flutter
+        'FlutterEngineRemoveView' error when closing the window.
+        """
         if e.data == "close":
-            # Just close the window without trying to remove views
-            self.page.window_destroy()
+            # Clean exit without calling window_destroy() which causes Flutter error
+            sys.exit(0)
 
     def display_results(self, domain: str, results: dict[str, Any]) -> None:
         """Display analysis results."""
@@ -552,17 +562,20 @@ class DomainAnalyzerApp:
                 content.append(self._create_warning_container(warning))
 
     def _text(self, text: str, **kwargs) -> ft.Text:
-        """Create a left-aligned text widget with defaults.
+        """Create a left-aligned, selectable text widget with defaults.
 
         Args:
             text: Text content
-            **kwargs: Additional Text properties
+            **kwargs: Additional Text properties (can override defaults)
 
         Returns:
-            Text widget with left alignment
+            Text widget with left alignment and text selection enabled
         """
+        # Set defaults (can be overridden by kwargs)
         if "text_align" not in kwargs:
             kwargs["text_align"] = ft.TextAlign.LEFT
+        if "selectable" not in kwargs:
+            kwargs["selectable"] = True  # ← ENABLE TEXT SELECTION for copy/paste
         return ft.Text(text, **kwargs)
 
     def _row(self, controls: list[ft.Control], **kwargs) -> ft.Row:
