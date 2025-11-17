@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Cross-Platform GUI Application (Desktop & Mobile)**
+  - Modern graphical interface built with Flet framework
+  - Supports Windows, macOS, Linux desktop platforms
+  - Mobile support for Android and iOS (via Flet packaging)
+  - Responsive UI that adapts to different screen sizes
+  - Interactive domain input with real-time validation
+  - Configurable analysis options via checkboxes (enable/disable specific checks)
+  - Real-time progress indicator with status updates
+  - Expandable result panels organized by category (DNS, HTTP, SSL, Email, etc.)
+  - Color-coded errors and warnings for easy identification
+  - All CLI analyzers available in GUI
+  - Uses existing configuration from config files
+  - Launch command: `wdt-app`
+  - Perfect for users who prefer graphical interfaces over command-line
+
 ### Changed
 - **Major Code Refactoring: Improved Architecture and Reduced Duplication**
   - Introduced `BaseAnalyzer` abstract class for all analyzers, ensuring consistent interface

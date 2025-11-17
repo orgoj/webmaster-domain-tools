@@ -1,6 +1,6 @@
 [project]
 name = "webmaster-domain-tool"
-version = "0.2.1"
+version = "0.3.0"
 description = "Comprehensive domain analysis tool for webmasters"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -33,6 +33,7 @@ dependencies = [
     "pydantic-settings>=2.2.0",
     "tomli>=2.0.0; python_version < '3.11'",
     "python-whois>=0.9.0",
+    "flet>=0.24.0",
 ]
 
 [project.optional-dependencies]
@@ -54,6 +55,7 @@ Issues = "https://github.com/orgoj/webmaster-domain-tool/issues"
 [project.scripts]
 webmaster-domain-tool = "webmaster_domain_tool.cli:main"
 wdt = "webmaster_domain_tool.cli:main"
+wdt-app = "webmaster_domain_tool.flet_app:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -101,3 +103,10 @@ python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 addopts = "--verbose --cov=webmaster_domain_tool --cov-report=term-missing"
+
+[dependency-groups]
+dev = [
+    "isort>=7.0.0",
+    "pre-commit>=4.4.0",
+    "pytest-cov>=7.0.0",
+]
