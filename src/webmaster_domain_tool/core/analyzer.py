@@ -293,6 +293,8 @@ def run_domain_analysis(
     skip_email: bool = False,
     skip_headers: bool = False,
     skip_site_verification: bool = False,
+    skip_seo: bool = False,
+    skip_favicon: bool = False,
     do_rbl_check: bool = False,
     # Progress callback for GUI
     progress_callback: Callable[[str], None] | None = None,
@@ -321,6 +323,8 @@ def run_domain_analysis(
         skip_email: Skip email security analysis
         skip_headers: Skip security headers analysis
         skip_site_verification: Skip site verification analysis
+        skip_seo: Skip SEO files analysis (robots.txt, sitemap.xml, llms.txt)
+        skip_favicon: Skip favicon detection
         do_rbl_check: Enable RBL blacklist checking
 
     Returns:
@@ -575,7 +579,7 @@ def run_domain_analysis(
             logger.debug("No IP addresses found for RBL check")
 
     # SEO Files Analysis (robots.txt, sitemap.xml, llms.txt)
-    if not config.analysis.skip_seo and results.http and results.http.preferred_final_url:
+    if not skip_seo and results.http and results.http.preferred_final_url:
         if progress_callback:
             progress_callback("Running SEO files analysis...")
         logger.info("Running SEO files analysis...")
@@ -588,7 +592,7 @@ def run_domain_analysis(
         results.seo = seo_analyzer.analyze(results.http.preferred_final_url)
 
     # Favicon Detection
-    if not config.analysis.skip_favicon and results.http and results.http.preferred_final_url:
+    if not skip_favicon and results.http and results.http.preferred_final_url:
         if progress_callback:
             progress_callback("Running favicon detection...")
         logger.info("Running favicon detection...")
