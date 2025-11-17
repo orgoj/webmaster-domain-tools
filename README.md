@@ -262,6 +262,9 @@ This solution is officially documented by the Flet team and is the standard work
 - ✅ **Modern, responsive UI** that adapts to desktop and mobile screens
 - ✅ **Interactive domain input** with validation
 - ✅ **Configurable analysis options** via checkboxes (enable/disable specific checks)
+- ✅ **Configuration profiles** - save, load, and switch between named configurations
+- ✅ **Visual configuration editor** with tabbed interface for all settings
+- ✅ **Client-side storage** - profiles persist across sessions
 - ✅ **Real-time progress** with status updates during analysis
 - ✅ **Expandable result panels** organized by category (DNS, HTTP, SSL, Email, etc.)
 - ✅ **Color-coded errors and warnings** for easy identification
@@ -273,6 +276,44 @@ This solution is officially documented by the Flet team and is the standard work
 - Easier to visualize complex results with expandable sections
 - Mobile-friendly for on-the-go domain analysis
 - No need to remember CLI flags and options
+
+#### Configuration Profiles (GUI)
+
+The GUI supports **named configuration profiles** for managing different analysis scenarios:
+
+**Managing Profiles:**
+1. **Select profile** from dropdown in header (default profiles: "default")
+2. **Edit settings** via ⚙️ Settings button - opens tabbed configuration editor
+3. **Save current config** as new profile via 💾 Save button
+4. **Delete profiles** via 🗑️ Delete button (cannot delete "default")
+
+**Configuration Editor Tabs:**
+- **DNS**: Nameservers, timeout, DNSSEC checking, www CNAME warnings
+- **HTTP**: Timeout, max redirects, custom user agent
+- **SSL/TLS**: Certificate expiry warning thresholds
+- **Email**: DKIM selectors, RBL checking, RBL servers
+- **Advanced Email**: BIMI, MTA-STS, TLS-RPT options
+- **Security Headers**: Individual header checks (HSTS, CSP, X-Frame-Options, etc.)
+- **SEO**: robots.txt, llms.txt, sitemap.xml checks
+- **Favicon**: HTML parsing, default path checking
+- **WHOIS**: Domain expiry warning thresholds
+- **Analysis Options**: Enable/disable individual analyzers
+- **Output**: CLI verbosity settings (CLI only)
+
+**Profile Storage:**
+- Profiles stored in browser client storage (persistent across sessions)
+- **Automatically restores your last used profile** when you reopen the app
+- JSON format with Pydantic validation
+- `default` profile auto-created on first run
+- All CLI configuration options available in GUI
+
+**Example Use Cases:**
+- `fast` - Minimal checks for quick scans (skip heavy analyzers)
+- `full` - All checks enabled for comprehensive analysis
+- `security` - Focus on SSL, headers, and security checks only
+- `email` - Detailed email configuration with custom DKIM selectors
+- `production` - Production-ready settings with strict thresholds
+- `testing` - Relaxed settings for development domains
 
 **Building for Mobile:**
 
