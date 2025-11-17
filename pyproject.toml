@@ -103,3 +103,10 @@ python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 addopts = "--verbose --cov=webmaster_domain_tool --cov-report=term-missing"
+
+[dependency-groups]
+dev = [
+    "isort>=7.0.0",
+    "pre-commit>=4.4.0",
+    "pytest-cov>=7.0.0",
+]

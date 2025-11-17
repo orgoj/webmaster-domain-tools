@@ -41,7 +41,7 @@ class DomainAnalyzerApp:
         self.domain_input = ft.TextField(
             label="Domain name",
             hint_text="example.com",
-            prefix_icon=ft.icons.LANGUAGE,
+            prefix_icon=ft.Icons.LANGUAGE,
             expand=True,
             autofocus=True,
             on_submit=lambda _: self.run_analysis(),
@@ -49,16 +49,16 @@ class DomainAnalyzerApp:
 
         self.analyze_button = ft.ElevatedButton(
             "Analyze Domain",
-            icon=ft.icons.SEARCH,
+            icon=ft.Icons.SEARCH,
             on_click=lambda _: self.run_analysis(),
             style=ft.ButtonStyle(
-                color=ft.colors.WHITE,
-                bgcolor=ft.colors.BLUE_700,
+                color=ft.Colors.WHITE,
+                bgcolor=ft.Colors.BLUE_700,
             ),
         )
 
         self.progress_bar = ft.ProgressBar(visible=False)
-        self.status_text = ft.Text("", size=14, color=ft.colors.GREY_700)
+        self.status_text = ft.Text("", size=14, color=ft.Colors.GREY_700)
 
         # Analysis options checkboxes
         self.check_dns = ft.Checkbox(label="DNS Analysis", value=True)
@@ -86,12 +86,12 @@ class DomainAnalyzerApp:
                 [
                     ft.Row(
                         [
-                            ft.Icon(ft.icons.DOMAIN, size=40, color=ft.colors.BLUE_700),
+                            ft.Icon(ft.Icons.DOMAIN, size=40, color=ft.Colors.BLUE_700),
                             ft.Text(
                                 "Webmaster Domain Tool",
                                 size=28,
                                 weight=ft.FontWeight.BOLD,
-                                color=ft.colors.BLUE_700,
+                                color=ft.Colors.BLUE_700,
                             ),
                         ],
                         alignment=ft.MainAxisAlignment.CENTER,
@@ -99,7 +99,7 @@ class DomainAnalyzerApp:
                     ft.Text(
                         "Comprehensive domain analysis for webmasters",
                         size=14,
-                        color=ft.colors.GREY_700,
+                        color=ft.Colors.GREY_700,
                         text_align=ft.TextAlign.CENTER,
                     ),
                 ],
@@ -461,14 +461,14 @@ class DomainAnalyzerApp:
         summary_card = ft.Container(
             content=ft.Row(
                 [
-                    ft.Icon(ft.icons.CHECK_CIRCLE, color=ft.colors.GREEN, size=30),
+                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN, size=30),
                     ft.Column(
                         [
                             ft.Text(f"Analysis completed for: {domain}", size=16, weight="bold"),
                             ft.Text(
                                 f"Errors: {total_errors} | Warnings: {total_warnings}",
                                 size=12,
-                                color=ft.colors.GREY_700,
+                                color=ft.Colors.GREY_700,
                             ),
                         ],
                         spacing=5,
@@ -476,7 +476,7 @@ class DomainAnalyzerApp:
                 ],
                 alignment=ft.MainAxisAlignment.START,
             ),
-            bgcolor=ft.colors.GREEN_50,
+            bgcolor=ft.Colors.GREEN_50,
             border_radius=10,
             padding=15,
         )
@@ -527,7 +527,7 @@ class DomainAnalyzerApp:
         self, title: str, icon: str, content: list[ft.Control], error_count: int = 0
     ) -> ft.ExpansionTile:
         """Create an expandable panel for results."""
-        title_color = ft.colors.RED if error_count > 0 else ft.colors.BLUE_700
+        title_color = ft.Colors.RED if error_count > 0 else ft.Colors.BLUE_700
 
         return ft.ExpansionTile(
             title=ft.Text(title, size=16, weight="bold", color=title_color),
@@ -546,11 +546,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.ERROR, color=ft.colors.RED, size=20),
-                                ft.Text(error, color=ft.colors.RED),
+                                ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED, size=20),
+                                ft.Text(error, color=ft.Colors.RED),
                             ]
                         ),
-                        bgcolor=ft.colors.RED_50,
+                        bgcolor=ft.Colors.RED_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -562,11 +562,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.WARNING, color=ft.colors.ORANGE, size=20),
-                                ft.Text(warning, color=ft.colors.ORANGE),
+                                ft.Icon(ft.Icons.WARNING, color=ft.Colors.ORANGE, size=20),
+                                ft.Text(warning, color=ft.Colors.ORANGE),
                             ]
                         ),
-                        bgcolor=ft.colors.ORANGE_50,
+                        bgcolor=ft.Colors.ORANGE_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -582,7 +582,7 @@ class DomainAnalyzerApp:
             content.append(ft.Text(f"Updated: {result.updated_date}"))
 
         return self._create_expandable_panel(
-            "WHOIS Information", ft.icons.INFO, content, len(result.errors)
+            "WHOIS Information", ft.Icons.INFO, content, len(result.errors)
         )
 
     def _create_dns_panel(self, result: Any) -> ft.ExpansionTile:
@@ -595,11 +595,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.ERROR, color=ft.colors.RED, size=20),
-                                ft.Text(error, color=ft.colors.RED),
+                                ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED, size=20),
+                                ft.Text(error, color=ft.Colors.RED),
                             ]
                         ),
-                        bgcolor=ft.colors.RED_50,
+                        bgcolor=ft.Colors.RED_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -611,11 +611,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.WARNING, color=ft.colors.ORANGE, size=20),
-                                ft.Text(warning, color=ft.colors.ORANGE),
+                                ft.Icon(ft.Icons.WARNING, color=ft.Colors.ORANGE, size=20),
+                                ft.Text(warning, color=ft.Colors.ORANGE),
                             ]
                         ),
-                        bgcolor=ft.colors.ORANGE_50,
+                        bgcolor=ft.Colors.ORANGE_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -627,13 +627,15 @@ class DomainAnalyzerApp:
                 record_type = record_key.split(":")[-1]
                 content.append(
                     ft.Text(
-                        f"{record_type} Records:", size=14, weight="bold", color=ft.colors.BLUE_700
+                        f"{record_type} Records:", size=14, weight="bold", color=ft.Colors.BLUE_700
                     )
                 )
                 for record in records:
                     content.append(ft.Text(f"  • {record.value}", size=12))
 
-        return self._create_expandable_panel("DNS Analysis", ft.icons.DNS, content, len(result.errors))
+        return self._create_expandable_panel(
+            "DNS Analysis", ft.Icons.DNS, content, len(result.errors)
+        )
 
     def _create_http_panel(self, result: Any) -> ft.ExpansionTile:
         """Create HTTP results panel."""
@@ -645,11 +647,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.ERROR, color=ft.colors.RED, size=20),
-                                ft.Text(error, color=ft.colors.RED),
+                                ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED, size=20),
+                                ft.Text(error, color=ft.Colors.RED),
                             ]
                         ),
-                        bgcolor=ft.colors.RED_50,
+                        bgcolor=ft.Colors.RED_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -661,11 +663,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.WARNING, color=ft.colors.ORANGE, size=20),
-                                ft.Text(warning, color=ft.colors.ORANGE),
+                                ft.Icon(ft.Icons.WARNING, color=ft.Colors.ORANGE, size=20),
+                                ft.Text(warning, color=ft.Colors.ORANGE),
                             ]
                         ),
-                        bgcolor=ft.colors.ORANGE_50,
+                        bgcolor=ft.Colors.ORANGE_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -678,11 +680,11 @@ class DomainAnalyzerApp:
                     f"Chain {i}: {chain.starting_url}",
                     size=14,
                     weight="bold",
-                    color=ft.colors.BLUE_700,
+                    color=ft.Colors.BLUE_700,
                 )
             )
             for response in chain.responses:
-                status_color = ft.colors.GREEN if response.status_code == 200 else ft.colors.ORANGE
+                status_color = ft.Colors.GREEN if response.status_code == 200 else ft.Colors.ORANGE
                 content.append(
                     ft.Text(
                         f"  → {response.status_code} {response.url}",
@@ -692,7 +694,7 @@ class DomainAnalyzerApp:
                 )
 
         return self._create_expandable_panel(
-            "HTTP/HTTPS Analysis", ft.icons.HTTP, content, len(result.errors)
+            "HTTP/HTTPS Analysis", ft.Icons.HTTP, content, len(result.errors)
         )
 
     def _create_ssl_panel(self, result: Any) -> ft.ExpansionTile:
@@ -705,11 +707,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.ERROR, color=ft.colors.RED, size=20),
-                                ft.Text(error, color=ft.colors.RED),
+                                ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED, size=20),
+                                ft.Text(error, color=ft.Colors.RED),
                             ]
                         ),
-                        bgcolor=ft.colors.RED_50,
+                        bgcolor=ft.Colors.RED_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -721,11 +723,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.WARNING, color=ft.colors.ORANGE, size=20),
-                                ft.Text(warning, color=ft.colors.ORANGE),
+                                ft.Icon(ft.Icons.WARNING, color=ft.Colors.ORANGE, size=20),
+                                ft.Text(warning, color=ft.Colors.ORANGE),
                             ]
                         ),
-                        bgcolor=ft.colors.ORANGE_50,
+                        bgcolor=ft.Colors.ORANGE_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -739,7 +741,7 @@ class DomainAnalyzerApp:
             content.append(ft.Text(f"Valid until: {cert.not_valid_after}", size=12))
 
         return self._create_expandable_panel(
-            "SSL/TLS Analysis", ft.icons.SECURITY, content, len(result.errors)
+            "SSL/TLS Analysis", ft.Icons.SECURITY, content, len(result.errors)
         )
 
     def _create_email_panel(self, result: Any, advanced_result: Any = None) -> ft.ExpansionTile:
@@ -752,11 +754,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.ERROR, color=ft.colors.RED, size=20),
-                                ft.Text(error, color=ft.colors.RED),
+                                ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED, size=20),
+                                ft.Text(error, color=ft.Colors.RED),
                             ]
                         ),
-                        bgcolor=ft.colors.RED_50,
+                        bgcolor=ft.Colors.RED_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -768,11 +770,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.WARNING, color=ft.colors.ORANGE, size=20),
-                                ft.Text(warning, color=ft.colors.ORANGE),
+                                ft.Icon(ft.Icons.WARNING, color=ft.Colors.ORANGE, size=20),
+                                ft.Text(warning, color=ft.Colors.ORANGE),
                             ]
                         ),
-                        bgcolor=ft.colors.ORANGE_50,
+                        bgcolor=ft.Colors.ORANGE_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -780,15 +782,13 @@ class DomainAnalyzerApp:
 
         # SPF
         if result.spf_record:
-            content.append(
-                ft.Text("SPF Record:", size=14, weight="bold", color=ft.colors.BLUE_700)
-            )
+            content.append(ft.Text("SPF Record:", size=14, weight="bold", color=ft.Colors.BLUE_700))
             content.append(ft.Text(f"  {result.spf_record}", size=12))
 
         # DMARC
         if result.dmarc_record:
             content.append(
-                ft.Text("DMARC Record:", size=14, weight="bold", color=ft.colors.BLUE_700)
+                ft.Text("DMARC Record:", size=14, weight="bold", color=ft.Colors.BLUE_700)
             )
             content.append(ft.Text(f"  {result.dmarc_record}", size=12))
 
@@ -796,18 +796,18 @@ class DomainAnalyzerApp:
         if advanced_result:
             if advanced_result.bimi_record:
                 content.append(
-                    ft.Text("BIMI Record:", size=14, weight="bold", color=ft.colors.BLUE_700)
+                    ft.Text("BIMI Record:", size=14, weight="bold", color=ft.Colors.BLUE_700)
                 )
                 content.append(ft.Text(f"  {advanced_result.bimi_record}", size=12))
 
             if advanced_result.mta_sts_policy:
                 content.append(
-                    ft.Text("MTA-STS:", size=14, weight="bold", color=ft.colors.BLUE_700)
+                    ft.Text("MTA-STS:", size=14, weight="bold", color=ft.Colors.BLUE_700)
                 )
                 content.append(ft.Text(f"  Mode: {advanced_result.mta_sts_policy}", size=12))
 
         return self._create_expandable_panel(
-            "Email Security", ft.icons.EMAIL, content, len(result.errors)
+            "Email Security", ft.Icons.EMAIL, content, len(result.errors)
         )
 
     def _create_headers_panel(self, result: Any) -> ft.ExpansionTile:
@@ -820,11 +820,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.ERROR, color=ft.colors.RED, size=20),
-                                ft.Text(error, color=ft.colors.RED),
+                                ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED, size=20),
+                                ft.Text(error, color=ft.Colors.RED),
                             ]
                         ),
-                        bgcolor=ft.colors.RED_50,
+                        bgcolor=ft.Colors.RED_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -836,11 +836,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.WARNING, color=ft.colors.ORANGE, size=20),
-                                ft.Text(warning, color=ft.colors.ORANGE),
+                                ft.Icon(ft.Icons.WARNING, color=ft.Colors.ORANGE, size=20),
+                                ft.Text(warning, color=ft.Colors.ORANGE),
                             ]
                         ),
-                        bgcolor=ft.colors.ORANGE_50,
+                        bgcolor=ft.Colors.ORANGE_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -852,7 +852,7 @@ class DomainAnalyzerApp:
             content.append(ft.Text(f"  {header_value}", size=12))
 
         return self._create_expandable_panel(
-            "Security Headers", ft.icons.SHIELD, content, len(result.errors)
+            "Security Headers", ft.Icons.SHIELD, content, len(result.errors)
         )
 
     def _create_rbl_panel(self, result: Any) -> ft.ExpansionTile:
@@ -865,11 +865,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.ERROR, color=ft.colors.RED, size=20),
-                                ft.Text(error, color=ft.colors.RED),
+                                ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED, size=20),
+                                ft.Text(error, color=ft.Colors.RED),
                             ]
                         ),
-                        bgcolor=ft.colors.RED_50,
+                        bgcolor=ft.Colors.RED_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -881,11 +881,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.WARNING, color=ft.colors.ORANGE, size=20),
-                                ft.Text(warning, color=ft.colors.ORANGE),
+                                ft.Icon(ft.Icons.WARNING, color=ft.Colors.ORANGE, size=20),
+                                ft.Text(warning, color=ft.Colors.ORANGE),
                             ]
                         ),
-                        bgcolor=ft.colors.ORANGE_50,
+                        bgcolor=ft.Colors.ORANGE_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -893,7 +893,7 @@ class DomainAnalyzerApp:
 
         # Blacklist status
         for ip, listings in result.blacklisted_ips.items():
-            content.append(ft.Text(f"IP: {ip}", size=14, weight="bold", color=ft.colors.RED))
+            content.append(ft.Text(f"IP: {ip}", size=14, weight="bold", color=ft.Colors.RED))
             for listing in listings:
                 content.append(ft.Text(f"  • Listed on: {listing}", size=12))
 
@@ -902,17 +902,19 @@ class DomainAnalyzerApp:
                 ft.Container(
                     content=ft.Row(
                         [
-                            ft.Icon(ft.icons.CHECK_CIRCLE, color=ft.colors.GREEN, size=20),
-                            ft.Text("No blacklist listings found", color=ft.colors.GREEN),
+                            ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN, size=20),
+                            ft.Text("No blacklist listings found", color=ft.Colors.GREEN),
                         ]
                     ),
-                    bgcolor=ft.colors.GREEN_50,
+                    bgcolor=ft.Colors.GREEN_50,
                     border_radius=5,
                     padding=10,
                 )
             )
 
-        return self._create_expandable_panel("RBL Check", ft.icons.BLOCK, content, len(result.errors))
+        return self._create_expandable_panel(
+            "RBL Check", ft.Icons.BLOCK, content, len(result.errors)
+        )
 
     def _create_seo_panel(self, result: Any) -> ft.ExpansionTile:
         """Create SEO files results panel."""
@@ -924,11 +926,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.ERROR, color=ft.colors.RED, size=20),
-                                ft.Text(error, color=ft.colors.RED),
+                                ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED, size=20),
+                                ft.Text(error, color=ft.Colors.RED),
                             ]
                         ),
-                        bgcolor=ft.colors.RED_50,
+                        bgcolor=ft.Colors.RED_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -940,11 +942,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.WARNING, color=ft.colors.ORANGE, size=20),
-                                ft.Text(warning, color=ft.colors.ORANGE),
+                                ft.Icon(ft.Icons.WARNING, color=ft.Colors.ORANGE, size=20),
+                                ft.Text(warning, color=ft.Colors.ORANGE),
                             ]
                         ),
-                        bgcolor=ft.colors.ORANGE_50,
+                        bgcolor=ft.Colors.ORANGE_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -956,11 +958,11 @@ class DomainAnalyzerApp:
                 ft.Container(
                     content=ft.Row(
                         [
-                            ft.Icon(ft.icons.CHECK_CIRCLE, color=ft.colors.GREEN, size=20),
-                            ft.Text("robots.txt found", color=ft.colors.GREEN),
+                            ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN, size=20),
+                            ft.Text("robots.txt found", color=ft.Colors.GREEN),
                         ]
                     ),
-                    bgcolor=ft.colors.GREEN_50,
+                    bgcolor=ft.Colors.GREEN_50,
                     border_radius=5,
                     padding=10,
                 )
@@ -971,11 +973,11 @@ class DomainAnalyzerApp:
                 ft.Container(
                     content=ft.Row(
                         [
-                            ft.Icon(ft.icons.CHECK_CIRCLE, color=ft.colors.GREEN, size=20),
-                            ft.Text("sitemap.xml found", color=ft.colors.GREEN),
+                            ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN, size=20),
+                            ft.Text("sitemap.xml found", color=ft.Colors.GREEN),
                         ]
                     ),
-                    bgcolor=ft.colors.GREEN_50,
+                    bgcolor=ft.Colors.GREEN_50,
                     border_radius=5,
                     padding=10,
                 )
@@ -986,17 +988,19 @@ class DomainAnalyzerApp:
                 ft.Container(
                     content=ft.Row(
                         [
-                            ft.Icon(ft.icons.CHECK_CIRCLE, color=ft.colors.GREEN, size=20),
-                            ft.Text("llms.txt found", color=ft.colors.GREEN),
+                            ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN, size=20),
+                            ft.Text("llms.txt found", color=ft.Colors.GREEN),
                         ]
                     ),
-                    bgcolor=ft.colors.GREEN_50,
+                    bgcolor=ft.Colors.GREEN_50,
                     border_radius=5,
                     padding=10,
                 )
             )
 
-        return self._create_expandable_panel("SEO Files", ft.icons.SEARCH, content, len(result.errors))
+        return self._create_expandable_panel(
+            "SEO Files", ft.Icons.SEARCH, content, len(result.errors)
+        )
 
     def _create_favicon_panel(self, result: Any) -> ft.ExpansionTile:
         """Create favicon detection results panel."""
@@ -1008,11 +1012,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.ERROR, color=ft.colors.RED, size=20),
-                                ft.Text(error, color=ft.colors.RED),
+                                ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED, size=20),
+                                ft.Text(error, color=ft.Colors.RED),
                             ]
                         ),
-                        bgcolor=ft.colors.RED_50,
+                        bgcolor=ft.Colors.RED_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -1024,11 +1028,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.WARNING, color=ft.colors.ORANGE, size=20),
-                                ft.Text(warning, color=ft.colors.ORANGE),
+                                ft.Icon(ft.Icons.WARNING, color=ft.Colors.ORANGE, size=20),
+                                ft.Text(warning, color=ft.Colors.ORANGE),
                             ]
                         ),
-                        bgcolor=ft.colors.ORANGE_50,
+                        bgcolor=ft.Colors.ORANGE_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -1037,15 +1041,17 @@ class DomainAnalyzerApp:
         # Favicon findings
         if result.favicons:
             content.append(
-                ft.Text("Found favicons:", size=14, weight="bold", color=ft.colors.BLUE_700)
+                ft.Text("Found favicons:", size=14, weight="bold", color=ft.Colors.BLUE_700)
             )
             for favicon in result.favicons:
                 content.append(ft.Text(f"  • {favicon.url}", size=12))
                 if favicon.sizes:
-                    content.append(ft.Text(f"    Sizes: {favicon.sizes}", size=11, color=ft.colors.GREY_700))
+                    content.append(
+                        ft.Text(f"    Sizes: {favicon.sizes}", size=11, color=ft.Colors.GREY_700)
+                    )
 
         return self._create_expandable_panel(
-            "Favicon Detection", ft.icons.IMAGE, content, len(result.errors)
+            "Favicon Detection", ft.Icons.IMAGE, content, len(result.errors)
         )
 
     def _create_site_verification_panel(self, result: Any) -> ft.ExpansionTile:
@@ -1058,11 +1064,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.ERROR, color=ft.colors.RED, size=20),
-                                ft.Text(error, color=ft.colors.RED),
+                                ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED, size=20),
+                                ft.Text(error, color=ft.Colors.RED),
                             ]
                         ),
-                        bgcolor=ft.colors.RED_50,
+                        bgcolor=ft.Colors.RED_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -1074,11 +1080,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.WARNING, color=ft.colors.ORANGE, size=20),
-                                ft.Text(warning, color=ft.colors.ORANGE),
+                                ft.Icon(ft.Icons.WARNING, color=ft.Colors.ORANGE, size=20),
+                                ft.Text(warning, color=ft.Colors.ORANGE),
                             ]
                         ),
-                        bgcolor=ft.colors.ORANGE_50,
+                        bgcolor=ft.Colors.ORANGE_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -1088,9 +1094,7 @@ class DomainAnalyzerApp:
         for service_name, verifications in result.verifications.items():
             if verifications:
                 content.append(
-                    ft.Text(
-                        f"{service_name}:", size=14, weight="bold", color=ft.colors.BLUE_700
-                    )
+                    ft.Text(f"{service_name}:", size=14, weight="bold", color=ft.Colors.BLUE_700)
                 )
                 for verification in verifications:
                     content.append(
@@ -1101,7 +1105,7 @@ class DomainAnalyzerApp:
                     )
 
         return self._create_expandable_panel(
-            "Site Verification", ft.icons.VERIFIED, content, len(result.errors)
+            "Site Verification", ft.Icons.VERIFIED, content, len(result.errors)
         )
 
     def _create_cdn_panel(self, result: Any) -> ft.ExpansionTile:
@@ -1114,11 +1118,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.ERROR, color=ft.colors.RED, size=20),
-                                ft.Text(error, color=ft.colors.RED),
+                                ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED, size=20),
+                                ft.Text(error, color=ft.Colors.RED),
                             ]
                         ),
-                        bgcolor=ft.colors.RED_50,
+                        bgcolor=ft.Colors.RED_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -1130,11 +1134,11 @@ class DomainAnalyzerApp:
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.icons.WARNING, color=ft.colors.ORANGE, size=20),
-                                ft.Text(warning, color=ft.colors.ORANGE),
+                                ft.Icon(ft.Icons.WARNING, color=ft.Colors.ORANGE, size=20),
+                                ft.Text(warning, color=ft.Colors.ORANGE),
                             ]
                         ),
-                        bgcolor=ft.colors.ORANGE_50,
+                        bgcolor=ft.Colors.ORANGE_50,
                         border_radius=5,
                         padding=10,
                     )
@@ -1143,26 +1147,28 @@ class DomainAnalyzerApp:
         # CDN detection
         if result.detected_cdns:
             content.append(
-                ft.Text("Detected CDNs:", size=14, weight="bold", color=ft.colors.BLUE_700)
+                ft.Text("Detected CDNs:", size=14, weight="bold", color=ft.Colors.BLUE_700)
             )
             for cdn in result.detected_cdns:
                 content.append(ft.Text(f"  • {cdn}", size=12))
         else:
-            content.append(ft.Text("No CDN detected", size=12, color=ft.colors.GREY_700))
+            content.append(ft.Text("No CDN detected", size=12, color=ft.Colors.GREY_700))
 
-        return self._create_expandable_panel("CDN Detection", ft.icons.CLOUD, content, len(result.errors))
+        return self._create_expandable_panel(
+            "CDN Detection", ft.Icons.CLOUD, content, len(result.errors)
+        )
 
     def show_error(self, message: str) -> None:
         """Show error message."""
         error_banner = ft.Container(
             content=ft.Row(
                 [
-                    ft.Icon(ft.icons.ERROR, color=ft.colors.RED),
-                    ft.Text(message, color=ft.colors.RED),
+                    ft.Icon(ft.Icons.ERROR, color=ft.Colors.RED),
+                    ft.Text(message, color=ft.Colors.RED),
                 ],
             ),
-            bgcolor=ft.colors.RED_50,
-            border=ft.border.all(1, ft.colors.RED),
+            bgcolor=ft.Colors.RED_50,
+            border=ft.border.all(1, ft.Colors.RED),
             border_radius=10,
             padding=15,
         )
