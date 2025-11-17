@@ -213,6 +213,7 @@ class TestPanelCreation:
         advanced_result = Mock()
         advanced_result.bimi_record = "v=BIMI1; l=https://example.com/logo.svg"
         advanced_result.mta_sts_policy = "enforce"
+        advanced_result.warnings = []  # Add warnings attribute
 
         panel = app._create_email_panel(basic_result, advanced_result)
         assert panel is not None

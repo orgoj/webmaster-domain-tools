@@ -126,8 +126,12 @@ class DomainAnalyzerApp:
         self.check_favicon = ft.Checkbox(label="Favicon Detection", value=True)
         self.check_site_verification = ft.Checkbox(label="Site Verification", value=True)
 
-        # Results container
-        self.results_column = ft.Column(spacing=self.theme.spacing_small, expand=True)
+        # Results container (aligned left, not centered)
+        self.results_column = ft.Column(
+            spacing=self.theme.spacing_small,
+            expand=True,
+            horizontal_alignment=ft.CrossAxisAlignment.START,
+        )
 
         # Build UI
         self._build_ui()
@@ -515,18 +519,35 @@ class DomainAnalyzerApp:
             if hasattr(result, "warnings"):
                 total_warnings += len(result.warnings)
 
+        # Determine status icon and color based on errors/warnings
+        if total_errors > 0:
+            status_icon = ft.Icons.ERROR
+            status_color = self.theme.error_color
+            status_bg = self.theme.error_bg
+            status_text = "Analysis completed with errors"
+        elif total_warnings > 0:
+            status_icon = ft.Icons.WARNING
+            status_color = "#FFA500"  # Orange
+            status_bg = "#FFF3CD"  # Light orange/yellow background
+            status_text = "Analysis completed with warnings"
+        else:
+            status_icon = ft.Icons.CHECK_CIRCLE
+            status_color = self.theme.success_color
+            status_bg = self.theme.success_bg
+            status_text = "Analysis completed successfully"
+
         summary_card = ft.Container(
             content=ft.Row(
                 [
                     ft.Icon(
-                        ft.Icons.CHECK_CIRCLE,
-                        color=self.theme.success_color,
+                        status_icon,
+                        color=status_color,
                         size=self.theme.icon_medium,
                     ),
                     ft.Column(
                         [
                             ft.Text(
-                                f"Analysis completed for: {domain}",
+                                f"{status_text}: {domain}",
                                 size=self.theme.text_subheading,
                                 weight="bold",
                             ),
@@ -537,11 +558,12 @@ class DomainAnalyzerApp:
                             ),
                         ],
                         spacing=self.theme.spacing_tiny,
+                        alignment=ft.MainAxisAlignment.START,
                     ),
                 ],
                 alignment=ft.MainAxisAlignment.START,
             ),
-            bgcolor=self.theme.success_bg,
+            bgcolor=status_bg,
             border_radius=self.theme.border_radius_large,
             padding=self.theme.padding_medium,
         )
@@ -650,16 +672,38 @@ class DomainAnalyzerApp:
                 content.append(self._create_warning_container(warning))
 
     def _create_expandable_panel(
-        self, title: str, icon: str, content: list[ft.Control], error_count: int = 0
+        self,
+        title: str,
+        icon: str,
+        content: list[ft.Control],
+        error_count: int = 0,
+        warning_count: int = 0,
     ) -> ft.ExpansionTile:
         """Create an expandable panel for results."""
-        title_color = self.theme.error_color if error_count > 0 else self.theme.text_primary
+        # Build title with error/warning counts
+        title_parts = [title]
+        if error_count > 0:
+            title_parts.append(f"({error_count} error{'s' if error_count > 1 else ''})")
+        if warning_count > 0:
+            title_parts.append(f"({warning_count} warning{'s' if warning_count > 1 else ''})")
+
+        full_title = " ".join(title_parts)
+
+        # Color based on severity: errors > warnings > normal
+        if error_count > 0:
+            title_color = self.theme.error_color
+        elif warning_count > 0:
+            title_color = "#FFA500"  # Orange for warnings
+        else:
+            title_color = self.theme.text_primary
 
         return ft.ExpansionTile(
-            title=ft.Text(title, size=self.theme.text_subheading, weight="bold", color=title_color),
+            title=ft.Text(
+                full_title, size=self.theme.text_subheading, weight="bold", color=title_color
+            ),
             leading=ft.Icon(icon, color=title_color),
             controls=content,
-            initially_expanded=error_count > 0,
+            initially_expanded=error_count > 0,  # Auto-expand if errors
         )
 
     def _create_whois_panel(self, result: Any) -> ft.ExpansionTile:
@@ -699,7 +743,7 @@ class DomainAnalyzerApp:
             content.append(ft.Text(f"Admin: {' / '.join(admin_parts)}"))
 
         return self._create_expandable_panel(
-            "WHOIS Information", ft.Icons.INFO, content, len(result.errors)
+            "WHOIS Information", ft.Icons.INFO, content, len(result.errors), len(result.warnings)
         )
 
     def _create_dns_panel(self, result: Any) -> ft.ExpansionTile:
@@ -724,7 +768,7 @@ class DomainAnalyzerApp:
                     content.append(ft.Text(f"  • {record.value}", size=self.theme.text_body))
 
         return self._create_expandable_panel(
-            "DNS Analysis", ft.Icons.DNS, content, len(result.errors)
+            "DNS Analysis", ft.Icons.DNS, content, len(result.errors), len(result.warnings)
         )
 
     def _create_http_panel(self, result: Any) -> ft.ExpansionTile:
@@ -758,7 +802,7 @@ class DomainAnalyzerApp:
                 )
 
         return self._create_expandable_panel(
-            "HTTP/HTTPS Analysis", ft.Icons.HTTP, content, len(result.errors)
+            "HTTP/HTTPS Analysis", ft.Icons.HTTP, content, len(result.errors), len(result.warnings)
         )
 
     def _create_ssl_panel(self, result: Any) -> ft.ExpansionTile:
@@ -787,7 +831,7 @@ class DomainAnalyzerApp:
                 )
 
         return self._create_expandable_panel(
-            "SSL/TLS Analysis", ft.Icons.SECURITY, content, len(result.errors)
+            "SSL/TLS Analysis", ft.Icons.SECURITY, content, len(result.errors), len(result.warnings)
         )
 
     def _create_email_panel(self, result: Any, advanced_result: Any = None) -> ft.ExpansionTile:
@@ -850,8 +894,17 @@ class DomainAnalyzerApp:
                     )
                 )
 
+        # Count warnings from both basic and advanced email results
+        warning_count = len(result.warnings)
+        if advanced_result and hasattr(advanced_result, "warnings"):
+            warning_count += len(advanced_result.warnings)
+
         return self._create_expandable_panel(
-            "Email Security", ft.Icons.EMAIL, content, len(result.errors)
+            "Email Security",
+            ft.Icons.EMAIL,
+            content,
+            len(result.errors),
+            warning_count,
         )
 
     def _create_headers_panel(self, result: Any) -> ft.ExpansionTile:
@@ -869,7 +922,7 @@ class DomainAnalyzerApp:
                 content.append(ft.Text("  ✗ Missing", size=self.theme.text_body, color="red"))
 
         return self._create_expandable_panel(
-            "Security Headers", ft.Icons.SHIELD, content, len(result.errors)
+            "Security Headers", ft.Icons.SHIELD, content, len(result.errors), len(result.warnings)
         )
 
     def _create_rbl_panel(self, result: Any) -> ft.ExpansionTile:
@@ -914,7 +967,7 @@ class DomainAnalyzerApp:
             )
 
         return self._create_expandable_panel(
-            "RBL Check", ft.Icons.BLOCK, content, len(result.errors)
+            "RBL Check", ft.Icons.BLOCK, content, len(result.errors), len(result.warnings)
         )
 
     def _create_seo_panel(self, result: Any) -> ft.ExpansionTile:
@@ -985,7 +1038,7 @@ class DomainAnalyzerApp:
             )
 
         return self._create_expandable_panel(
-            "SEO Files", ft.Icons.SEARCH, content, len(result.errors)
+            "SEO Files", ft.Icons.SEARCH, content, len(result.errors), len(result.warnings)
         )
 
     def _create_favicon_panel(self, result: Any) -> ft.ExpansionTile:
@@ -1016,7 +1069,7 @@ class DomainAnalyzerApp:
                     )
 
         return self._create_expandable_panel(
-            "Favicon Detection", ft.Icons.IMAGE, content, len(result.errors)
+            "Favicon Detection", ft.Icons.IMAGE, content, len(result.errors), len(result.warnings)
         )
 
     def _create_site_verification_panel(self, result: Any) -> ft.ExpansionTile:
@@ -1048,7 +1101,11 @@ class DomainAnalyzerApp:
                     )
 
         return self._create_expandable_panel(
-            "Site Verification", ft.Icons.VERIFIED, content, len(result.errors)
+            "Site Verification",
+            ft.Icons.VERIFIED,
+            content,
+            len(result.errors),
+            len(result.warnings),
         )
 
     def _create_cdn_panel(self, result: Any) -> ft.ExpansionTile:
@@ -1090,7 +1147,7 @@ class DomainAnalyzerApp:
             )
 
         return self._create_expandable_panel(
-            "CDN Detection", ft.Icons.CLOUD, content, len(result.errors)
+            "CDN Detection", ft.Icons.CLOUD, content, len(result.errors), len(result.warnings)
         )
 
     def show_error(self, message: str) -> None:
