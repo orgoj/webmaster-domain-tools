@@ -5,7 +5,32 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from webmaster_domain_tool.analyzers.advanced_email_security import (
+    AdvancedEmailSecurityResult,
+    BIMIRecord,
+    MTASTSRecord,
+)
+from webmaster_domain_tool.analyzers.cdn_detector import CDNDetectionResult
+from webmaster_domain_tool.analyzers.dns_analyzer import DNSAnalysisResult, DNSRecord
+from webmaster_domain_tool.analyzers.email_security import (
+    DMARCRecord,
+    EmailSecurityResult,
+    SPFRecord,
+)
+from webmaster_domain_tool.analyzers.favicon_analyzer import FaviconAnalysisResult
+from webmaster_domain_tool.analyzers.http_analyzer import (
+    HTTPAnalysisResult,
+    HTTPResponse,
+    RedirectChain,
+)
+from webmaster_domain_tool.analyzers.rbl_checker import RBLAnalysisResult
+from webmaster_domain_tool.analyzers.security_headers import SecurityHeadersResult
+from webmaster_domain_tool.analyzers.seo_files_analyzer import SEOFilesAnalysisResult
+from webmaster_domain_tool.analyzers.site_verification_analyzer import (
+    SiteVerificationAnalysisResult,
+)
 from webmaster_domain_tool.analyzers.ssl_analyzer import CertificateInfo, SSLAnalysisResult
+from webmaster_domain_tool.analyzers.whois_analyzer import WhoisAnalysisResult
 from webmaster_domain_tool.flet_app import DomainAnalyzerApp
 
 
@@ -198,9 +223,19 @@ class TestPanelCreation:
         result.domain = "example.com"
         result.errors = []
         result.warnings = []
-        result.present_headers = {
-            "Strict-Transport-Security": "max-age=31536000",
-            "Content-Security-Policy": "default-src 'self'",
+
+        # headers is dict of SecurityHeaderCheck objects
+        header_check_1 = Mock()
+        header_check_1.present = True
+        header_check_1.value = "max-age=31536000"
+
+        header_check_2 = Mock()
+        header_check_2.present = True
+        header_check_2.value = "default-src 'self'"
+
+        result.headers = {
+            "Strict-Transport-Security": header_check_1,
+            "Content-Security-Policy": header_check_2,
         }
 
         panel = app._create_headers_panel(result)
@@ -212,7 +247,8 @@ class TestPanelCreation:
         result.domain = "example.com"
         result.errors = []
         result.warnings = []
-        result.blacklisted_ips = {}
+        result.checks = []  # list of RBLCheckResult objects
+        result.total_listed = 0
 
         panel = app._create_rbl_panel(result)
         assert panel is not None
@@ -223,7 +259,15 @@ class TestPanelCreation:
         result.domain = "example.com"
         result.errors = ["IP is blacklisted"]
         result.warnings = []
-        result.blacklisted_ips = {"192.0.2.1": ["zen.spamhaus.org", "bl.spamcop.net"]}
+
+        # checks is list of RBLCheckResult objects
+        check = Mock()
+        check.ip = "192.0.2.1"
+        check.listed = True
+        check.blacklists = ["zen.spamhaus.org", "bl.spamcop.net"]
+
+        result.checks = [check]
+        result.total_listed = 1
 
         panel = app._create_rbl_panel(result)
         assert panel is not None
@@ -235,8 +279,18 @@ class TestPanelCreation:
         result.domain = "example.com"
         result.errors = []
         result.warnings = []
-        result.robots_txt = "User-agent: *\nDisallow: /admin/"
-        result.sitemap_xml = "https://example.com/sitemap.xml"
+
+        # robots is RobotsResult object
+        robots_result = Mock()
+        robots_result.content = "User-agent: *\nDisallow: /admin/"
+        result.robots = robots_result
+
+        # sitemaps is list of SitemapResult objects
+        sitemap_result = Mock()
+        sitemap_result.url = "https://example.com/sitemap.xml"
+        sitemap_result.url_count = 100
+        result.sitemaps = [sitemap_result]
+
         result.llms_txt = "# AI Crawler Instructions"
 
         panel = app._create_seo_panel(result)
@@ -264,12 +318,16 @@ class TestPanelCreation:
         result.errors = []
         result.warnings = []
 
-        verification = Mock()
-        verification.service = "Google"
-        verification.verification_id = "ABC123"
-        verification.method = "dns"
+        # service_results is list of ServiceResult objects
+        verification_id = Mock()
+        verification_id.verification_id = "ABC123"
+        verification_id.method = "dns"
 
-        result.verifications = {"Google": [verification]}
+        service_result = Mock()
+        service_result.service = "Google"
+        service_result.detected_verification_ids = [verification_id]
+
+        result.service_results = [service_result]
 
         panel = app._create_site_verification_panel(result)
         assert panel is not None
@@ -280,7 +338,11 @@ class TestPanelCreation:
         result.domain = "example.com"
         result.errors = []
         result.warnings = []
-        result.detected_cdns = ["Cloudflare"]
+        result.cdn_detected = True
+        result.cdn_provider = "Cloudflare"
+        result.detection_method = "header"
+        result.confidence = "high"
+        result.evidence = ["CF-Ray header present"]
 
         panel = app._create_cdn_panel(result)
         assert panel is not None
@@ -291,7 +353,11 @@ class TestPanelCreation:
         result.domain = "example.com"
         result.errors = []
         result.warnings = []
-        result.detected_cdns = []
+        result.cdn_detected = False
+        result.cdn_provider = None
+        result.detection_method = None
+        result.confidence = "unknown"
+        result.evidence = []
 
         panel = app._create_cdn_panel(result)
         assert panel is not None
@@ -347,3 +413,150 @@ class TestDisplayResults:
         # Verify results are displayed
         assert app.results_card.visible is True
         assert len(app.results_column.controls) > 0
+
+    def test_display_all_results_complete_analysis(self, app):
+        """INTEGRATION TEST: Display ALL analyzer results to catch AttributeErrors.
+
+        This test creates REAL objects from ALL analyzers and displays them all
+        to ensure no AttributeError occurs in any panel creation method.
+        """
+        # WHOIS Result
+        whois_result = WhoisAnalysisResult(
+            domain="example.com",
+            registrar="Example Registrar",
+            creation_date=datetime(2020, 1, 1),
+            expiration_date=datetime(2025, 1, 1),
+        )
+
+        # DNS Result
+        dns_result = DNSAnalysisResult(
+            domain="example.com",
+            records={
+                "example.com:A": [
+                    DNSRecord(record_type="A", name="example.com", value="192.0.2.1", ttl=300)
+                ],
+                "example.com:MX": [
+                    DNSRecord(
+                        record_type="MX", name="example.com", value="10 mail.example.com", ttl=300
+                    )
+                ],
+            },
+        )
+
+        # HTTP Result
+        http_result = HTTPAnalysisResult(
+            domain="example.com",
+            chains=[
+                RedirectChain(
+                    start_url="http://example.com",
+                    final_url="https://example.com",
+                    responses=[
+                        HTTPResponse(
+                            url="http://example.com",
+                            status_code=301,
+                            headers={"Location": "https://example.com"},
+                        ),
+                        HTTPResponse(
+                            url="https://example.com",
+                            status_code=200,
+                            headers={"Content-Type": "text/html"},
+                        ),
+                    ],
+                )
+            ],
+        )
+
+        # SSL Result - MUST use correct attribute names!
+        cert = CertificateInfo(
+            subject={"CN": "example.com"},
+            issuer={"CN": "Let's Encrypt"},
+            version=3,
+            serial_number="123456789",
+            not_before=datetime(2024, 1, 1),  # not_before, NOT not_valid_before!
+            not_after=datetime(2025, 1, 1),  # not_after, NOT not_valid_after!
+        )
+        ssl_result = SSLAnalysisResult(
+            domain="example.com",
+            certificates={"example.com": cert},  # certificates (plural), NOT certificate!
+        )
+
+        # Email Security Result
+        email_result = EmailSecurityResult(
+            domain="example.com",
+            spf=SPFRecord(record="v=spf1 include:_spf.google.com ~all", is_valid=True),
+            dmarc=DMARCRecord(record="v=DMARC1; p=quarantine;", policy="quarantine", is_valid=True),
+        )
+
+        # Advanced Email Security Result
+        advanced_email_result = AdvancedEmailSecurityResult(
+            domain="example.com",
+            bimi=BIMIRecord(
+                domain="example.com",
+                record_found=True,
+                record_value="v=BIMI1; l=https://example.com/logo.svg",
+            ),
+            mta_sts=MTASTSRecord(
+                domain="example.com",
+                record_found=True,
+                policy_mode="enforce",
+            ),
+        )
+
+        # Security Headers Result - create with MINIMAL parameters
+        headers_result = SecurityHeadersResult(
+            domain="example.com",
+            url="https://example.com",
+        )
+
+        # RBL Result
+        rbl_result = RBLAnalysisResult(
+            domain="example.com",
+        )
+
+        # SEO Files Result
+        seo_result = SEOFilesAnalysisResult(
+            domain="example.com",
+        )
+
+        # Favicon Result
+        favicon_result = FaviconAnalysisResult(
+            domain="example.com",
+        )
+
+        # Site Verification Result
+        site_verification_result = SiteVerificationAnalysisResult(
+            domain="example.com",
+        )
+
+        # CDN Detection Result - MINIMAL
+        cdn_result = CDNDetectionResult(
+            domain="example.com",
+        )
+
+        # Create complete results dict with ALL analyzers
+        results = {
+            "whois": whois_result,
+            "dns": dns_result,
+            "http": http_result,
+            "ssl": ssl_result,
+            "email": email_result,
+            "advanced_email": advanced_email_result,
+            "headers": headers_result,
+            "rbl": rbl_result,
+            "seo": seo_result,
+            "favicon": favicon_result,
+            "site_verification": site_verification_result,
+            "cdn": cdn_result,
+        }
+
+        # This MUST NOT raise any AttributeError!
+        # If it does, it means we're using wrong attribute names somewhere
+        app.display_results("example.com", results)
+
+        # Verify all results are displayed
+        assert app.results_card.visible is True
+        assert len(app.results_column.controls) > 0
+
+        # Should have summary + 12 panels (one for each analyzer)
+        # Note: advanced_email is merged into email panel, so we get 11 panels + summary
+        assert len(app.results_column.controls) >= 11

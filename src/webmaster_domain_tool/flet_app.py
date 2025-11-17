@@ -797,7 +797,7 @@ class DomainAnalyzerApp:
         self._add_errors_and_warnings(content, result)
 
         # SPF
-        if result.spf_record:
+        if result.spf:
             content.append(
                 ft.Text(
                     "SPF Record:",
@@ -806,10 +806,10 @@ class DomainAnalyzerApp:
                     color=self.theme.text_primary,
                 )
             )
-            content.append(ft.Text(f"  {result.spf_record}", size=self.theme.text_body))
+            content.append(ft.Text(f"  {result.spf.record}", size=self.theme.text_body))
 
         # DMARC
-        if result.dmarc_record:
+        if result.dmarc:
             content.append(
                 ft.Text(
                     "DMARC Record:",
@@ -818,11 +818,11 @@ class DomainAnalyzerApp:
                     color=self.theme.text_primary,
                 )
             )
-            content.append(ft.Text(f"  {result.dmarc_record}", size=self.theme.text_body))
+            content.append(ft.Text(f"  {result.dmarc.record}", size=self.theme.text_body))
 
         # Advanced email (BIMI, MTA-STS, TLS-RPT)
         if advanced_result:
-            if advanced_result.bimi_record:
+            if advanced_result.bimi:
                 content.append(
                     ft.Text(
                         "BIMI Record:",
@@ -832,10 +832,10 @@ class DomainAnalyzerApp:
                     )
                 )
                 content.append(
-                    ft.Text(f"  {advanced_result.bimi_record}", size=self.theme.text_body)
+                    ft.Text(f"  {advanced_result.bimi.record_value}", size=self.theme.text_body)
                 )
 
-            if advanced_result.mta_sts_policy:
+            if advanced_result.mta_sts:
                 content.append(
                     ft.Text(
                         "MTA-STS:",
@@ -845,7 +845,9 @@ class DomainAnalyzerApp:
                     )
                 )
                 content.append(
-                    ft.Text(f"  Mode: {advanced_result.mta_sts_policy}", size=self.theme.text_body)
+                    ft.Text(
+                        f"  Mode: {advanced_result.mta_sts.policy_mode}", size=self.theme.text_body
+                    )
                 )
 
         return self._create_expandable_panel(
@@ -858,10 +860,13 @@ class DomainAnalyzerApp:
 
         self._add_errors_and_warnings(content, result)
 
-        # Present headers
-        for header_name, header_value in result.present_headers.items():
+        # Headers (dict of SecurityHeaderCheck objects)
+        for header_name, header_check in result.headers.items():
             content.append(ft.Text(f"{header_name}:", size=self.theme.text_label, weight="bold"))
-            content.append(ft.Text(f"  {header_value}", size=self.theme.text_body))
+            if header_check.present:
+                content.append(ft.Text("  ✓ Present", size=self.theme.text_body, color="green"))
+            else:
+                content.append(ft.Text("  ✗ Missing", size=self.theme.text_body, color="red"))
 
         return self._create_expandable_panel(
             "Security Headers", ft.Icons.SHIELD, content, len(result.errors)
@@ -874,19 +879,22 @@ class DomainAnalyzerApp:
         self._add_errors_and_warnings(content, result)
 
         # Blacklist status
-        for ip, listings in result.blacklisted_ips.items():
-            content.append(
-                ft.Text(
-                    f"IP: {ip}",
-                    size=self.theme.text_label,
-                    weight="bold",
-                    color=self.theme.error_color,
+        for check in result.checks:
+            if check.listed:
+                content.append(
+                    ft.Text(
+                        f"IP: {check.ip}",
+                        size=self.theme.text_label,
+                        weight="bold",
+                        color=self.theme.error_color,
+                    )
                 )
-            )
-            for listing in listings:
-                content.append(ft.Text(f"  • Listed on: {listing}", size=self.theme.text_body))
+                for blacklist in check.blacklists:
+                    content.append(
+                        ft.Text(f"  • Listed on: {blacklist}", size=self.theme.text_body)
+                    )
 
-        if not result.blacklisted_ips:
+        if result.total_listed == 0:
             content.append(
                 ft.Container(
                     content=ft.Row(
@@ -916,7 +924,7 @@ class DomainAnalyzerApp:
         self._add_errors_and_warnings(content, result)
 
         # SEO files status
-        if result.robots_txt:
+        if result.robots:
             content.append(
                 ft.Container(
                     content=ft.Row(
@@ -935,7 +943,7 @@ class DomainAnalyzerApp:
                 )
             )
 
-        if result.sitemap_xml:
+        if result.sitemaps:
             content.append(
                 ft.Container(
                     content=ft.Row(
@@ -945,7 +953,10 @@ class DomainAnalyzerApp:
                                 color=self.theme.success_color,
                                 size=self.theme.icon_small,
                             ),
-                            ft.Text("sitemap.xml found", color=self.theme.success_color),
+                            ft.Text(
+                                f"{len(result.sitemaps)} sitemap(s) found",
+                                color=self.theme.success_color,
+                            ),
                         ]
                     ),
                     bgcolor=self.theme.success_bg,
@@ -1015,17 +1026,17 @@ class DomainAnalyzerApp:
         self._add_errors_and_warnings(content, result)
 
         # Verification findings
-        for service_name, verifications in result.verifications.items():
-            if verifications:
+        for service_result in result.service_results:
+            if service_result.detected_verification_ids:
                 content.append(
                     ft.Text(
-                        f"{service_name}:",
+                        f"{service_result.service}:",
                         size=self.theme.text_label,
                         weight="bold",
                         color=self.theme.text_primary,
                     )
                 )
-                for verification in verifications:
+                for verification in service_result.detected_verification_ids:
                     content.append(
                         ft.Text(
                             f"  • {verification.verification_id} ({verification.method})",
@@ -1044,17 +1055,30 @@ class DomainAnalyzerApp:
         self._add_errors_and_warnings(content, result)
 
         # CDN detection
-        if result.detected_cdns:
+        if result.cdn_detected and result.cdn_provider:
             content.append(
                 ft.Text(
-                    "Detected CDNs:",
+                    "CDN Detected:",
                     size=self.theme.text_label,
                     weight="bold",
                     color=self.theme.text_primary,
                 )
             )
-            for cdn in result.detected_cdns:
-                content.append(ft.Text(f"  • {cdn}", size=self.theme.text_body))
+            content.append(ft.Text(f"  Provider: {result.cdn_provider}", size=self.theme.text_body))
+            if result.detection_method:
+                content.append(
+                    ft.Text(
+                        f"  Detection method: {result.detection_method}", size=self.theme.text_body
+                    )
+                )
+            if result.confidence:
+                content.append(
+                    ft.Text(f"  Confidence: {result.confidence}", size=self.theme.text_body)
+                )
+            if result.evidence:
+                content.append(ft.Text("  Evidence:", size=self.theme.text_body))
+                for evidence in result.evidence:
+                    content.append(ft.Text(f"    • {evidence}", size=self.theme.text_body))
         else:
             content.append(
                 ft.Text(
