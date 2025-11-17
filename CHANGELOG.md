@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Both CLI and GUI updated to show new contact information
 
 ### Fixed
+- **GUI Application Launch Issue**
+  - Fixed `wdt-app` failing to launch with "No module named pip" error
+  - Added explicit `flet-desktop` dependency to prevent auto-installation issues
+  - The flet package was trying to auto-install flet-desktop using pip, which isn't available in uv virtual environments
+  - Now flet-desktop is installed directly by uv during package installation
+
 - **WHOIS Registrar Display for .cz Domains**
   - Fixed incorrect registrar extraction for .cz domains
   - Previously showed registrar from contact records instead of domain record
