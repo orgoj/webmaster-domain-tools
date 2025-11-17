@@ -737,7 +737,7 @@ class DomainAnalyzerApp:
         for i, chain in enumerate(result.chains, 1):
             content.append(
                 ft.Text(
-                    f"Chain {i}: {chain.starting_url}",
+                    f"Chain {i}: {chain.start_url}",
                     size=self.theme.text_label,
                     weight="bold",
                     color=self.theme.text_primary,
