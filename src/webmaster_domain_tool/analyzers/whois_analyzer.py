@@ -322,20 +322,20 @@ class WhoisAnalyzer(BaseAnalyzer[WhoisAnalysisResult]):
                     current_contact = parts[1].strip()
                 continue
 
-            # nsset: and keyset: start new sections (after domain section ends with blank line)
-            if line.startswith("nsset:"):
-                in_domain_section = False
-                in_contact_section = False
-                in_nsset_section = True
-                in_keyset_section = False
-                continue
+            # nsset: and keyset: start new sections ONLY when not in domain section
+            # In domain section, they are fields (nsset/keyset references), not section headers
+            if not in_domain_section:
+                if line.startswith("nsset:"):
+                    in_contact_section = False
+                    in_nsset_section = True
+                    in_keyset_section = False
+                    continue
 
-            if line.startswith("keyset:"):
-                in_domain_section = False
-                in_contact_section = False
-                in_nsset_section = False
-                in_keyset_section = True
-                continue
+                if line.startswith("keyset:"):
+                    in_contact_section = False
+                    in_nsset_section = False
+                    in_keyset_section = True
+                    continue
 
             # Parse domain section fields
             if in_domain_section and ":" in line:
