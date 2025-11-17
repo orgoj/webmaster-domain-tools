@@ -6,6 +6,9 @@ from dataclasses import dataclass, field
 import dns.resolver
 import httpx
 
+from .dns_utils import create_resolver
+from .base import BaseAnalysisResult, BaseAnalyzer
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,18 +54,15 @@ class TLSRPTRecord:
 
 
 @dataclass
-class AdvancedEmailSecurityResult:
+class AdvancedEmailSecurityResult(BaseAnalysisResult):
     """Results from advanced email security analysis."""
 
-    domain: str
     bimi: BIMIRecord | None = None
     mta_sts: MTASTSRecord | None = None
     tls_rpt: TLSRPTRecord | None = None
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
 
 
-class AdvancedEmailSecurityAnalyzer:
+class AdvancedEmailSecurityAnalyzer(BaseAnalyzer[AdvancedEmailSecurityResult]):
     """Analyzes advanced email security features (BIMI, MTA-STS, TLS-RPT)."""
 
     def __init__(
@@ -88,10 +88,8 @@ class AdvancedEmailSecurityAnalyzer:
         self.check_tls_rpt = check_tls_rpt
         self.timeout = timeout
 
-        # Setup DNS resolver
-        self.resolver = dns.resolver.Resolver()
-        if nameservers:
-            self.resolver.nameservers = nameservers
+        # Create DNS resolver using centralized utility
+        self.resolver = create_resolver(nameservers=nameservers, timeout=timeout)
 
     def analyze(self, domain: str) -> AdvancedEmailSecurityResult:
         """

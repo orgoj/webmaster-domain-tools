@@ -21,7 +21,13 @@ class CDNDetectionResult:
 
 
 class CDNDetector:
-    """Detects CDN usage from headers and DNS records."""
+    """
+    Detects CDN usage from headers and DNS records.
+
+    Note: This analyzer does NOT inherit from BaseAnalyzer because it has
+    a different API pattern - it provides separate methods for different
+    detection sources (headers, CNAME) and combines them externally.
+    """
 
     # CDN detection patterns for HTTP headers
     HEADER_PATTERNS = {

@@ -12,6 +12,7 @@ from ..constants import (
     DEFAULT_SSL_PORT,
     DEFAULT_SSL_TIMEOUT,
 )
+from .base import BaseAnalysisResult, BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -35,19 +36,16 @@ class CertificateInfo:
 
 
 @dataclass
-class SSLAnalysisResult:
+class SSLAnalysisResult(BaseAnalysisResult):
     """Results from SSL/TLS analysis."""
 
-    domain: str
-    port: int
+    port: int = DEFAULT_SSL_PORT
     certificates: dict[str, CertificateInfo] = field(default_factory=dict)
     protocols: list[str] = field(default_factory=list)
     ciphers: list[str] = field(default_factory=list)
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
 
 
-class SSLAnalyzer:
+class SSLAnalyzer(BaseAnalyzer[SSLAnalysisResult]):
     """Analyzes SSL/TLS certificates and configurations."""
 
     def __init__(

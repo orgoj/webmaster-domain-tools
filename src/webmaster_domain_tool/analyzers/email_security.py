@@ -12,6 +12,8 @@ from ..constants import (
     SPF_MAX_INCLUDES_LIMIT,
     SPF_MAX_INCLUDES_WARNING,
 )
+from .dns_utils import create_resolver
+from .base import BaseAnalysisResult, BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -58,19 +60,16 @@ class DMARCRecord:
 
 
 @dataclass
-class EmailSecurityResult:
+class EmailSecurityResult(BaseAnalysisResult):
     """Results from email security analysis."""
 
-    domain: str
     spf: SPFRecord | None = None
     dkim: dict[str, DKIMRecord] = field(default_factory=dict)
     dmarc: DMARCRecord | None = None
     dkim_selectors_searched: list[str] = field(default_factory=list)
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
 
 
-class EmailSecurityAnalyzer:
+class EmailSecurityAnalyzer(BaseAnalyzer[EmailSecurityResult]):
     """Analyzes email security records (SPF, DKIM, DMARC)."""
 
     def __init__(
@@ -86,9 +85,9 @@ class EmailSecurityAnalyzer:
             timeout: DNS query timeout in seconds
         """
         self.dkim_selectors = dkim_selectors or DEFAULT_DKIM_SELECTORS
-        self.resolver = dns.resolver.Resolver()
-        self.resolver.timeout = timeout
-        self.resolver.lifetime = timeout
+
+        # Create DNS resolver using centralized utility
+        self.resolver = create_resolver(timeout=timeout)
 
     def analyze(self, domain: str) -> EmailSecurityResult:
         """

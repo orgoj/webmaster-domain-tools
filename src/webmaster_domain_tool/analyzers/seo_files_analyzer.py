@@ -9,6 +9,8 @@ import xml.etree.ElementTree as ET
 
 import httpx
 
+from .base import BaseAnalysisResult, BaseAnalyzer
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,18 +57,15 @@ class SitemapResult:
 
 
 @dataclass
-class SEOFilesAnalysisResult:
+class SEOFilesAnalysisResult(BaseAnalysisResult):
     """Results from SEO files analysis."""
 
-    domain: str
     robots: RobotsResult | None = None
     llms_txt: LLMsTxtResult | None = None
     sitemaps: list[SitemapResult] = field(default_factory=list)
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
 
 
-class SEOFilesAnalyzer:
+class SEOFilesAnalyzer(BaseAnalyzer[SEOFilesAnalysisResult]):
     """Analyzes SEO-related files (robots.txt, llms.txt, sitemap.xml)."""
 
     def __init__(

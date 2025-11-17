@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 import dns.exception
 import dns.resolver
 
-from ..constants import DEFAULT_DNS_PUBLIC_SERVERS, DEFAULT_RBL_SERVERS, DEFAULT_RBL_TIMEOUT
+from ..constants import DEFAULT_RBL_SERVERS, DEFAULT_RBL_TIMEOUT
+from .dns_utils import create_resolver
+from .base import BaseAnalysisResult, BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -23,16 +25,14 @@ class RBLCheckResult:
 
 
 @dataclass
-class RBLAnalysisResult:
+class RBLAnalysisResult(BaseAnalysisResult):
     """Results from RBL analysis."""
 
     checks: list[RBLCheckResult] = field(default_factory=list)
     total_listed: int = 0
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
 
 
-class RBLChecker:
+class RBLChecker(BaseAnalyzer[RBLAnalysisResult]):
     """Checks IP addresses against realtime blacklists."""
 
     def __init__(
@@ -49,17 +49,8 @@ class RBLChecker:
         """
         self.rbl_servers = rbl_servers or DEFAULT_RBL_SERVERS
 
-        # Create resolver
-        try:
-            self.resolver = dns.resolver.Resolver()
-            if not self.resolver.nameservers:
-                raise dns.resolver.NoResolverConfiguration("no nameservers")
-        except (dns.resolver.NoResolverConfiguration, OSError):
-            self.resolver = dns.resolver.Resolver(configure=False)
-            self.resolver.nameservers = DEFAULT_DNS_PUBLIC_SERVERS
-
-        self.resolver.timeout = timeout
-        self.resolver.lifetime = timeout
+        # Create DNS resolver using centralized utility
+        self.resolver = create_resolver(timeout=timeout)
 
     def check_ip(self, ip: str) -> RBLCheckResult:
         """
@@ -107,17 +98,33 @@ class RBLChecker:
 
         return result
 
-    def check_ips(self, ips: list[str]) -> RBLAnalysisResult:
+    def analyze(self, domain: str) -> RBLAnalysisResult:
+        """
+        Analyze domain - required by BaseAnalyzer but not used.
+
+        RBLChecker works with IP addresses, not domains directly.
+        Use check_ips() method instead.
+
+        Args:
+            domain: Domain name (unused)
+
+        Returns:
+            Empty RBLAnalysisResult
+        """
+        return RBLAnalysisResult(domain=domain)
+
+    def check_ips(self, domain: str, ips: list[str]) -> RBLAnalysisResult:
         """
         Check multiple IP addresses against RBL servers.
 
         Args:
+            domain: Domain name (for result tracking)
             ips: List of IP addresses to check
 
         Returns:
             RBLAnalysisResult with all check results
         """
-        result = RBLAnalysisResult()
+        result = RBLAnalysisResult(domain=domain)
 
         for ip in ips:
             check_result = self.check_ip(ip)

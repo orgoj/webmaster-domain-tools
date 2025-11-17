@@ -2,6 +2,9 @@
 
 import logging
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
+
+from .base import BaseAnalysisResult, BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -20,17 +23,15 @@ class SecurityHeaderCheck:
 
 
 @dataclass
-class SecurityHeadersResult:
+class SecurityHeadersResult(BaseAnalysisResult):
     """Results from security headers analysis."""
 
-    url: str
+    url: str = ""
     headers: dict[str, SecurityHeaderCheck] = field(default_factory=dict)
     score: int = 0  # Score out of 100
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
 
 
-class SecurityHeadersAnalyzer:
+class SecurityHeadersAnalyzer(BaseAnalyzer[SecurityHeadersResult]):
     """Analyzes HTTP security headers."""
 
     # Security headers to check with their recommendations
@@ -119,7 +120,10 @@ class SecurityHeadersAnalyzer:
             SecurityHeadersResult with analysis
         """
         logger.info(f"Analyzing security headers for {url}")
-        result = SecurityHeadersResult(url=url)
+        # Extract domain from URL for BaseAnalysisResult
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc or parsed_url.path  # fallback to path if no netloc
+        result = SecurityHeadersResult(domain=domain, url=url)
 
         # Normalize header names (case-insensitive)
         normalized_headers = {k.lower(): v for k, v in headers.items()}

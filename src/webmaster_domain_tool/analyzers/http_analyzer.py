@@ -13,6 +13,7 @@ from ..constants import (
     DEFAULT_USER_AGENT,
     MAX_REDIRECT_WARNING,
 )
+from .base import BaseAnalysisResult, BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -54,18 +55,15 @@ class RedirectChain:
 
 
 @dataclass
-class HTTPAnalysisResult:
+class HTTPAnalysisResult(BaseAnalysisResult):
     """Results from HTTP/HTTPS analysis."""
 
-    domain: str
     chains: list[RedirectChain] = field(default_factory=list)
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
     preferred_final_url: str | None = None  # URL used for further analysis (headers, verification)
     path_check_result: PathCheckResult | None = None  # Result of checking specific path
 
 
-class HTTPAnalyzer:
+class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
     """Analyzes HTTP/HTTPS responses and redirect chains."""
 
     def __init__(

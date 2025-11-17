@@ -10,7 +10,9 @@ import dns.name
 import dns.resolver
 import dns.reversename
 
-from ..constants import DEFAULT_DNS_PUBLIC_SERVERS, DEFAULT_DNS_TIMEOUT
+from ..constants import DEFAULT_DNS_TIMEOUT
+from .dns_utils import create_resolver
+from .base import BaseAnalysisResult, BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -59,19 +61,16 @@ class DNSSECInfo:
 
 
 @dataclass
-class DNSAnalysisResult:
+class DNSAnalysisResult(BaseAnalysisResult):
     """Results from DNS analysis."""
 
-    domain: str
     records: dict[str, list[DNSRecord]] = field(default_factory=dict)
     ptr_records: dict[str, str] = field(default_factory=dict)  # IP -> PTR mapping
     dnssec: DNSSECInfo | None = None
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
     info_messages: list[str] = field(default_factory=list)  # Informational messages (not warnings)
 
 
-class DNSAnalyzer:
+class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
     """Analyzes DNS records for a domain."""
 
     RECORD_TYPES = ["A", "AAAA", "MX", "TXT", "NS", "SOA", "CAA", "CNAME"]
@@ -98,28 +97,8 @@ class DNSAnalyzer:
         self.warn_www_not_cname = warn_www_not_cname
         self.skip_www = skip_www
 
-        # Try to create resolver with system config, fallback to manual config
-        try:
-            self.resolver = dns.resolver.Resolver()
-            # Check if we have nameservers
-            if not self.resolver.nameservers:
-                raise dns.resolver.NoResolverConfiguration("no nameservers")
-        except (dns.resolver.NoResolverConfiguration, OSError):
-            # System DNS not available, create unconfigured resolver
-            self.resolver = dns.resolver.Resolver(configure=False)
-            logger.debug("System DNS not available, using public DNS servers")
-
-        # Override with provided nameservers or use public DNS
-        if nameservers:
-            self.resolver.nameservers = nameservers
-        elif not self.resolver.nameservers:
-            # Use public DNS servers as fallback
-            self.resolver.nameservers = DEFAULT_DNS_PUBLIC_SERVERS
-            logger.debug(f"Using fallback public DNS servers: {', '.join(DEFAULT_DNS_PUBLIC_SERVERS)}")
-
-        # Set timeout
-        self.resolver.timeout = timeout
-        self.resolver.lifetime = timeout
+        # Create DNS resolver using centralized utility
+        self.resolver = create_resolver(nameservers=nameservers, timeout=timeout)
 
     def analyze(self, domain: str) -> DNSAnalysisResult:
         """
