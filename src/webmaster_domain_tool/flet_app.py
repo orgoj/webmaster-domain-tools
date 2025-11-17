@@ -720,6 +720,8 @@ class DomainAnalyzerApp:
             leading=ft.Icon(icon, color=title_color),
             controls=content,
             initially_expanded=error_count > 0,  # Auto-expand if errors
+            # ← KEY FIX: ExpansionTile defaults to CENTER, must set to START!
+            expanded_cross_axis_alignment=ft.CrossAxisAlignment.START,
         )
 
     def _create_whois_panel(self, result: Any) -> ft.ExpansionTile:
