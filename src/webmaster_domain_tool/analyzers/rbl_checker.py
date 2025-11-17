@@ -2,13 +2,17 @@
 
 import logging
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import dns.exception
 import dns.resolver
 
 from ..constants import DEFAULT_RBL_SERVERS, DEFAULT_RBL_TIMEOUT
-from .dns_utils import create_resolver
 from .base import BaseAnalysisResult, BaseAnalyzer
+from .dns_utils import create_resolver
+
+if TYPE_CHECKING:
+    from .dns_analyzer import DNSAnalysisResult
 
 logger = logging.getLogger(__name__)
 

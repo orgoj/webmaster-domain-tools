@@ -12,8 +12,8 @@ from ..constants import (
     SPF_MAX_INCLUDES_LIMIT,
     SPF_MAX_INCLUDES_WARNING,
 )
-from .dns_utils import create_resolver
 from .base import BaseAnalysisResult, BaseAnalyzer
+from .dns_utils import create_resolver
 
 logger = logging.getLogger(__name__)
 
@@ -372,9 +372,7 @@ class EmailSecurityAnalyzer(BaseAnalyzer[EmailSecurityResult]):
 
         # Check percentage
         if dmarc.percentage < 100:
-            dmarc.warnings.append(
-                f"DMARC policy applies to only {dmarc.percentage}% of messages"
-            )
+            dmarc.warnings.append(f"DMARC policy applies to only {dmarc.percentage}% of messages")
 
         # Check report addresses
         if not dmarc.rua:

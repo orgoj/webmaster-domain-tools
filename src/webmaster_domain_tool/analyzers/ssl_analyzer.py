@@ -127,9 +127,7 @@ class SSLAnalyzer(BaseAnalyzer[SSLAnalysisResult]):
                     issuer = dict(x[0] for x in cert.get("issuer", ()))
 
                     # Parse dates
-                    not_before = datetime.strptime(
-                        cert["notBefore"], "%b %d %H:%M:%S %Y %Z"
-                    )
+                    not_before = datetime.strptime(cert["notBefore"], "%b %d %H:%M:%S %Y %Z")
                     not_after = datetime.strptime(cert["notAfter"], "%b %d %H:%M:%S %Y %Z")
 
                     # Calculate days until expiry
@@ -219,9 +217,7 @@ class SSLAnalyzer(BaseAnalyzer[SSLAnalysisResult]):
                 f"Certificate expired {abs(cert_info.days_until_expiry)} days ago"
             )
         elif cert_info.days_until_expiry < self.cert_expiry_critical_days:
-            cert_info.warnings.append(
-                f"Certificate expires in {cert_info.days_until_expiry} days"
-            )
+            cert_info.warnings.append(f"Certificate expires in {cert_info.days_until_expiry} days")
         elif cert_info.days_until_expiry < self.cert_expiry_warning_days:
             cert_info.warnings.append(
                 f"Certificate expires in {cert_info.days_until_expiry} days (consider renewal)"
@@ -278,10 +274,8 @@ class SSLAnalyzer(BaseAnalyzer[SSLAnalysisResult]):
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
 
-                    with socket.create_connection(
-                        (domain, port), timeout=self.timeout
-                    ) as sock:
-                        with context.wrap_socket(sock, server_hostname=domain) as ssock:
+                    with socket.create_connection((domain, port), timeout=self.timeout) as sock:
+                        with context.wrap_socket(sock, server_hostname=domain):
                             result.protocols.append(protocol_name)
                             logger.debug(f"{domain} supports {protocol_name}")
                 except Exception:

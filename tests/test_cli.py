@@ -3,6 +3,11 @@
 import pytest
 import typer
 
+from webmaster_domain_tool.analyzers.http_analyzer import (
+    HTTPAnalysisResult,
+    HTTPResponse,
+    RedirectChain,
+)
 from webmaster_domain_tool.cli import (
     get_preferred_final_url,
     validate_config_file,
@@ -10,11 +15,6 @@ from webmaster_domain_tool.cli import (
     validate_max_redirects,
     validate_nameservers,
     validate_timeout,
-)
-from webmaster_domain_tool.analyzers.http_analyzer import (
-    HTTPAnalysisResult,
-    HTTPResponse,
-    RedirectChain,
 )
 
 
@@ -139,22 +139,26 @@ class TestGetPreferredFinalUrl:
         http_result = HTTPAnalysisResult(domain="example.com")
 
         # Chain 1: http://example.com -> https://www.example.com/
-        http_result.chains.append(RedirectChain(
-            start_url="http://example.com",
-            final_url="https://www.example.com/",
-            responses=[
-                HTTPResponse(url="https://www.example.com/", status_code=200, headers={})
-            ]
-        ))
+        http_result.chains.append(
+            RedirectChain(
+                start_url="http://example.com",
+                final_url="https://www.example.com/",
+                responses=[
+                    HTTPResponse(url="https://www.example.com/", status_code=200, headers={})
+                ],
+            )
+        )
 
         # Chain 2: https://example.com -> https://www.example.com/
-        http_result.chains.append(RedirectChain(
-            start_url="https://example.com",
-            final_url="https://www.example.com/",
-            responses=[
-                HTTPResponse(url="https://www.example.com/", status_code=200, headers={})
-            ]
-        ))
+        http_result.chains.append(
+            RedirectChain(
+                start_url="https://example.com",
+                final_url="https://www.example.com/",
+                responses=[
+                    HTTPResponse(url="https://www.example.com/", status_code=200, headers={})
+                ],
+            )
+        )
 
         final_url, final_response, warnings, errors = get_preferred_final_url(http_result)
 
@@ -169,22 +173,24 @@ class TestGetPreferredFinalUrl:
         http_result = HTTPAnalysisResult(domain="example.com")
 
         # Chain 1: ends at http://example.com
-        http_result.chains.append(RedirectChain(
-            start_url="http://example.com",
-            final_url="http://example.com/",
-            responses=[
-                HTTPResponse(url="http://example.com/", status_code=200, headers={})
-            ]
-        ))
+        http_result.chains.append(
+            RedirectChain(
+                start_url="http://example.com",
+                final_url="http://example.com/",
+                responses=[HTTPResponse(url="http://example.com/", status_code=200, headers={})],
+            )
+        )
 
         # Chain 2: ends at https://www.example.com (should be preferred)
-        http_result.chains.append(RedirectChain(
-            start_url="https://example.com",
-            final_url="https://www.example.com/",
-            responses=[
-                HTTPResponse(url="https://www.example.com/", status_code=200, headers={})
-            ]
-        ))
+        http_result.chains.append(
+            RedirectChain(
+                start_url="https://example.com",
+                final_url="https://www.example.com/",
+                responses=[
+                    HTTPResponse(url="https://www.example.com/", status_code=200, headers={})
+                ],
+            )
+        )
 
         final_url, final_response, warnings, errors = get_preferred_final_url(http_result)
 
@@ -198,22 +204,22 @@ class TestGetPreferredFinalUrl:
         http_result = HTTPAnalysisResult(domain="example.com")
 
         # Chain 1: ends at http://example.com
-        http_result.chains.append(RedirectChain(
-            start_url="http://example.com",
-            final_url="http://example.com/",
-            responses=[
-                HTTPResponse(url="http://example.com/", status_code=200, headers={})
-            ]
-        ))
+        http_result.chains.append(
+            RedirectChain(
+                start_url="http://example.com",
+                final_url="http://example.com/",
+                responses=[HTTPResponse(url="http://example.com/", status_code=200, headers={})],
+            )
+        )
 
         # Chain 2: ends at https://example.com (should be preferred)
-        http_result.chains.append(RedirectChain(
-            start_url="https://example.com",
-            final_url="https://example.com/",
-            responses=[
-                HTTPResponse(url="https://example.com/", status_code=200, headers={})
-            ]
-        ))
+        http_result.chains.append(
+            RedirectChain(
+                start_url="https://example.com",
+                final_url="https://example.com/",
+                responses=[HTTPResponse(url="https://example.com/", status_code=200, headers={})],
+            )
+        )
 
         final_url, final_response, warnings, errors = get_preferred_final_url(http_result)
 
@@ -226,22 +232,26 @@ class TestGetPreferredFinalUrl:
         http_result = HTTPAnalysisResult(domain="example.com")
 
         # Chain 1: with trailing slash
-        http_result.chains.append(RedirectChain(
-            start_url="http://example.com",
-            final_url="https://www.example.com/",
-            responses=[
-                HTTPResponse(url="https://www.example.com/", status_code=200, headers={})
-            ]
-        ))
+        http_result.chains.append(
+            RedirectChain(
+                start_url="http://example.com",
+                final_url="https://www.example.com/",
+                responses=[
+                    HTTPResponse(url="https://www.example.com/", status_code=200, headers={})
+                ],
+            )
+        )
 
         # Chain 2: without trailing slash (should be treated as same)
-        http_result.chains.append(RedirectChain(
-            start_url="https://example.com",
-            final_url="https://www.example.com",
-            responses=[
-                HTTPResponse(url="https://www.example.com", status_code=200, headers={})
-            ]
-        ))
+        http_result.chains.append(
+            RedirectChain(
+                start_url="https://example.com",
+                final_url="https://www.example.com",
+                responses=[
+                    HTTPResponse(url="https://www.example.com", status_code=200, headers={})
+                ],
+            )
+        )
 
         final_url, final_response, warnings, errors = get_preferred_final_url(http_result)
 
@@ -255,13 +265,13 @@ class TestGetPreferredFinalUrl:
         http_result = HTTPAnalysisResult(domain="example.com")
 
         # Chain with error response
-        http_result.chains.append(RedirectChain(
-            start_url="http://example.com",
-            final_url="http://example.com/",
-            responses=[
-                HTTPResponse(url="http://example.com/", status_code=404, headers={})
-            ]
-        ))
+        http_result.chains.append(
+            RedirectChain(
+                start_url="http://example.com",
+                final_url="http://example.com/",
+                responses=[HTTPResponse(url="http://example.com/", status_code=404, headers={})],
+            )
+        )
 
         final_url, final_response, warnings, errors = get_preferred_final_url(http_result)
 

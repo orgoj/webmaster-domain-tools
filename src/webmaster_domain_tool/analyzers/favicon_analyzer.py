@@ -32,27 +32,35 @@ def _get_image_dimensions(image_data: bytes) -> tuple[int | None, int | None]:
         return None, None
 
     # SVG format (XML-based)
-    if image_data[:5] in (b'<?xml', b'<svg ') or b'<svg' in image_data[:200]:
+    if image_data[:5] in (b"<?xml", b"<svg ") or b"<svg" in image_data[:200]:
         try:
             # Parse SVG as XML
-            svg_text = image_data.decode('utf-8', errors='ignore')
+            svg_text = image_data.decode("utf-8", errors="ignore")
 
             # Try to parse with ElementTree
             root = ET.fromstring(svg_text)
 
             # Check for width/height attributes
-            width_str = root.get('width')
-            height_str = root.get('height')
+            width_str = root.get("width")
+            height_str = root.get("height")
 
             if width_str and height_str:
                 # Extract numeric value (strip 'px', 'pt', etc.)
-                width = int(re.search(r'\d+', width_str).group()) if re.search(r'\d+', width_str) else None
-                height = int(re.search(r'\d+', height_str).group()) if re.search(r'\d+', height_str) else None
+                width = (
+                    int(re.search(r"\d+", width_str).group())
+                    if re.search(r"\d+", width_str)
+                    else None
+                )
+                height = (
+                    int(re.search(r"\d+", height_str).group())
+                    if re.search(r"\d+", height_str)
+                    else None
+                )
                 if width and height:
                     return width, height
 
             # Fallback to viewBox if no width/height
-            viewbox = root.get('viewBox')
+            viewbox = root.get("viewBox")
             if viewbox:
                 # viewBox format: "x y width height"
                 parts = viewbox.split()
@@ -72,16 +80,16 @@ def _get_image_dimensions(image_data: bytes) -> tuple[int | None, int | None]:
         return None, None
 
     # PNG format
-    if image_data[:8] == b'\x89PNG\r\n\x1a\n':
+    if image_data[:8] == b"\x89PNG\r\n\x1a\n":
         try:
             # PNG IHDR chunk is at bytes 16-24
-            width, height = struct.unpack('>II', image_data[16:24])
+            width, height = struct.unpack(">II", image_data[16:24])
             return width, height
         except struct.error:
             pass
 
     # ICO format
-    elif image_data[:4] == b'\x00\x00\x01\x00':
+    elif image_data[:4] == b"\x00\x00\x01\x00":
         try:
             # ICO directory entry at offset 6
             # Width and height are at bytes 6 and 7 (0 means 256)
@@ -92,7 +100,7 @@ def _get_image_dimensions(image_data: bytes) -> tuple[int | None, int | None]:
             pass
 
     # JPEG format
-    elif image_data[:2] == b'\xff\xd8':
+    elif image_data[:2] == b"\xff\xd8":
         try:
             # JPEG uses markers - scan for SOF0 (Start of Frame)
             data = io.BytesIO(image_data)
@@ -104,22 +112,22 @@ def _get_image_dimensions(image_data: bytes) -> tuple[int | None, int | None]:
                     break
 
                 # SOF0, SOF1, SOF2 markers
-                if marker[0] == 0xff and marker[1] in (0xc0, 0xc1, 0xc2):
+                if marker[0] == 0xFF and marker[1] in (0xC0, 0xC1, 0xC2):
                     data.read(3)  # Skip length and precision
-                    height, width = struct.unpack('>HH', data.read(4))
+                    height, width = struct.unpack(">HH", data.read(4))
                     return width, height
 
                 # Skip to next marker
-                length = struct.unpack('>H', data.read(2))[0]
+                length = struct.unpack(">H", data.read(2))[0]
                 data.seek(length - 2, 1)
-        except (struct.error, IOError):
+        except (OSError, struct.error):
             pass
 
     # GIF format
-    elif image_data[:6] in (b'GIF87a', b'GIF89a'):
+    elif image_data[:6] in (b"GIF87a", b"GIF89a"):
         try:
             # GIF dimensions at bytes 6-10
-            width, height = struct.unpack('<HH', image_data[6:10])
+            width, height = struct.unpack("<HH", image_data[6:10])
             return width, height
         except struct.error:
             pass
@@ -143,7 +151,7 @@ def _get_ico_all_dimensions(image_data: bytes) -> list[tuple[int, int]]:
         return []
 
     # Check ICO signature
-    if image_data[:4] != b'\x00\x00\x01\x00':
+    if image_data[:4] != b"\x00\x00\x01\x00":
         return []
 
     try:
@@ -152,7 +160,7 @@ def _get_ico_all_dimensions(image_data: bytes) -> list[tuple[int, int]]:
         # Bytes 2-3: Image type (1 for ICO)
         # Bytes 4-5: Number of images
 
-        num_images = struct.unpack('<H', image_data[4:6])[0]
+        num_images = struct.unpack("<H", image_data[4:6])[0]
 
         if num_images == 0 or num_images > 256:  # Sanity check
             return []
@@ -199,7 +207,9 @@ class FaviconInfo:
     size_bytes: int | None = None
     actual_width: int | None = None  # Real width from image data (primary/first layer)
     actual_height: int | None = None  # Real height from image data (primary/first layer)
-    all_dimensions: list[str] | None = None  # All dimensions for multi-layer ICO (e.g., ["16x16", "32x32", "48x48"])
+    all_dimensions: list[str] | None = (
+        None  # All dimensions for multi-layer ICO (e.g., ["16x16", "32x32", "48x48"])
+    )
 
 
 @dataclass
@@ -220,7 +230,6 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
         "/favicon.ico",
         "/favicon.svg",
         "/icon.svg",
-
         # Apple Touch Icons (modern sizes first)
         "/apple-touch-icon.png",  # Default (usually 180x180)
         "/apple-touch-icon-180x180.png",  # iPhone XS/XR/11/12/13/14/15
@@ -229,7 +238,6 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
         "/apple-touch-icon-120x120.png",  # iPhone Retina
         "/apple-touch-icon-76x76.png",  # iPad
         "/apple-touch-icon-60x60.png",  # iPhone (older)
-
         # Apple Touch Icons (precomposed - legacy iOS)
         "/apple-touch-icon-precomposed.png",
         "/apple-touch-icon-180x180-precomposed.png",
@@ -301,7 +309,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                     # Only warn if HTML has favicons (meaning site uses favicons but didn't reference this one)
                     if default_fav.exists and has_html_favicons:
                         # For main defaults (/favicon.ico, /apple-touch-icon.png), warn about potential conflict
-                        if default_fav.url.endswith(('/favicon.ico', '/apple-touch-icon.png')):
+                        if default_fav.url.endswith(("/favicon.ico", "/apple-touch-icon.png")):
                             result.warnings.append(
                                 f"Favicon exists at {default_fav.url} but is not referenced in HTML (potential conflict with HTML-defined favicons)"
                             )
@@ -309,8 +317,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
 
         # Check if default /favicon.ico exists
         favicon_ico = next(
-            (f for f in result.favicons if f.url.endswith('/favicon.ico') and f.exists),
-            None
+            (f for f in result.favicons if f.url.endswith("/favicon.ico") and f.exists), None
         )
         result.has_default_favicon = favicon_ico is not None
 
@@ -342,8 +349,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
             # 1. Find all link tags with icon-related rel attributes
             # Pattern: <link rel="..." href="..." sizes="..." type="...">
             link_pattern = re.compile(
-                r'<link\s+[^>]*rel=["\']([^"\']*icon[^"\']*)["\'][^>]*>',
-                re.IGNORECASE
+                r'<link\s+[^>]*rel=["\']([^"\']*icon[^"\']*)["\'][^>]*>', re.IGNORECASE
             )
 
             for match in link_pattern.finditer(html):
@@ -371,12 +377,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                 color = color_match.group(1) if color_match else None
 
                 favicon = FaviconInfo(
-                    url=full_url,
-                    source="html",
-                    rel=rel,
-                    sizes=sizes,
-                    type=fav_type,
-                    color=color
+                    url=full_url, source="html", rel=rel, sizes=sizes, type=fav_type, color=color
                 )
 
                 # Check if favicon actually exists and get dimensions
@@ -389,7 +390,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
             # <meta name="msapplication-TileImage" content="...">
             ms_tile_pattern = re.compile(
                 r'<meta\s+name=["\']msapplication-TileImage["\']\s+content=["\']([^"\']+)["\']',
-                re.IGNORECASE
+                re.IGNORECASE,
             )
             for match in ms_tile_pattern.finditer(html):
                 tile_url = urljoin(base_url, match.group(1))
@@ -397,7 +398,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                     url=tile_url,
                     source="meta",
                     rel="msapplication-TileImage",
-                    type="image/png"  # Usually PNG
+                    type="image/png",  # Usually PNG
                 )
                 self._check_favicon_exists(favicon)
                 favicons.append(favicon)
@@ -406,8 +407,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
             # 3. Check for Web App Manifest
             # <link rel="manifest" href="manifest.json">
             manifest_pattern = re.compile(
-                r'<link\s+rel=["\']manifest["\']\s+href=["\']([^"\']+)["\']',
-                re.IGNORECASE
+                r'<link\s+rel=["\']manifest["\']\s+href=["\']([^"\']+)["\']', re.IGNORECASE
             )
             manifest_match = manifest_pattern.search(html)
             if manifest_match:
@@ -431,7 +431,9 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                 response = client.get(manifest_url, headers={"User-Agent": self.user_agent})
 
             if response.status_code != 200:
-                logger.debug(f"Failed to fetch manifest: {manifest_url} - status {response.status_code}")
+                logger.debug(
+                    f"Failed to fetch manifest: {manifest_url} - status {response.status_code}"
+                )
                 return favicons
 
             try:
@@ -441,7 +443,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                 return favicons
 
             # Parse icons array
-            icons = manifest.get('icons', [])
+            icons = manifest.get("icons", [])
             if not isinstance(icons, list):
                 logger.warning(f"Manifest icons is not an array: {manifest_url}")
                 return favicons
@@ -450,7 +452,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                 if not isinstance(icon, dict):
                     continue
 
-                src = icon.get('src')
+                src = icon.get("src")
                 if not src:
                     continue
 
@@ -461,9 +463,9 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                     url=icon_url,
                     source="manifest",
                     rel="manifest-icon",
-                    sizes=icon.get('sizes'),
-                    type=icon.get('type'),
-                    purpose=icon.get('purpose')
+                    sizes=icon.get("sizes"),
+                    type=icon.get("type"),
+                    purpose=icon.get("purpose"),
                 )
 
                 self._check_favicon_exists(favicon)
@@ -498,10 +500,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
         try:
             with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
                 # First try HEAD to check existence
-                head_response = client.head(
-                    favicon.url,
-                    headers={"User-Agent": self.user_agent}
-                )
+                head_response = client.head(favicon.url, headers={"User-Agent": self.user_agent})
 
             favicon.status_code = head_response.status_code
 
@@ -509,7 +508,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                 favicon.exists = True
 
                 # Get content length from HEAD response
-                content_length = head_response.headers.get('content-length')
+                content_length = head_response.headers.get("content-length")
                 if content_length:
                     try:
                         favicon.size_bytes = int(content_length)
@@ -519,13 +518,14 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                 # Download the image to get dimensions
                 # Only download if size is reasonable (< 5MB)
                 if favicon.size_bytes and favicon.size_bytes > 5 * 1024 * 1024:
-                    logger.warning(f"Favicon too large to download for dimension check: {favicon.url}")
+                    logger.warning(
+                        f"Favicon too large to download for dimension check: {favicon.url}"
+                    )
                 else:
                     try:
                         with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
                             get_response = client.get(
-                                favicon.url,
-                                headers={"User-Agent": self.user_agent}
+                                favicon.url, headers={"User-Agent": self.user_agent}
                             )
 
                         if get_response.status_code == 200:
@@ -536,7 +536,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                                 favicon.size_bytes = len(image_data)
 
                             # Check if this is a multi-layer ICO file
-                            if image_data[:4] == b'\x00\x00\x01\x00':
+                            if image_data[:4] == b"\x00\x00\x01\x00":
                                 # Get all dimensions from ICO file
                                 ico_dimensions = _get_ico_all_dimensions(image_data)
                                 if ico_dimensions:
@@ -548,29 +548,41 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                                     favicon.actual_width = largest[0]
                                     favicon.actual_height = largest[1]
 
-                                    logger.debug(f"Multi-layer ICO favicon: {', '.join(favicon.all_dimensions)} - {favicon.url}")
+                                    logger.debug(
+                                        f"Multi-layer ICO favicon: {', '.join(favicon.all_dimensions)} - {favicon.url}"
+                                    )
                                 else:
                                     # Fallback to single dimension detection
                                     width, height = _get_image_dimensions(image_data)
                                     if width and height:
                                         favicon.actual_width = width
                                         favicon.actual_height = height
-                                        logger.debug(f"Favicon dimensions: {width}×{height} - {favicon.url}")
+                                        logger.debug(
+                                            f"Favicon dimensions: {width}×{height} - {favicon.url}"
+                                        )
                             else:
                                 # Get dimensions from image data (PNG, SVG, JPEG, GIF)
                                 width, height = _get_image_dimensions(image_data)
                                 if width and height:
                                     favicon.actual_width = width
                                     favicon.actual_height = height
-                                    logger.debug(f"Favicon dimensions: {width}×{height} - {favicon.url}")
+                                    logger.debug(
+                                        f"Favicon dimensions: {width}×{height} - {favicon.url}"
+                                    )
                     except httpx.TimeoutException:
-                        logger.debug(f"Timeout downloading favicon for dimension check: {favicon.url}")
+                        logger.debug(
+                            f"Timeout downloading favicon for dimension check: {favicon.url}"
+                        )
                     except Exception as e:
-                        logger.debug(f"Error downloading favicon for dimensions: {favicon.url} - {e}")
+                        logger.debug(
+                            f"Error downloading favicon for dimensions: {favicon.url} - {e}"
+                        )
 
                 logger.debug(f"Favicon accessible: {favicon.url}")
             else:
-                logger.debug(f"Favicon not accessible: {favicon.url} - status {head_response.status_code}")
+                logger.debug(
+                    f"Favicon not accessible: {favicon.url} - status {head_response.status_code}"
+                )
 
         except httpx.TimeoutException:
             logger.debug(f"Timeout checking favicon: {favicon.url}")

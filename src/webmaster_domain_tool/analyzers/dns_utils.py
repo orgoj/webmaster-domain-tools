@@ -53,9 +53,7 @@ def create_resolver(
     elif not resolver.nameservers:
         # Use public DNS servers as fallback
         resolver.nameservers = DEFAULT_DNS_PUBLIC_SERVERS
-        logger.debug(
-            f"Using fallback public DNS servers: {', '.join(DEFAULT_DNS_PUBLIC_SERVERS)}"
-        )
+        logger.debug(f"Using fallback public DNS servers: {', '.join(DEFAULT_DNS_PUBLIC_SERVERS)}")
 
     # Set timeout
     resolver.timeout = timeout

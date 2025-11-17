@@ -157,9 +157,7 @@ class SecurityHeadersAnalyzer(BaseAnalyzer[SecurityHeadersResult]):
                 elif header_name == "X-Frame-Options":
                     score += self._validate_x_frame_options(check, header_info["weight"])
                 elif header_name == "X-Content-Type-Options":
-                    score += self._validate_x_content_type_options(
-                        check, header_info["weight"]
-                    )
+                    score += self._validate_x_content_type_options(check, header_info["weight"])
                 elif header_name == "Referrer-Policy":
                     score += self._validate_referrer_policy(check, header_info["weight"])
                 elif header_name == "Permissions-Policy":
@@ -278,9 +276,7 @@ class SecurityHeadersAnalyzer(BaseAnalyzer[SecurityHeadersResult]):
             check.warnings.append(f"X-Frame-Options has invalid value: {check.value}")
             return max_score // 2
 
-    def _validate_x_content_type_options(
-        self, check: SecurityHeaderCheck, max_score: int
-    ) -> int:
+    def _validate_x_content_type_options(self, check: SecurityHeaderCheck, max_score: int) -> int:
         """Validate X-Content-Type-Options header."""
         if not check.value:
             return 0
@@ -288,9 +284,7 @@ class SecurityHeadersAnalyzer(BaseAnalyzer[SecurityHeadersResult]):
         if check.value.lower() == "nosniff":
             return max_score
         else:
-            check.warnings.append(
-                f"X-Content-Type-Options has unexpected value: {check.value}"
-            )
+            check.warnings.append(f"X-Content-Type-Options has unexpected value: {check.value}")
             return max_score // 2
 
     def _validate_referrer_policy(self, check: SecurityHeaderCheck, max_score: int) -> int:

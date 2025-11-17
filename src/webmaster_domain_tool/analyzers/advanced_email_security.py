@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 import dns.resolver
 import httpx
 
-from .dns_utils import create_resolver
 from .base import BaseAnalysisResult, BaseAnalyzer
+from .dns_utils import create_resolver
 
 logger = logging.getLogger(__name__)
 
@@ -130,23 +130,23 @@ class AdvancedEmailSecurityAnalyzer(BaseAnalyzer[AdvancedEmailSecurityResult]):
         result = BIMIRecord(domain=domain)
 
         try:
-            answers = self.resolver.resolve(bimi_domain, 'TXT')
+            answers = self.resolver.resolve(bimi_domain, "TXT")
 
             for rdata in answers:
                 txt_string = rdata.to_text().strip('"')
 
                 # Check if this is a BIMI record (starts with v=BIMI1)
-                if txt_string.startswith('v=BIMI1'):
+                if txt_string.startswith("v=BIMI1"):
                     result.record_found = True
                     result.record_value = txt_string
 
                     # Parse BIMI record
-                    parts = txt_string.split(';')
+                    parts = txt_string.split(";")
                     for part in parts:
                         part = part.strip()
-                        if part.startswith('l='):
+                        if part.startswith("l="):
                             result.logo_url = part[2:].strip()
-                        elif part.startswith('a='):
+                        elif part.startswith("a="):
                             result.vmc_url = part[2:].strip()
 
                     logger.info(f"BIMI record found for {domain}")
@@ -176,13 +176,13 @@ class AdvancedEmailSecurityAnalyzer(BaseAnalyzer[AdvancedEmailSecurityResult]):
 
         # Check DNS record
         try:
-            answers = self.resolver.resolve(mta_sts_domain, 'TXT')
+            answers = self.resolver.resolve(mta_sts_domain, "TXT")
 
             for rdata in answers:
                 txt_string = rdata.to_text().strip('"')
 
                 # Check if this is an MTA-STS record (starts with v=STSv1)
-                if txt_string.startswith('v=STSv1'):
+                if txt_string.startswith("v=STSv1"):
                     result.record_found = True
                     result.record_value = txt_string
                     logger.info(f"MTA-STS DNS record found for {domain}")
@@ -211,25 +211,27 @@ class AdvancedEmailSecurityAnalyzer(BaseAnalyzer[AdvancedEmailSecurityResult]):
                     result.policy_content = response.text
 
                     # Parse policy
-                    for line in response.text.split('\n'):
+                    for line in response.text.split("\n"):
                         line = line.strip()
-                        if line.startswith('mode:'):
-                            result.policy_mode = line.split(':', 1)[1].strip()
-                        elif line.startswith('max_age:'):
+                        if line.startswith("mode:"):
+                            result.policy_mode = line.split(":", 1)[1].strip()
+                        elif line.startswith("max_age:"):
                             try:
-                                result.policy_max_age = int(line.split(':', 1)[1].strip())
+                                result.policy_max_age = int(line.split(":", 1)[1].strip())
                             except ValueError:
                                 pass
-                        elif line.startswith('mx:'):
-                            mx_pattern = line.split(':', 1)[1].strip()
+                        elif line.startswith("mx:"):
+                            mx_pattern = line.split(":", 1)[1].strip()
                             result.mx_patterns.append(mx_pattern)
 
                     logger.info(f"MTA-STS policy found for {domain} (mode: {result.policy_mode})")
                 else:
-                    result.errors.append(f"MTA-STS policy file returned HTTP {response.status_code}")
+                    result.errors.append(
+                        f"MTA-STS policy file returned HTTP {response.status_code}"
+                    )
 
             except httpx.TimeoutException:
-                result.errors.append(f"Timeout fetching MTA-STS policy")
+                result.errors.append("Timeout fetching MTA-STS policy")
             except Exception as e:
                 result.errors.append(f"Error fetching MTA-STS policy: {str(e)}")
                 logger.error(f"Error fetching MTA-STS policy for {domain}: {e}")
@@ -243,23 +245,23 @@ class AdvancedEmailSecurityAnalyzer(BaseAnalyzer[AdvancedEmailSecurityResult]):
         result = TLSRPTRecord(domain=domain)
 
         try:
-            answers = self.resolver.resolve(tls_rpt_domain, 'TXT')
+            answers = self.resolver.resolve(tls_rpt_domain, "TXT")
 
             for rdata in answers:
                 txt_string = rdata.to_text().strip('"')
 
                 # Check if this is a TLS-RPT record (starts with v=TLSRPTv1)
-                if txt_string.startswith('v=TLSRPTv1'):
+                if txt_string.startswith("v=TLSRPTv1"):
                     result.record_found = True
                     result.record_value = txt_string
 
                     # Parse reporting addresses (rua=)
-                    parts = txt_string.split(';')
+                    parts = txt_string.split(";")
                     for part in parts:
                         part = part.strip()
-                        if part.startswith('rua='):
+                        if part.startswith("rua="):
                             # Multiple addresses can be comma-separated
-                            addresses = part[4:].split(',')
+                            addresses = part[4:].split(",")
                             result.reporting_addresses.extend([a.strip() for a in addresses])
 
                     logger.info(f"TLS-RPT record found for {domain}")
