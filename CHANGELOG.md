@@ -44,6 +44,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All packages tested and working with latest versions
 
 ### Added
+- **GUI Configuration Profiles System**
+  - Named configuration profiles for managing different analysis scenarios
+  - Profile dropdown in GUI header for quick switching between configs
+  - Save/load/delete profiles via GUI buttons with confirmation dialogs
+  - Comprehensive config editor dialog with tabbed interface for all settings:
+    - DNS tab: nameservers, timeout, DNSSEC, www CNAME warnings
+    - HTTP tab: timeout, max redirects, custom user agent
+    - SSL/TLS tab: certificate expiry thresholds
+    - Email tab: DKIM selectors, RBL checking
+    - Advanced Email tab: BIMI, MTA-STS, TLS-RPT
+    - Security Headers tab: individual header checks
+    - SEO tab: robots.txt, llms.txt, sitemap
+    - Favicon tab: HTML parsing, default paths
+    - WHOIS tab: domain expiry thresholds
+    - Analysis Options tab: enable/disable analyzers
+    - Output tab: CLI verbosity settings
+  - Client-side storage using Flet's page.client_storage API
+  - JSON format with Pydantic validation for data integrity
+  - Default profile auto-created on first run
+  - All CLI configuration options available in GUI
+  - Key namespacing ("wdt.profile.{name}") to prevent conflicts
+  - Comprehensive test coverage (14 tests, 91% coverage for manager)
+  - Type-safe implementation with proper Callable type hints
+
 - **Enhanced WHOIS Information Display**
   - Added registrant email field extraction from WHOIS data
   - Added administrator contact (admin-c) display for .cz domains

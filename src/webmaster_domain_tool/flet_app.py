@@ -10,11 +10,13 @@ from typing import Any
 
 import flet as ft
 
-from .config import load_config
+from .config import Config
+from .config_editor_dialog import ConfigEditorDialog
 from .core.analyzer import (
     ANALYZER_REGISTRY,
     run_domain_analysis,
 )
+from .flet_config_manager import FletConfigProfileManager
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +93,10 @@ class DomainAnalyzerApp:
         self.theme = UITheme()
         self.page.padding = self.theme.padding_large
 
-        # Load config
-        self.config = load_config()
+        # Initialize profile manager and load config
+        self.profile_manager = FletConfigProfileManager(self.page)
+        self.current_profile_name = "default"
+        self.config = self.profile_manager.get_or_create_default()
 
         # UI Components
         self.domain_input = ft.TextField(
@@ -120,6 +124,32 @@ class DomainAnalyzerApp:
             size=self.theme.text_label,
             color=self.theme.text_secondary,
             text_align=ft.TextAlign.LEFT,
+        )
+
+        # Profile management UI components
+        self.profile_dropdown = ft.Dropdown(
+            label="Config Profile",
+            options=[],  # Populated in _load_profile_list()
+            on_change=self._on_profile_changed,
+            width=200,
+        )
+
+        self.config_editor_button = ft.IconButton(
+            icon=ft.Icons.SETTINGS,
+            tooltip="Edit configuration",
+            on_click=self._show_config_editor,
+        )
+
+        self.save_profile_button = ft.IconButton(
+            icon=ft.Icons.SAVE,
+            tooltip="Save current config as new profile",
+            on_click=self._show_save_profile_dialog,
+        )
+
+        self.delete_profile_button = ft.IconButton(
+            icon=ft.Icons.DELETE,
+            tooltip="Delete selected profile",
+            on_click=self._delete_current_profile,
         )
 
         # Analysis options checkboxes - generated dynamically from registry (DRY!)
@@ -189,10 +219,22 @@ class DomainAnalyzerApp:
 
     def _build_ui(self) -> None:
         """Build the user interface."""
-        # Header
+        # Header with profile management controls
         header = ft.Container(
             content=ft.Column(
                 [
+                    # Profile management row
+                    ft.Row(
+                        [
+                            self.profile_dropdown,
+                            self.config_editor_button,
+                            self.save_profile_button,
+                            self.delete_profile_button,
+                        ],
+                        alignment=ft.MainAxisAlignment.START,
+                        spacing=10,
+                    ),
+                    # Title row
                     ft.Row(
                         [
                             ft.Icon(
@@ -273,6 +315,9 @@ class DomainAnalyzerApp:
         )
 
         self.page.add(main_column)
+
+        # Load profile list after UI is built
+        self._load_profile_list()
 
     def validate_domain(self, domain: str) -> bool:
         """Validate domain name format."""
@@ -1594,6 +1639,196 @@ class DomainAnalyzerApp:
         return self._create_expandable_panel(
             metadata.title, icon, content, error_count, warning_count
         )
+
+    # ========== PROFILE MANAGEMENT METHODS ==========
+
+    def _load_profile_list(self) -> None:
+        """Load and populate profile dropdown."""
+        profiles = self.profile_manager.list_profiles()
+
+        # Ensure default profile exists
+        if "default" not in profiles:
+            self.profile_manager.save_profile("default", self.config)
+            profiles = self.profile_manager.list_profiles()
+
+        # Populate dropdown
+        self.profile_dropdown.options = [ft.dropdown.Option(p) for p in profiles]
+        self.profile_dropdown.value = self.current_profile_name
+        self.page.update()
+
+    def _on_profile_changed(self, e: ft.ControlEvent) -> None:
+        """Handle profile selection change."""
+        new_profile_name = e.data
+        if not new_profile_name:
+            return
+
+        try:
+            # Load the selected profile
+            self.config = self.profile_manager.load_profile(new_profile_name)
+            self.current_profile_name = new_profile_name
+
+            # Update analyzer checkboxes from new config
+            # (Currently checkboxes don't reflect config, they're independent)
+            # Future enhancement: sync checkboxes with config.analysis.skip_* values
+
+            logger.info(f"Switched to profile: {new_profile_name}")
+
+            # Show confirmation
+            snackbar = ft.SnackBar(
+                content=ft.Text(f"Loaded profile: {new_profile_name}"),
+                bgcolor=ft.Colors.GREEN,
+            )
+            self.page.overlay.append(snackbar)
+            snackbar.open = True
+            self.page.update()
+
+        except Exception as e:
+            logger.error(f"Failed to load profile {new_profile_name}: {e}")
+            self.show_error(f"Failed to load profile: {e}")
+
+    def _show_config_editor(self, e: ft.ControlEvent) -> None:
+        """Show configuration editor dialog."""
+
+        def on_save(new_config: Config) -> None:
+            """Callback when config is saved in editor."""
+            self.config = new_config
+            # Also save to current profile
+            self.profile_manager.save_profile(self.current_profile_name, new_config)
+            logger.info(f"Updated configuration for profile: {self.current_profile_name}")
+
+            # Show confirmation
+            snackbar = ft.SnackBar(
+                content=ft.Text(f"Configuration saved to profile: {self.current_profile_name}"),
+                bgcolor=ft.Colors.GREEN,
+            )
+            self.page.overlay.append(snackbar)
+            snackbar.open = True
+            self.page.update()
+
+        editor = ConfigEditorDialog(self.page, self.config, on_save)
+        editor.show()
+
+    def _show_save_profile_dialog(self, e: ft.ControlEvent) -> None:
+        """Show dialog to save current config as new profile."""
+        profile_name_field = ft.TextField(
+            label="Profile Name",
+            hint_text="e.g., fast, full, security",
+            autofocus=True,
+        )
+
+        def save_new_profile(dialog_e: ft.ControlEvent) -> None:
+            """Save config as new profile."""
+            name = profile_name_field.value.strip()
+            if not name:
+                return
+
+            try:
+                self.profile_manager.save_profile(name, self.config)
+                logger.info(f"Saved new profile: {name}")
+
+                # Reload profile list and select new profile
+                self._load_profile_list()
+                self.profile_dropdown.value = name
+                self.current_profile_name = name
+
+                # Close dialog
+                dialog.open = False
+
+                # Show confirmation
+                snackbar = ft.SnackBar(
+                    content=ft.Text(f"Profile saved: {name}"),
+                    bgcolor=ft.Colors.GREEN,
+                )
+                self.page.overlay.append(snackbar)
+                snackbar.open = True
+                self.page.update()
+
+            except ValueError as e:
+                logger.error(f"Invalid profile name {name}: {e}")
+                # Show error in dialog
+                error_text = ft.Text(str(e), color=ft.Colors.RED, size=12)
+                if error_text not in dialog.content.controls:
+                    dialog.content.controls.append(error_text)
+                    self.page.update()
+
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Save Profile"),
+            content=ft.Column([profile_name_field], tight=True, width=300),
+            actions=[
+                ft.TextButton(
+                    "Cancel",
+                    on_click=lambda _: setattr(dialog, "open", False) or self.page.update(),
+                ),
+                ft.ElevatedButton("Save", on_click=save_new_profile),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        self.page.overlay.append(dialog)
+        dialog.open = True
+        self.page.update()
+
+    def _delete_current_profile(self, e: ft.ControlEvent) -> None:
+        """Delete currently selected profile with confirmation."""
+        if self.current_profile_name == "default":
+            self.show_error("Cannot delete the default profile")
+            return
+
+        def confirm_delete(dialog_e: ft.ControlEvent) -> None:
+            """Confirm and delete profile."""
+            try:
+                self.profile_manager.delete_profile(self.current_profile_name)
+                logger.info(f"Deleted profile: {self.current_profile_name}")
+
+                # Switch to default profile
+                self.current_profile_name = "default"
+                self.config = self.profile_manager.load_profile("default")
+
+                # Reload profile list
+                self._load_profile_list()
+
+                # Close dialog
+                dialog.open = False
+
+                # Show confirmation
+                snackbar = ft.SnackBar(
+                    content=ft.Text("Profile deleted"),
+                    bgcolor=ft.Colors.ORANGE,
+                )
+                self.page.overlay.append(snackbar)
+                snackbar.open = True
+                self.page.update()
+
+            except Exception as e:
+                logger.error(f"Failed to delete profile: {e}")
+                dialog.open = False
+                self.page.update()
+                self.show_error(f"Failed to delete profile: {e}")
+
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Delete Profile"),
+            content=ft.Text(
+                f"Are you sure you want to delete profile '{self.current_profile_name}'?"
+            ),
+            actions=[
+                ft.TextButton(
+                    "Cancel",
+                    on_click=lambda _: setattr(dialog, "open", False) or self.page.update(),
+                ),
+                ft.ElevatedButton(
+                    "Delete",
+                    on_click=confirm_delete,
+                    style=ft.ButtonStyle(bgcolor=ft.Colors.RED, color=ft.Colors.WHITE),
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        self.page.overlay.append(dialog)
+        dialog.open = True
+        self.page.update()
 
     def show_error(self, message: str) -> None:
         """Show error message."""
