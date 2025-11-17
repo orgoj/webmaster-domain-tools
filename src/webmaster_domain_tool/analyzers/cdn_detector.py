@@ -3,24 +3,31 @@
 import logging
 from dataclasses import dataclass, field
 
-from .base import BaseAnalysisResult, BaseAnalyzer
-
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class CDNDetectionResult(BaseAnalysisResult):
+class CDNDetectionResult:
     """Results from CDN detection."""
 
+    domain: str
     cdn_detected: bool = False
     cdn_provider: str | None = None
     detection_method: str | None = None  # "headers", "cname", "both"
     confidence: str = "unknown"  # "high", "medium", "low"
     evidence: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
-class CDNDetector(BaseAnalyzer[CDNDetectionResult]):
-    """Detects CDN usage from headers and DNS records."""
+class CDNDetector:
+    """
+    Detects CDN usage from headers and DNS records.
+
+    Note: This analyzer does NOT inherit from BaseAnalyzer because it has
+    a different API pattern - it provides separate methods for different
+    detection sources (headers, CNAME) and combines them externally.
+    """
 
     # CDN detection patterns for HTTP headers
     HEADER_PATTERNS = {
