@@ -9,7 +9,9 @@ from typing import Any
 import flet as ft
 
 from .config import load_config
-from .core.analyzer import DomainAnalysisResults, run_domain_analysis
+from .core.analyzer import (
+    run_domain_analysis,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -639,6 +641,7 @@ class DomainAnalyzerApp:
             True if value is an IP address
         """
         import ipaddress
+
         try:
             ipaddress.ip_address(value)
             return True
@@ -1261,6 +1264,125 @@ class DomainAnalyzerApp:
 
         return self._create_expandable_panel(
             "CDN Detection", ft.Icons.CLOUD, content, len(result.errors), len(result.warnings)
+        )
+
+    def _create_default_auto_display_panel(self, metadata: Any, result: Any) -> ft.ExpansionTile:
+        """
+        Default auto-display panel for any analyzer result.
+
+        This is called when an analyzer doesn't have a custom renderer.
+        It automatically displays all fields from the result object
+        using reflection.
+
+        Args:
+            metadata: AnalyzerMetadata with display configuration
+            result: Any analyzer result object (with errors/warnings)
+
+        Returns:
+            Expansion panel with auto-generated content
+        """
+        content: list[ft.Control] = []
+
+        # Add errors and warnings
+        self._add_errors_and_warnings(content, result)
+
+        # Auto-display all other fields (skip domain, errors, warnings)
+        skip_fields = {"domain", "errors", "warnings"}
+
+        if hasattr(result, "__dict__"):
+            displayed_any = False
+            for field_name, value in result.__dict__.items():
+                if field_name in skip_fields or value is None:
+                    continue
+
+                # Format field name nicely
+                field_label = field_name.replace("_", " ").title()
+
+                # Display based on type
+                if isinstance(value, bool):
+                    # Boolean: show as ✓/✗ with color
+                    icon = ft.Icons.CHECK_CIRCLE if value else ft.Icons.CANCEL
+                    color = self.theme.success_color if value else self.theme.error_color
+                    content.append(
+                        self._row(
+                            [
+                                ft.Icon(icon, color=color, size=self.theme.icon_small),
+                                self._text(field_label, color=color),
+                            ]
+                        )
+                    )
+                    displayed_any = True
+                elif isinstance(value, (str, int, float)):
+                    # Simple types: just display
+                    content.append(self._text(f"{field_label}: {value}"))
+                    displayed_any = True
+                elif isinstance(value, list):
+                    # Lists: show count and items
+                    if value:
+                        content.append(
+                            self._text(
+                                f"{field_label}: ({len(value)} items)",
+                                weight="bold",
+                                size=self.theme.text_label,
+                            )
+                        )
+                        for item in value[:5]:  # Show first 5
+                            content.append(self._text(f"  • {item}", size=self.theme.text_body))
+                        if len(value) > 5:
+                            content.append(
+                                self._text(
+                                    f"  ... and {len(value) - 5} more",
+                                    size=self.theme.text_small,
+                                    color=self.theme.text_secondary,
+                                )
+                            )
+                        displayed_any = True
+                elif isinstance(value, dict):
+                    # Dicts: show count and keys
+                    if value:
+                        content.append(
+                            self._text(
+                                f"{field_label}: ({len(value)} items)",
+                                weight="bold",
+                                size=self.theme.text_label,
+                            )
+                        )
+                        for key, val in list(value.items())[:5]:
+                            content.append(self._text(f"  {key}: {val}", size=self.theme.text_body))
+                        if len(value) > 5:
+                            content.append(
+                                self._text(
+                                    f"  ... and {len(value) - 5} more",
+                                    size=self.theme.text_small,
+                                    color=self.theme.text_secondary,
+                                )
+                            )
+                        displayed_any = True
+                else:
+                    # Complex objects: try str()
+                    content.append(
+                        self._text(f"{field_label}: {str(value)}", size=self.theme.text_small)
+                    )
+                    displayed_any = True
+
+            if not displayed_any and not result.errors and not result.warnings:
+                content.append(
+                    self._text(
+                        "No data available",
+                        color=self.theme.text_secondary,
+                        size=self.theme.text_small,
+                    )
+                )
+
+        # Get icon from metadata
+        icon = getattr(ft.Icons, metadata.icon, ft.Icons.INFO)
+
+        # Count errors and warnings
+        error_count = len(result.errors) if hasattr(result, "errors") else 0
+        warning_count = len(result.warnings) if hasattr(result, "warnings") else 0
+
+        return self._create_expandable_panel(
+            metadata.title, icon, content, error_count, warning_count
         )
 
     def show_error(self, message: str) -> None:

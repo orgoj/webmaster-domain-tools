@@ -2,30 +2,149 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any
 
 from ..analyzers.advanced_email_security import (
     AdvancedEmailSecurityAnalyzer,
     AdvancedEmailSecurityResult,
 )
-from ..analyzers.cdn_detector import CDNDetector, CDNDetectionResult
+from ..analyzers.cdn_detector import CDNDetectionResult, CDNDetector
 from ..analyzers.dns_analyzer import DNSAnalysisResult, DNSAnalyzer
 from ..analyzers.email_security import EmailSecurityAnalyzer, EmailSecurityResult
-from ..analyzers.favicon_analyzer import FaviconAnalyzer, FaviconAnalysisResult
+from ..analyzers.favicon_analyzer import FaviconAnalysisResult, FaviconAnalyzer
 from ..analyzers.http_analyzer import HTTPAnalysisResult, HTTPAnalyzer, HTTPResponse
-from ..analyzers.rbl_checker import RBLChecker, RBLAnalysisResult, extract_ips_from_dns_result
+from ..analyzers.rbl_checker import RBLAnalysisResult, RBLChecker, extract_ips_from_dns_result
 from ..analyzers.security_headers import SecurityHeadersAnalyzer, SecurityHeadersResult
-from ..analyzers.seo_files_analyzer import SEOFilesAnalyzer, SEOFilesAnalysisResult
+from ..analyzers.seo_files_analyzer import SEOFilesAnalysisResult, SEOFilesAnalyzer
 from ..analyzers.site_verification_analyzer import (
     ServiceConfig,
-    SiteVerificationAnalyzer,
     SiteVerificationAnalysisResult,
+    SiteVerificationAnalyzer,
 )
-from ..analyzers.ssl_analyzer import SSLAnalyzer, SSLAnalysisResult
-from ..analyzers.whois_analyzer import WhoisAnalyzer, WhoisAnalysisResult
+from ..analyzers.ssl_analyzer import SSLAnalysisResult, SSLAnalyzer
+from ..analyzers.whois_analyzer import WhoisAnalysisResult, WhoisAnalyzer
 from ..config import Config
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AnalyzerMetadata:
+    """
+    Metadata for automatic analyzer registration and display.
+
+    This enables the auto-display system where new analyzers can be added
+    with minimal boilerplate. Most analyzers only need to be registered here
+    with basic metadata, and both CLI and GUI will automatically display results.
+    """
+
+    # Display configuration
+    title: str  # "WHOIS Information", "DNS Analysis", etc.
+    icon: str  # For GUI: "INFO", "DNS", "HTTP", etc. (from ft.Icons)
+    result_field: str  # Field name in DomainAnalysisResults: "whois", "dns", etc.
+
+    # Rendering
+    custom_renderer: str | None = None  # None = use auto-display, else specify renderer name
+
+    # Optional metadata
+    category: str = "general"  # "general", "security", "seo", "advanced"
+    description: str = ""  # Optional description for documentation
+
+
+# Analyzer Registry - Single source of truth for all analyzers
+# To add a new analyzer:
+# 1. Create analyzer class in analyzers/
+# 2. Add entry here with metadata
+# 3. Both CLI and GUI will automatically display it!
+ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
+    "whois": AnalyzerMetadata(
+        title="WHOIS Information",
+        icon="INFO",
+        result_field="whois",
+        custom_renderer="whois",  # Has custom links
+        category="general",
+        description="Domain registration and ownership information",
+    ),
+    "dns": AnalyzerMetadata(
+        title="DNS Analysis",
+        icon="DNS",
+        result_field="dns",
+        custom_renderer="dns",  # Has clickable IPs
+        category="general",
+        description="DNS records and DNSSEC validation",
+    ),
+    "http": AnalyzerMetadata(
+        title="HTTP/HTTPS Analysis",
+        icon="HTTP",
+        result_field="http",
+        custom_renderer="http",  # Special chain format
+        category="general",
+        description="HTTP/HTTPS redirects and response analysis",
+    ),
+    "ssl": AnalyzerMetadata(
+        title="SSL/TLS Analysis",
+        icon="SECURITY",
+        result_field="ssl",
+        custom_renderer="ssl",  # Has SSL Labs link
+        category="security",
+        description="SSL/TLS certificates and security",
+    ),
+    "email": AnalyzerMetadata(
+        title="Email Security",
+        icon="EMAIL",
+        result_field="email",
+        custom_renderer="email",  # Combined with advanced_email
+        category="security",
+        description="SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT",
+    ),
+    "headers": AnalyzerMetadata(
+        title="Security Headers",
+        icon="SHIELD",
+        result_field="headers",
+        custom_renderer="headers",  # List format
+        category="security",
+        description="HTTP security headers validation",
+    ),
+    "rbl": AnalyzerMetadata(
+        title="RBL Blacklist Check",
+        icon="BLOCK",
+        result_field="rbl",
+        custom_renderer="rbl",  # Has clickable IPs
+        category="security",
+        description="IP blacklist reputation check",
+    ),
+    "seo": AnalyzerMetadata(
+        title="SEO Files",
+        icon="SEARCH",
+        result_field="seo",
+        custom_renderer="seo",  # Has clickable file URLs
+        category="seo",
+        description="robots.txt, sitemap.xml, llms.txt detection",
+    ),
+    "favicon": AnalyzerMetadata(
+        title="Favicon Detection",
+        icon="IMAGE",
+        result_field="favicon",
+        custom_renderer="favicon",  # Has clickable favicon URLs
+        category="seo",
+        description="Favicon file detection and sizes",
+    ),
+    "site_verification": AnalyzerMetadata(
+        title="Site Verification",
+        icon="VERIFIED",
+        result_field="site_verification",
+        custom_renderer=None,  # Can use auto-display
+        category="seo",
+        description="Google, Facebook, Pinterest verification codes",
+    ),
+    "cdn": AnalyzerMetadata(
+        title="CDN Detection",
+        icon="CLOUD",
+        result_field="cdn",
+        custom_renderer=None,  # Can use auto-display
+        category="advanced",
+        description="Content Delivery Network detection",
+    ),
+}
 
 
 @dataclass
