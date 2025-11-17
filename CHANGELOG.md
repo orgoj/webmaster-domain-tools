@@ -60,7 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Documented system requirements for GUI (libmpv library) in README
   - Added Ubuntu 24.04+ compatibility fix using official Flet team solution
   - Ubuntu 24.04 ships with libmpv2, but Flet requires libmpv.so.1 (known Flet limitation)
-  - Solution: `sudo apt install libmpv-dev libmpv2` + symlink (official Flet workaround)
+  - Solution: `sudo ln -s /usr/lib/x86_64-linux-gnu/libmpv.so.2 /usr/lib/x86_64-linux-gnu/libmpv.so.1`
+  - Corrected symlink command to point to actual libmpv.so.2 file
   - Documented in README with link to official Flet documentation
 
 - **WHOIS Registrar Display for .cz Domains**

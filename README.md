@@ -251,7 +251,7 @@ sudo apt update
 sudo apt install libmpv-dev libmpv2
 
 # Create compatibility symlink (official Flet workaround)
-sudo ln -s /usr/lib/x86_64-linux-gnu/libmpv.so /usr/lib/libmpv.so.1
+sudo ln -s /usr/lib/x86_64-linux-gnu/libmpv.so.2 /usr/lib/x86_64-linux-gnu/libmpv.so.1
 ```
 
 This solution is officially documented by the Flet team and is the standard workaround until Flet releases native libmpv2 support.
