@@ -767,16 +767,24 @@ class DomainAnalyzerApp:
 
         self._add_errors_and_warnings(content, result)
 
-        if result.certificate:
-            cert = result.certificate
-            content.append(ft.Text(f"Issuer: {cert.issuer}", size=self.theme.text_body))
-            content.append(ft.Text(f"Subject: {cert.subject}", size=self.theme.text_body))
-            content.append(
-                ft.Text(f"Valid from: {cert.not_valid_before}", size=self.theme.text_body)
-            )
-            content.append(
-                ft.Text(f"Valid until: {cert.not_valid_after}", size=self.theme.text_body)
-            )
+        if result.certificates:
+            for hostname, cert in result.certificates.items():
+                content.append(
+                    ft.Text(
+                        f"Certificate for {hostname}:",
+                        size=self.theme.text_label,
+                        weight="bold",
+                        color=self.theme.text_primary,
+                    )
+                )
+                content.append(ft.Text(f"  Issuer: {cert.issuer}", size=self.theme.text_body))
+                content.append(ft.Text(f"  Subject: {cert.subject}", size=self.theme.text_body))
+                content.append(
+                    ft.Text(f"  Valid from: {cert.not_valid_before}", size=self.theme.text_body)
+                )
+                content.append(
+                    ft.Text(f"  Valid until: {cert.not_valid_after}", size=self.theme.text_body)
+                )
 
         return self._create_expandable_panel(
             "SSL/TLS Analysis", ft.Icons.SECURITY, content, len(result.errors)
