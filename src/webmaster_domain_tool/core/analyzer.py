@@ -167,7 +167,7 @@ ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
         title="Site Verification",
         icon="VERIFIED",
         result_field="site_verification",
-        custom_renderer=None,  # Can use auto-display
+        custom_renderer="site_verification",  # Use custom renderer to avoid showing html_content
         category="seo",
         description="Google, Facebook, Pinterest verification codes",
         # Checkbox config
@@ -177,7 +177,7 @@ ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
         title="CDN Detection",
         icon="CLOUD",
         result_field="cdn",
-        custom_renderer=None,  # Can use auto-display
+        custom_renderer="cdn",  # Use custom renderer for consistent display
         category="advanced",
         description="Content Delivery Network detection",
         # No checkbox in GUI - always runs
