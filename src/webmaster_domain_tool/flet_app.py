@@ -686,6 +686,18 @@ class DomainAnalyzerApp:
     def _create_whois_panel(self, result: Any) -> ft.ExpansionTile:
         """Create WHOIS results panel."""
         content: list[ft.Control] = []
+
+        # Handle None result (WHOIS disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "WHOIS check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("WHOIS Information", ft.Icons.INFO, content, 0, 0)
+
         self._add_errors_and_warnings(content, result)
 
         if result.registrar:
@@ -731,6 +743,17 @@ class DomainAnalyzerApp:
         """Create DNS results panel."""
         content: list[ft.Control] = []
 
+        # Handle None result (DNS disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "DNS check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("DNS Analysis", ft.Icons.DNS, content, 0, 0)
+
         self._add_errors_and_warnings(content, result)
 
         # DNS records
@@ -772,6 +795,17 @@ class DomainAnalyzerApp:
     def _create_http_panel(self, result: Any) -> ft.ExpansionTile:
         """Create HTTP results panel."""
         content: list[ft.Control] = []
+
+        # Handle None result (HTTP disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "HTTP check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("HTTP/HTTPS", ft.Icons.HTTP, content, 0, 0)
 
         self._add_errors_and_warnings(content, result)
 
@@ -816,6 +850,17 @@ class DomainAnalyzerApp:
     def _create_ssl_panel(self, result: Any) -> ft.ExpansionTile:
         """Create SSL results panel."""
         content: list[ft.Control] = []
+
+        # Handle None result (SSL disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "SSL check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("SSL/TLS", ft.Icons.LOCK, content, 0, 0)
 
         self._add_errors_and_warnings(content, result)
 
@@ -865,6 +910,17 @@ class DomainAnalyzerApp:
     def _create_email_panel(self, result: Any, advanced_result: Any = None) -> ft.ExpansionTile:
         """Create email security results panel."""
         content: list[ft.Control] = []
+
+        # Handle None result (email check disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "Email security check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("Email Security", ft.Icons.EMAIL, content, 0, 0)
 
         self._add_errors_and_warnings(content, result)
 
@@ -997,6 +1053,19 @@ class DomainAnalyzerApp:
         """Create RBL results panel."""
         content: list[ft.Control] = []
 
+        # Handle None result (RBL check disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "RBL check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel(
+                "RBL Check", ft.Icons.SHIELD_OUTLINED, content, 0, 0
+            )
+
         self._add_errors_and_warnings(content, result)
 
         # Blacklist status
@@ -1050,6 +1119,17 @@ class DomainAnalyzerApp:
     def _create_seo_panel(self, result: Any) -> ft.ExpansionTile:
         """Create SEO files results panel."""
         content: list[ft.Control] = []
+
+        # Handle None result (SEO check disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "SEO files check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("SEO Files", ft.Icons.SEARCH, content, 0, 0)
 
         self._add_errors_and_warnings(content, result)
 
@@ -1140,6 +1220,17 @@ class DomainAnalyzerApp:
         """Create favicon detection results panel."""
         content: list[ft.Control] = []
 
+        # Handle None result (favicon check disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "Favicon check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("Favicon", ft.Icons.IMAGE, content, 0, 0)
+
         self._add_errors_and_warnings(content, result)
 
         # Favicon findings
@@ -1179,6 +1270,19 @@ class DomainAnalyzerApp:
         """Create site verification results panel."""
         content: list[ft.Control] = []
 
+        # Handle None result (site verification check disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "Site verification check disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel(
+                "Site Verification", ft.Icons.VERIFIED, content, 0, 0
+            )
+
         self._add_errors_and_warnings(content, result)
 
         # Verification findings
@@ -1214,6 +1318,17 @@ class DomainAnalyzerApp:
     def _create_cdn_panel(self, result: Any) -> ft.ExpansionTile:
         """Create CDN detection results panel."""
         content: list[ft.Control] = []
+
+        # Handle None result (CDN check disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    "CDN detection disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel("CDN Detection", ft.Icons.CLOUD, content, 0, 0)
 
         self._add_errors_and_warnings(content, result)
 
@@ -1290,6 +1405,17 @@ class DomainAnalyzerApp:
             Expansion panel with auto-generated content
         """
         content: list[ft.Control] = []
+
+        # Handle None result (analyzer disabled)
+        if result is None:
+            content.append(
+                self._text(
+                    f"{metadata.title} disabled",
+                    size=self.theme.text_body,
+                    color=self.theme.text_secondary,
+                )
+            )
+            return self._create_expandable_panel(metadata.title, metadata.icon, content, 0, 0)
 
         # Add errors and warnings
         self._add_errors_and_warnings(content, result)
