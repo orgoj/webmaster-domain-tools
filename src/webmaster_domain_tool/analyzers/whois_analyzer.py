@@ -273,36 +273,68 @@ class WhoisAnalyzer(BaseAnalyzer[WhoisAnalysisResult]):
             logger.debug("No raw WHOIS text available for .cz parsing")
             return
 
+        # Clear fields that may contain handles instead of actual names
+        # These will be re-populated from contact sections with proper values
+        result.registrant_name = None
+        result.registrant_organization = None
+        result.admin_name = None
+
         lines = raw_text.split("\n")
-        in_domain_section = True  # Start in domain section
+        in_domain_section = False  # Not in domain section yet
         in_contact_section = False
+        in_nsset_section = False
+        in_keyset_section = False
         current_contact = None
         registrant_handle = None
 
         for line in lines:
             line = line.strip()
 
-            # Empty line or comment marks end of current section
-            if not line or line.startswith("%"):
+            # Skip comments (but don't change section state)
+            if line.startswith("%"):
+                continue
+
+            # Empty line ends current section
+            if not line:
                 in_domain_section = False
                 in_contact_section = False
+                in_nsset_section = False
+                in_keyset_section = False
+                continue
+
+            # Detect start of domain section
+            if line.startswith("domain:"):
+                in_domain_section = True
+                in_contact_section = False
+                in_nsset_section = False
+                in_keyset_section = False
                 continue
 
             # Detect section boundaries - contact: always starts a new section
             if line.startswith("contact:"):
                 in_domain_section = False
                 in_contact_section = True
+                in_nsset_section = False
+                in_keyset_section = False
                 # Extract contact handle
                 parts = line.split(":", 1)
                 if len(parts) == 2:
                     current_contact = parts[1].strip()
                 continue
 
-            # nsset: and keyset: start new sections only if we're not in domain/contact section
-            # (they can appear as fields within the domain section)
-            if not in_domain_section and not in_contact_section:
-                if line.startswith("nsset:") or line.startswith("keyset:"):
-                    # These are section definitions, not fields we care about
+            # nsset: and keyset: start new sections ONLY when not in domain section
+            # In domain section, they are fields (nsset/keyset references), not section headers
+            if not in_domain_section:
+                if line.startswith("nsset:"):
+                    in_contact_section = False
+                    in_nsset_section = True
+                    in_keyset_section = False
+                    continue
+
+                if line.startswith("keyset:"):
+                    in_contact_section = False
+                    in_nsset_section = False
+                    in_keyset_section = True
                     continue
 
             # Parse domain section fields
@@ -332,16 +364,18 @@ class WhoisAnalyzer(BaseAnalyzer[WhoisAnalysisResult]):
                     if key == "e-mail":
                         result.registrant_email = value
                         logger.debug(f"Extracted .cz registrant email: {value}")
-                    elif key == "name" and not result.registrant_name:
+                    elif key == "name":
                         result.registrant_name = value
-                    elif key == "org" and not result.registrant_organization:
+                        logger.debug(f"Extracted .cz registrant name: {value}")
+                    elif key == "org":
                         result.registrant_organization = value
+                        logger.debug(f"Extracted .cz registrant org: {value}")
 
                 # Extract admin contact details if it matches admin-c
                 if result.admin_contact and current_contact == result.admin_contact:
-                    if key == "e-mail" and not result.admin_email:
+                    if key == "e-mail":
                         result.admin_email = value
                         logger.debug(f"Extracted .cz admin email: {value}")
-                    elif key == "name" and not result.admin_name:
+                    elif key == "name":
                         result.admin_name = value
                         logger.debug(f"Extracted .cz admin name: {value}")
