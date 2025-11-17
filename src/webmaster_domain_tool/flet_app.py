@@ -681,6 +681,28 @@ class DomainAnalyzerApp:
         if result.updated_date:
             content.append(ft.Text(f"Updated: {result.updated_date}"))
 
+        # Owner/Registrant information
+        if result.registrant_name or result.registrant_organization or result.registrant_email:
+            owner_parts = []
+            if result.registrant_organization:
+                owner_parts.append(result.registrant_organization)
+            if result.registrant_name:
+                owner_parts.append(result.registrant_name)
+            if result.registrant_email:
+                owner_parts.append(result.registrant_email)
+            content.append(ft.Text(f"Owner: {' / '.join(owner_parts)}"))
+
+        # Admin contact information
+        if result.admin_name or result.admin_email or result.admin_contact:
+            admin_parts = []
+            if result.admin_contact:
+                admin_parts.append(f"[{result.admin_contact}]")
+            if result.admin_name:
+                admin_parts.append(result.admin_name)
+            if result.admin_email:
+                admin_parts.append(result.admin_email)
+            content.append(ft.Text(f"Admin: {' / '.join(admin_parts)}"))
+
         return self._create_expandable_panel(
             "WHOIS Information", ft.Icons.INFO, content, len(result.errors)
         )

@@ -65,12 +65,16 @@ Comprehensive tool for webmasters that analyzes and clearly displays all importa
 
 ### WHOIS Information
 - ✅ Domain registration details
-- ✅ Registrar information
+- ✅ Registrar information (with special .cz domain support)
 - ✅ Creation and expiration dates
 - ✅ Days until expiration
 - ✅ Name server listing
-- ✅ Registrant organization (when available)
+- ✅ Registrant organization and name (when available)
+- ✅ Registrant email (when available)
+- ✅ Administrator contact information (admin-c for .cz domains)
+- ✅ Administrator name and email (when available)
 - ✅ Expiration warnings (30/60 day thresholds)
+- ✅ Special parsing for .cz domains to ensure correct registrar extraction
 
 ### CDN Detection
 - ✅ Automatic CDN provider detection
