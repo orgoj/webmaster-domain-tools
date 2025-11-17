@@ -245,6 +245,24 @@ export async function analyzeDomain(domain: string): Promise<DomainAnalysisResul
       // Ignore www subdomain errors
     }
 
+    // DKIM check (try common selectors)
+    const commonDkimSelectors = ['default', 'google', 'mail', 'k1', 'selector1', 'selector2'];
+
+    for (const selector of commonDkimSelectors) {
+      try {
+        const dkimRes = await queryDNS(`${selector}._domainkey.${normalizedDomain}`, 'TXT');
+        const dkimRecords = parseRecords(dkimRes, 'TXT');
+
+        if (dkimRecords.length > 0 && dkimRecords.some((r) => r.value.includes('v=DKIM1'))) {
+          result.emailSecurity.dkim.found = true;
+          result.emailSecurity.dkim.selector = selector;
+          break; // Found one, stop looking
+        }
+      } catch (error) {
+        // Ignore DKIM errors (selector might not exist)
+      }
+    }
+
     // Warnings for missing critical records
     if (result.dnsRecords.A.length === 0 && result.dnsRecords.CNAME.length === 0) {
       warnings.push('No A or CNAME records found - domain may not be accessible');

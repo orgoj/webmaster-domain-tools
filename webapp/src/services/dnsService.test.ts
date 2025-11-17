@@ -280,5 +280,124 @@ describe('dnsService', () => {
 
       expect(result.domain).toBe('example.com');
     });
+
+    it('should detect DKIM with common selectors', async () => {
+      const mockDkimResponse: GoogleDohResponse = {
+        Status: 0,
+        TC: false,
+        RD: true,
+        RA: true,
+        AD: false,
+        CD: false,
+        Question: [{ name: 'google._domainkey.example.com.', type: 16 }],
+        Answer: [
+          {
+            name: 'google._domainkey.example.com.',
+            type: 16,
+            TTL: 3600,
+            data: 'v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC',
+          },
+        ],
+      };
+
+      const mockEmptyResponse: GoogleDohResponse = {
+        Status: 0,
+        TC: false,
+        RD: true,
+        RA: true,
+        AD: false,
+        CD: false,
+        Question: [],
+      };
+
+      vi.mocked(global.fetch).mockImplementation((url: string) => {
+        if (url.includes('google._domainkey')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(mockDkimResponse),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockEmptyResponse),
+        });
+      });
+
+      const result = await analyzeDomain('example.com');
+
+      expect(result.emailSecurity.dkim.found).toBe(true);
+      expect(result.emailSecurity.dkim.selector).toBe('google');
+    });
+
+    it('should try multiple DKIM selectors', async () => {
+      const mockDkimResponse: GoogleDohResponse = {
+        Status: 0,
+        TC: false,
+        RD: true,
+        RA: true,
+        AD: false,
+        CD: false,
+        Question: [{ name: 'selector1._domainkey.example.com.', type: 16 }],
+        Answer: [
+          {
+            name: 'selector1._domainkey.example.com.',
+            type: 16,
+            TTL: 3600,
+            data: 'v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC',
+          },
+        ],
+      };
+
+      const mockEmptyResponse: GoogleDohResponse = {
+        Status: 0,
+        TC: false,
+        RD: true,
+        RA: true,
+        AD: false,
+        CD: false,
+        Question: [],
+      };
+
+      vi.mocked(global.fetch).mockImplementation((url: string) => {
+        // selector1 is the 5th in the list
+        if (url.includes('selector1._domainkey')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(mockDkimResponse),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockEmptyResponse),
+        });
+      });
+
+      const result = await analyzeDomain('example.com');
+
+      expect(result.emailSecurity.dkim.found).toBe(true);
+      expect(result.emailSecurity.dkim.selector).toBe('selector1');
+    });
+
+    it('should handle missing DKIM gracefully', async () => {
+      const mockEmptyResponse: GoogleDohResponse = {
+        Status: 0,
+        TC: false,
+        RD: true,
+        RA: true,
+        AD: false,
+        CD: false,
+        Question: [],
+      };
+
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockEmptyResponse),
+      });
+
+      const result = await analyzeDomain('example.com');
+
+      expect(result.emailSecurity.dkim.found).toBe(false);
+      expect(result.emailSecurity.dkim.selector).toBeUndefined();
+    });
   });
 });
