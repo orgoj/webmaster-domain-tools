@@ -1,8 +1,8 @@
 """Flet multiplatform GUI application for webmaster-domain-tool."""
 
-import asyncio
 import logging
 import re
+import threading
 from dataclasses import dataclass
 from typing import Any
 
@@ -297,11 +297,12 @@ class DomainAnalyzerApp:
         self.results_card.visible = False
         self.page.update()
 
-        # Run analysis in background
-        asyncio.create_task(self._run_analysis_async(domain))
+        # Run analysis in background thread
+        thread = threading.Thread(target=self._run_analysis_sync, args=(domain,), daemon=True)
+        thread.start()
 
-    async def _run_analysis_async(self, domain: str) -> None:
-        """Run analysis asynchronously."""
+    def _run_analysis_sync(self, domain: str) -> None:
+        """Run analysis synchronously in background thread."""
         try:
             results: dict[str, Any] = {}
 
@@ -312,7 +313,7 @@ class DomainAnalyzerApp:
                     expiry_warning_days=self.config.whois.expiry_warning_days,
                     expiry_critical_days=self.config.whois.expiry_critical_days,
                 )
-                results["whois"] = await asyncio.to_thread(whois_analyzer.analyze, domain)
+                results["whois"] = whois_analyzer.analyze(domain)
 
             # DNS Analysis
             if self.check_dns.value:
@@ -322,7 +323,7 @@ class DomainAnalyzerApp:
                     check_dnssec=self.config.dns.check_dnssec,
                     warn_www_not_cname=self.config.dns.warn_www_not_cname,
                 )
-                results["dns"] = await asyncio.to_thread(dns_analyzer.analyze, domain)
+                results["dns"] = dns_analyzer.analyze(domain)
 
             # HTTP/HTTPS Analysis
             if self.check_http.value:
@@ -331,7 +332,7 @@ class DomainAnalyzerApp:
                     timeout=self.config.http.timeout,
                     max_redirects=self.config.http.max_redirects,
                 )
-                results["http"] = await asyncio.to_thread(http_analyzer.analyze, domain)
+                results["http"] = http_analyzer.analyze(domain)
 
             # SSL/TLS Analysis
             if self.check_ssl.value:
@@ -341,7 +342,7 @@ class DomainAnalyzerApp:
                     cert_expiry_warning_days=self.config.ssl.cert_expiry_warning_days,
                     cert_expiry_critical_days=self.config.ssl.cert_expiry_critical_days,
                 )
-                results["ssl"] = await asyncio.to_thread(ssl_analyzer.analyze, domain)
+                results["ssl"] = ssl_analyzer.analyze(domain)
 
             # Email Security
             if self.check_email.value:
@@ -349,7 +350,7 @@ class DomainAnalyzerApp:
                 email_analyzer = EmailSecurityAnalyzer(
                     dkim_selectors=self.config.email.dkim_selectors
                 )
-                results["email"] = await asyncio.to_thread(email_analyzer.analyze, domain)
+                results["email"] = email_analyzer.analyze(domain)
 
                 # Advanced Email Security
                 if not self.config.analysis.skip_advanced_email:
@@ -360,9 +361,7 @@ class DomainAnalyzerApp:
                         check_tls_rpt=self.config.advanced_email.check_tls_rpt,
                         timeout=self.config.http.timeout,
                     )
-                    results["advanced_email"] = await asyncio.to_thread(
-                        advanced_email_analyzer.analyze, domain
-                    )
+                    results["advanced_email"] = advanced_email_analyzer.analyze(domain)
 
             # Security Headers
             if self.check_headers.value and results.get("http"):
@@ -382,8 +381,8 @@ class DomainAnalyzerApp:
                             "check_content_type": self.config.security_headers.check_content_type,
                         }
                         headers_analyzer = SecurityHeadersAnalyzer(enabled_checks=enabled_checks)
-                        results["headers"] = await asyncio.to_thread(
-                            headers_analyzer.analyze, final_response.url, final_response.headers
+                        results["headers"] = headers_analyzer.analyze(
+                            final_response.url, final_response.headers
                         )
 
             # RBL Check
@@ -396,7 +395,7 @@ class DomainAnalyzerApp:
                         rbl_servers=self.config.email.rbl_servers,
                         timeout=self.config.dns.timeout,
                     )
-                    results["rbl"] = await asyncio.to_thread(rbl_checker.check_ips, domain, ips)
+                    results["rbl"] = rbl_checker.check_ips(domain, ips)
 
             # SEO Files
             if self.check_seo.value and results.get("http"):
@@ -411,9 +410,7 @@ class DomainAnalyzerApp:
                             check_llms_txt=self.config.seo.check_llms_txt,
                             check_sitemap=self.config.seo.check_sitemap,
                         )
-                        results["seo"] = await asyncio.to_thread(
-                            seo_analyzer.analyze, final_response.url
-                        )
+                        results["seo"] = seo_analyzer.analyze(final_response.url)
 
             # Favicon Detection
             if self.check_favicon.value and results.get("http"):
@@ -427,9 +424,7 @@ class DomainAnalyzerApp:
                             check_html=self.config.favicon.check_html,
                             check_defaults=self.config.favicon.check_defaults,
                         )
-                        results["favicon"] = await asyncio.to_thread(
-                            favicon_analyzer.analyze, final_response.url
-                        )
+                        results["favicon"] = favicon_analyzer.analyze(final_response.url)
 
             # Site Verification
             if self.check_site_verification.value:
@@ -462,8 +457,8 @@ class DomainAnalyzerApp:
                             if final_response.status_code == 200:
                                 verification_url = final_response.url
 
-                    results["site_verification"] = await asyncio.to_thread(
-                        site_verification_analyzer.analyze, domain, verification_url
+                    results["site_verification"] = site_verification_analyzer.analyze(
+                        domain, verification_url
                     )
 
             # CDN Detection
