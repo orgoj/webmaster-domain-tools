@@ -112,12 +112,6 @@ function App() {
       {/* Dark Mode Toggle */}
       <DarkModeToggle />
 
-      {/* Top Ad - Banner */}
-      {/* TODO: Replace ad slot "1234567890" with your real AdSense slot ID */}
-      <div className="max-w-4xl mx-auto mb-6">
-        <GoogleAd adSlot="1234567890" adFormat="horizontal" className="w-full" />
-      </div>
-
       <main id="main-content" className="max-w-4xl mx-auto">
         {/* Header */}
         <header className="text-center mb-8">
@@ -131,6 +125,12 @@ function App() {
             Check DNS records, DNSSEC, SPF/DMARC/DKIM, robots.txt, sitemap.xml, and more
           </p>
         </header>
+
+        {/* Top Ad - Banner (placed AFTER header for AdSense policy compliance) */}
+        {/* TODO: Replace ad slot "1234567890" with your real AdSense slot ID */}
+        <div className="mb-6">
+          <GoogleAd adSlot="1234567890" adFormat="horizontal" className="w-full" />
+        </div>
 
         {/* Input Form */}
         <DomainInput onAnalyze={handleAnalyze} isLoading={isLoading} />
@@ -289,7 +289,7 @@ function App() {
                     <div className="space-y-2">
                       <p className="success-message">
                         <span>✓</span>
-                        <span>Found {seoResult.favicon.favicons.length} favicon(s)</span>
+                        <span>Found {seoResult.favicon.locations.length} favicon(s)</span>
                       </p>
                       <div className="overflow-x-auto">
                         <table className="record-table">
@@ -302,7 +302,7 @@ function App() {
                             </tr>
                           </thead>
                           <tbody>
-                            {seoResult.favicon.favicons.map((fav, i) => (
+                            {seoResult.favicon.locations.map((fav, i) => (
                               <tr key={i}>
                                 <td className="text-xs break-all">{fav.url}</td>
                                 <td>{fav.type}</td>
