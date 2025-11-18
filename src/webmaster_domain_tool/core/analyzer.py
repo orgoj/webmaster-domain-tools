@@ -4,10 +4,6 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from ..analyzers.advanced_email_security import (
-    AdvancedEmailSecurityAnalyzer,
-    AdvancedEmailSecurityResult,
-)
 from ..analyzers.cdn_detector import CDNDetectionResult, CDNDetector
 from ..analyzers.dns_analyzer import DNSAnalysisResult, DNSAnalyzer
 from ..analyzers.email_security import EmailSecurityAnalyzer, EmailSecurityResult
@@ -113,12 +109,11 @@ ANALYZER_REGISTRY: dict[str, AnalyzerMetadata] = {
         title="Email Security",
         icon="EMAIL",
         result_field="email",
-        custom_renderer="email",  # Combined with advanced_email
-        additional_result_fields=["advanced_email"],  # Needs advanced_email too
+        custom_renderer="email",
         category="security",
         description="SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT",
         # Checkbox config
-        checkbox_label="Email Security (SPF/DKIM/DMARC)",
+        checkbox_label="Email Security (SPF/DKIM/DMARC/BIMI/MTA-STS/TLS-RPT)",
         skip_param_name="skip_email",
     ),
     "headers": AnalyzerMetadata(
@@ -196,7 +191,6 @@ class DomainAnalysisResults:
     http: HTTPAnalysisResult | None = None
     ssl: SSLAnalysisResult | None = None
     email: EmailSecurityResult | None = None
-    advanced_email: AdvancedEmailSecurityResult | None = None
     headers: list[SecurityHeadersResult] | None = None
     rbl: RBLAnalysisResult | None = None
     seo: SEOFilesAnalysisResult | None = None
@@ -433,22 +427,15 @@ def run_domain_analysis(
             progress_callback("Running email security analysis...")
         logger.info("Running email security analysis...")
         selectors = dkim_selectors.split(",") if dkim_selectors else config.email.dkim_selectors
-        email_analyzer = EmailSecurityAnalyzer(dkim_selectors=selectors)
+        email_analyzer = EmailSecurityAnalyzer(
+            dkim_selectors=selectors,
+            timeout=timeout if timeout else config.http.timeout,
+            check_bimi=config.email.check_bimi,
+            check_mta_sts=config.email.check_mta_sts,
+            check_tls_rpt=config.email.check_tls_rpt,
+            nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
+        )
         results.email = email_analyzer.analyze(domain)
-
-        # Advanced Email Security (BIMI, MTA-STS, TLS-RPT)
-        if not config.analysis.skip_advanced_email:
-            if progress_callback:
-                progress_callback("Running advanced email security analysis...")
-            logger.info("Running advanced email security analysis...")
-            advanced_email_analyzer = AdvancedEmailSecurityAnalyzer(
-                nameservers=nameservers.split(",") if nameservers else config.dns.nameservers,
-                check_bimi=config.advanced_email.check_bimi,
-                check_mta_sts=config.advanced_email.check_mta_sts,
-                check_tls_rpt=config.advanced_email.check_tls_rpt,
-                timeout=timeout if timeout else config.http.timeout,
-            )
-            results.advanced_email = advanced_email_analyzer.analyze(domain)
 
     # Security Headers Analysis
     if not skip_headers and results.http:

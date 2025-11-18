@@ -29,23 +29,11 @@ class TestAnalyzerInstantiation:
         assert callable(analyzer.analyze), "analyze() must be callable"
 
     def test_email_security_analyzer(self):
-        """Test EmailSecurityAnalyzer instantiation and interface."""
+        """Test EmailSecurityAnalyzer instantiation and interface (includes BIMI, MTA-STS, TLS-RPT)."""
         from webmaster_domain_tool.analyzers.email_security import EmailSecurityAnalyzer
 
         analyzer = EmailSecurityAnalyzer()
         assert hasattr(analyzer, "analyze"), "EmailSecurityAnalyzer must have analyze() method"
-        assert callable(analyzer.analyze), "analyze() must be callable"
-
-    def test_advanced_email_security_analyzer(self):
-        """Test AdvancedEmailSecurityAnalyzer instantiation and interface."""
-        from webmaster_domain_tool.analyzers.advanced_email_security import (
-            AdvancedEmailSecurityAnalyzer,
-        )
-
-        analyzer = AdvancedEmailSecurityAnalyzer()
-        assert hasattr(
-            analyzer, "analyze"
-        ), "AdvancedEmailSecurityAnalyzer must have analyze() method"
         assert callable(analyzer.analyze), "analyze() must be callable"
 
     def test_rbl_checker(self):
