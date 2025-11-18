@@ -137,9 +137,6 @@ function App() {
               </div>
             </div>
 
-            {/* Mid Ad - Rectangle */}
-            <GoogleAd adSlot="2345678901" adFormat="rectangle" className="w-full" />
-
             {/* DNS Results */}
             <ResultSection result={result} />
 
@@ -263,6 +260,9 @@ function App() {
                 </div>
               </div>
             )}
+
+            {/* Mid Ad - Rectangle (after content for AdSense policy compliance) */}
+            <GoogleAd adSlot="2345678901" adFormat="rectangle" className="w-full" />
           </div>
         )}
 

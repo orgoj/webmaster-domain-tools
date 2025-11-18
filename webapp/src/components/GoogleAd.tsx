@@ -28,7 +28,12 @@ export function GoogleAd({
         console.error('AdSense error:', error);
       }
     }
-  }, [adClient]);
+
+    // Cleanup function (AdSense doesn't need explicit cleanup, but good practice)
+    return () => {
+      // AdSense handles cleanup internally
+    };
+  }, [adClient, adSlot]); // Include adSlot in dependencies
 
   // Don't render if no client ID configured
   if (!adClient) {

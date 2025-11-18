@@ -46,6 +46,35 @@
       gtag('js', new Date());
       gtag('config', 'G-XXXXXXXXXX');
     </script>
+
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Domain Analyzer",
+      "applicationCategory": "DeveloperApplication",
+      "description": "Free comprehensive domain analysis tool. Check DNS records, DNSSEC, email security (SPF/DMARC/DKIM), robots.txt, sitemap.xml, and favicons.",
+      "url": "https://your-domain.com",
+      "operatingSystem": "Any (Web-based)",
+      "browserRequirements": "Requires JavaScript",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "featureList": [
+        "DNS Records Analysis (A, AAAA, MX, TXT, NS, CNAME, SOA, CAA)",
+        "DNSSEC Validation",
+        "Email Security Check (SPF, DMARC, DKIM)",
+        "SEO Analysis (robots.txt, sitemap.xml)",
+        "Favicon Detection",
+        "Export to JSON/CSV/TXT/HTML",
+        "Dark Mode"
+      ],
+      "screenshot": "https://your-domain.com/screenshot.png"
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
