@@ -34,7 +34,24 @@
   }
 
   .record-table td {
-    @apply py-2 border-b border-gray-100 dark:border-gray-800 text-gray-900 dark:text-gray-100;
+    @apply py-2 border-b border-gray-100 dark:border-gray-800 text-gray-900 dark:text-gray-100 break-words;
+  }
+
+  /* Responsive table wrapper for horizontal scroll on small screens */
+  .table-wrapper {
+    @apply overflow-x-auto -mx-2 px-2 md:mx-0 md:px-0;
+  }
+
+  /* Responsive adjustments for mobile */
+  @media (max-width: 640px) {
+    .record-table {
+      @apply text-xs;
+    }
+
+    .record-table td,
+    .record-table th {
+      @apply px-2 py-1;
+    }
   }
 
   .error-message {

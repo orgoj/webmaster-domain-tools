@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { DomainInput } from './components/DomainInput';
 import { ResultSection } from './components/ResultSection';
-import { LoadingSpinner } from './components/LoadingSpinner';
 import { DarkModeToggle } from './components/DarkModeToggle';
 import { GoogleAd } from './components/GoogleAd';
+import { AnalysisProgress, type AnalysisStep } from './components/AnalysisProgress';
 import { analyzeDomain } from './services/dnsService';
 import { analyzeSEO } from './services/seoService';
 import { exportAnalysis, type ExportFormat } from './services/exportService';
@@ -15,6 +15,9 @@ function App() {
   const [result, setResult] = useState<DomainAnalysisResult | null>(null);
   const [seoResult, setSeoResult] = useState<SEOAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState<string>('');
+  const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>([]);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   const handleAnalyze = async (domain: string) => {
     setIsLoading(true);
@@ -22,21 +25,57 @@ function App() {
     setResult(null);
     setSeoResult(null);
 
-    try {
-      // Run DNS and SEO analysis in parallel
-      const [dnsResult, seoAnalysis] = await Promise.all([
-        analyzeDomain(domain),
-        analyzeSEO(domain),
-      ]);
+    // Initialize analysis steps
+    const steps: AnalysisStep[] = [
+      { id: 'dns', label: 'DNS Records', status: 'pending' },
+      { id: 'dnssec', label: 'DNSSEC', status: 'pending' },
+      { id: 'email', label: 'Email Security', status: 'pending' },
+      { id: 'seo', label: 'SEO Analysis', status: 'pending' },
+    ];
+    setAnalysisSteps(steps);
 
+    try {
+      // DNS Analysis
+      setAnalysisSteps((prev) =>
+        prev.map((s) => (s.id === 'dns' || s.id === 'dnssec' || s.id === 'email' ? { ...s, status: 'in_progress' } : s))
+      );
+      const dnsResult = await analyzeDomain(domain);
+      setAnalysisSteps((prev) =>
+        prev.map((s) =>
+          s.id === 'dns' || s.id === 'dnssec' || s.id === 'email' ? { ...s, status: 'completed' } : s
+        )
+      );
       setResult(dnsResult);
+
+      // SEO Analysis
+      setAnalysisSteps((prev) =>
+        prev.map((s) => (s.id === 'seo' ? { ...s, status: 'in_progress' } : s))
+      );
+      const seoAnalysis = await analyzeSEO(domain);
+      setAnalysisSteps((prev) =>
+        prev.map((s) => (s.id === 'seo' ? { ...s, status: 'completed' } : s))
+      );
       setSeoResult(seoAnalysis);
+
+      setAnnouncement(`Analysis complete for ${domain}. Results are now available.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(errorMessage);
+      setAnnouncement(`Analysis failed: ${errorMessage}`);
+      setAnalysisSteps((prev) =>
+        prev.map((s) => (s.status === 'in_progress' ? { ...s, status: 'error' } : s))
+      );
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Focus results section after analysis completes
+  useEffect(() => {
+    if (result && resultsRef.current) {
+      resultsRef.current.focus();
+    }
+  }, [result]);
 
   const handleExport = (format: ExportFormat) => {
     if (!result) return;
@@ -52,6 +91,24 @@ function App() {
 
   return (
     <div className="min-h-screen py-8 px-4">
+      {/* Skip to main content link for keyboard navigation */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded-lg"
+      >
+        Skip to main content
+      </a>
+
+      {/* Screen reader announcements */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {announcement}
+      </div>
+
       {/* Dark Mode Toggle */}
       <DarkModeToggle />
 
@@ -61,9 +118,9 @@ function App() {
         <GoogleAd adSlot="1234567890" adFormat="horizontal" className="w-full" />
       </div>
 
-      <div className="max-w-4xl mx-auto">
+      <main id="main-content" className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-8">
+        <header className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
             🌐 Domain Analyzer
           </h1>
@@ -73,18 +130,18 @@ function App() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
             Check DNS records, DNSSEC, SPF/DMARC/DKIM, robots.txt, sitemap.xml, and more
           </p>
-        </div>
+        </header>
 
         {/* Input Form */}
         <DomainInput onAnalyze={handleAnalyze} isLoading={isLoading} />
 
-        {/* Loading State */}
+        {/* Loading State with Progress */}
         {isLoading && (
           <div className="mt-8 card">
-            <LoadingSpinner />
-            <p className="text-center text-gray-600 dark:text-gray-300 mt-4">
-              Analyzing domain... Running DNS and SEO checks.
-            </p>
+            <h2 className="text-xl font-semibold mb-6 text-center text-gray-900 dark:text-white">
+              🔍 Analyzing Domain
+            </h2>
+            <AnalysisProgress steps={analysisSteps} />
           </div>
         )}
 
@@ -100,9 +157,14 @@ function App() {
 
         {/* Results */}
         {result && !isLoading && (
-          <div className="mt-8 space-y-6">
+          <div
+            ref={resultsRef}
+            tabIndex={-1}
+            className="mt-8 space-y-6 focus:outline-none"
+            aria-label="Analysis results"
+          >
             {/* Export Buttons */}
-            <div className="card">
+            <div className="card" role="region" aria-label="Export options">
               <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
                 📥 Export Results
               </h2>
@@ -295,7 +357,7 @@ function App() {
             </p>
           </div>
         </footer>
-      </div>
+      </main>
     </div>
   );
 }

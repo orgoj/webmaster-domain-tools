@@ -64,7 +64,7 @@ global.DOMParser = class DOMParser {
     }
     return { querySelector: () => null, querySelectorAll: () => [] };
   }
-} as any;
+} as unknown as typeof DOMParser;
 
 describe('seoService', () => {
   beforeEach(() => {

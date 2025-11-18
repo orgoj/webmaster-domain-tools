@@ -334,12 +334,12 @@ describe('exportService', () => {
   describe('exportAnalysis', () => {
     beforeEach(() => {
       // Mock DOM methods
-      document.createElement = vi.fn((tag: string) => {
+      document.createElement = vi.fn((_tag: string) => {
         return {
           href: '',
           download: '',
           click: vi.fn(),
-        } as any;
+        } as HTMLAnchorElement;
       });
 
       document.body.appendChild = vi.fn();
@@ -348,9 +348,9 @@ describe('exportService', () => {
       global.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
       global.URL.revokeObjectURL = vi.fn();
 
-      global.Blob = vi.fn((content: any[], options: any) => {
-        return { content, options };
-      }) as any;
+      global.Blob = vi.fn((content: BlobPart[], options: BlobPropertyBag) => {
+        return { content, options } as unknown as Blob;
+      }) as unknown as typeof Blob;
     });
 
     it('should export to JSON with correct filename', () => {
