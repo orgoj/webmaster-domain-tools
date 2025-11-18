@@ -1,0 +1,8 @@
+# Robots.txt for Webmaster Domain Tools
+# https://www.robotstxt.org/
+
+User-agent: *
+Allow: /
+
+# Sitemaps
+Sitemap: https://your-domain.com/sitemap.xml
