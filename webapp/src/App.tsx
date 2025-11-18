@@ -289,7 +289,7 @@ function App() {
                     <div className="space-y-2">
                       <p className="success-message">
                         <span>✓</span>
-                        <span>Found {seoResult.favicon.locations.length} favicon(s)</span>
+                        <span>Found {seoResult.favicon.favicons.length} favicon(s)</span>
                       </p>
                       <div className="overflow-x-auto">
                         <table className="record-table">
@@ -302,7 +302,7 @@ function App() {
                             </tr>
                           </thead>
                           <tbody>
-                            {seoResult.favicon.locations.map((fav, i) => (
+                            {seoResult.favicon.favicons.map((fav, i) => (
                               <tr key={i}>
                                 <td className="text-xs break-all">{fav.url}</td>
                                 <td>{fav.type}</td>

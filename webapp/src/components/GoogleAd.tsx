@@ -49,7 +49,7 @@ export function GoogleAd({
   }
 
   return (
-    <div className={`ad-container ${className}`}>
+    <div className={`ad-container ${className}`} role="complementary" aria-label="Advertisement">
       <ins
         className="adsbygoogle"
         style={{ display: 'block' }}
