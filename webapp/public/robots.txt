@@ -1,0 +1,9 @@
+# Robots.txt for Webmaster Domain Tools
+# https://www.robotstxt.org/
+
+User-agent: *
+Allow: /
+
+# TODO: Replace your-domain.com with your production domain before deployment
+# Sitemaps
+Sitemap: https://your-domain.com/sitemap.xml
