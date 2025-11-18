@@ -88,13 +88,13 @@ describe('DomainInput', () => {
 
   it('should show validation error for empty input on submit', () => {
     const mockOnAnalyze = vi.fn();
-    render(<DomainInput onAnalyze={mockOnAnalyze} isLoading={false} />);
+    const { container } = render(<DomainInput onAnalyze={mockOnAnalyze} isLoading={false} />);
 
     const input = screen.getByPlaceholderText('example.com');
-    const button = screen.getByRole('button', { name: /analyze/i });
+    const form = container.querySelector('form')!;
 
     fireEvent.change(input, { target: { value: '   ' } });
-    fireEvent.click(button);
+    fireEvent.submit(form);
 
     expect(screen.getByText(/Please enter a domain name/i)).toBeInTheDocument();
     expect(mockOnAnalyze).not.toHaveBeenCalled();

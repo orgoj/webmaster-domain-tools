@@ -9,7 +9,16 @@ global.DOMParser = class DOMParser {
   parseFromString(str: string, type: string) {
     if (type === 'text/xml') {
       // Simple mock for sitemap parsing
-      const urls = str.match(/<loc>(.*?)<\/loc>/g)?.map((m) => m.replace(/<\/?loc>/g, '')) || [];
+      const urlLocs = str.match(/<url>[\s\S]*?<loc>(.*?)<\/loc>[\s\S]*?<\/url>/g)?.map((m) => {
+        const match = m.match(/<loc>(.*?)<\/loc>/);
+        return match ? match[1] : '';
+      }).filter(Boolean) || [];
+
+      const sitemapLocs = str.match(/<sitemap>[\s\S]*?<loc>(.*?)<\/loc>[\s\S]*?<\/sitemap>/g)?.map((m) => {
+        const match = m.match(/<loc>(.*?)<\/loc>/);
+        return match ? match[1] : '';
+      }).filter(Boolean) || [];
+
       return {
         querySelector: (selector: string) => {
           if (selector === 'parsererror') return null;
@@ -21,8 +30,11 @@ global.DOMParser = class DOMParser {
           return null;
         },
         querySelectorAll: (selector: string) => {
-          if (selector.includes('loc')) {
-            return urls.map((url) => ({ textContent: url }));
+          if (selector === 'url > loc') {
+            return urlLocs.map((url) => ({ textContent: url }));
+          }
+          if (selector === 'sitemap > loc') {
+            return sitemapLocs.map((url) => ({ textContent: url }));
           }
           return [];
         },
