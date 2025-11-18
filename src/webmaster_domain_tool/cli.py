@@ -347,7 +347,7 @@ def analyze(
             formatter.print_ssl_results(results.ssl)
 
         if results.email:
-            formatter.print_email_security_results(results.email, results.advanced_email)
+            formatter.print_email_security_results(results.email)
 
         if results.headers:
             for headers_result in results.headers:
@@ -377,7 +377,6 @@ def analyze(
             site_verification_result=results.site_verification,
             seo_result=results.seo,
             favicon_result=results.favicon,
-            advanced_email_result=results.advanced_email,
             cdn_result=results.cdn,
         )
 

@@ -39,7 +39,6 @@ class ConfigEditorDialog:
         self.whois_fields: dict[str, ft.Control] = {}
         self.seo_fields: dict[str, ft.Control] = {}
         self.favicon_fields: dict[str, ft.Control] = {}
-        self.advanced_email_fields: dict[str, ft.Control] = {}
         self.analysis_fields: dict[str, ft.Control] = {}
         self.output_fields: dict[str, ft.Control] = {}
 
@@ -56,7 +55,6 @@ class ConfigEditorDialog:
                 self._create_http_tab(),
                 self._create_ssl_tab(),
                 self._create_email_tab(),
-                self._create_advanced_email_tab(),
                 self._create_security_headers_tab(),
                 self._create_seo_tab(),
                 self._create_favicon_tab(),
@@ -211,6 +209,18 @@ class ConfigEditorDialog:
             min_lines=2,
             max_lines=3,
         )
+        self.email_fields["check_bimi"] = ft.Checkbox(
+            label="Check BIMI records",
+            value=self.config.email.check_bimi,
+        )
+        self.email_fields["check_mta_sts"] = ft.Checkbox(
+            label="Check MTA-STS",
+            value=self.config.email.check_mta_sts,
+        )
+        self.email_fields["check_tls_rpt"] = ft.Checkbox(
+            label="Check TLS-RPT",
+            value=self.config.email.check_tls_rpt,
+        )
 
         return ft.Tab(
             text="Email",
@@ -221,38 +231,11 @@ class ConfigEditorDialog:
                         self.email_fields["dkim_selectors"],
                         self.email_fields["check_rbl"],
                         self.email_fields["rbl_servers"],
-                    ],
-                    spacing=10,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                padding=20,
-            ),
-        )
-
-    def _create_advanced_email_tab(self) -> ft.Tab:
-        """Create advanced email security configuration tab."""
-        self.advanced_email_fields["check_bimi"] = ft.Checkbox(
-            label="Check BIMI records",
-            value=self.config.advanced_email.check_bimi,
-        )
-        self.advanced_email_fields["check_mta_sts"] = ft.Checkbox(
-            label="Check MTA-STS",
-            value=self.config.advanced_email.check_mta_sts,
-        )
-        self.advanced_email_fields["check_tls_rpt"] = ft.Checkbox(
-            label="Check TLS-RPT",
-            value=self.config.advanced_email.check_tls_rpt,
-        )
-
-        return ft.Tab(
-            text="Advanced Email",
-            icon=ft.Icons.MARK_EMAIL_READ,
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        self.advanced_email_fields["check_bimi"],
-                        self.advanced_email_fields["check_mta_sts"],
-                        self.advanced_email_fields["check_tls_rpt"],
+                        ft.Divider(),
+                        ft.Text("Advanced Email Security", weight=ft.FontWeight.BOLD),
+                        self.email_fields["check_bimi"],
+                        self.email_fields["check_mta_sts"],
+                        self.email_fields["check_tls_rpt"],
                     ],
                     spacing=10,
                     scroll=ft.ScrollMode.AUTO,
@@ -396,7 +379,6 @@ class ConfigEditorDialog:
             ("skip_www", "Skip testing www subdomain"),
             ("skip_seo", "Skip SEO files analysis"),
             ("skip_favicon", "Skip favicon detection"),
-            ("skip_advanced_email", "Skip advanced email security"),
             ("skip_cdn_detection", "Skip CDN detection"),
         ]
 
@@ -502,13 +484,9 @@ class ConfigEditorDialog:
                 "dkim_selectors": dkim_selectors,
                 "check_rbl": self.email_fields["check_rbl"].value,
                 "rbl_servers": rbl_servers,
-            }
-
-            # Advanced Email
-            config_dict["advanced_email"] = {
-                "check_bimi": self.advanced_email_fields["check_bimi"].value,
-                "check_mta_sts": self.advanced_email_fields["check_mta_sts"].value,
-                "check_tls_rpt": self.advanced_email_fields["check_tls_rpt"].value,
+                "check_bimi": self.email_fields["check_bimi"].value,
+                "check_mta_sts": self.email_fields["check_mta_sts"].value,
+                "check_tls_rpt": self.email_fields["check_tls_rpt"].value,
             }
 
             # Security Headers

@@ -5,16 +5,13 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from webmaster_domain_tool.analyzers.advanced_email_security import (
-    AdvancedEmailSecurityResult,
-    BIMIRecord,
-    MTASTSRecord,
-)
 from webmaster_domain_tool.analyzers.cdn_detector import CDNDetectionResult
 from webmaster_domain_tool.analyzers.dns_analyzer import DNSAnalysisResult, DNSRecord
 from webmaster_domain_tool.analyzers.email_security import (
+    BIMIRecord,
     DMARCRecord,
     EmailSecurityResult,
+    MTASTSRecord,
     SPFRecord,
 )
 from webmaster_domain_tool.analyzers.favicon_analyzer import FaviconAnalysisResult
@@ -516,11 +513,6 @@ class TestDisplayResults:
             domain="example.com",
             spf=SPFRecord(record="v=spf1 include:_spf.google.com ~all", is_valid=True),
             dmarc=DMARCRecord(record="v=DMARC1; p=quarantine;", policy="quarantine", is_valid=True),
-        )
-
-        # Advanced Email Security Result
-        advanced_email_result = AdvancedEmailSecurityResult(
-            domain="example.com",
             bimi=BIMIRecord(
                 domain="example.com",
                 record_found=True,
@@ -571,7 +563,6 @@ class TestDisplayResults:
             "http": http_result,
             "ssl": ssl_result,
             "email": email_result,
-            "advanced_email": advanced_email_result,
             "headers": headers_result,
             "rbl": rbl_result,
             "seo": seo_result,

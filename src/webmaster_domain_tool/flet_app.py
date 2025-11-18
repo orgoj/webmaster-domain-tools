@@ -423,9 +423,6 @@ class DomainAnalyzerApp:
                 field_name = metadata.result_field
                 results_dict[field_name] = getattr(results, field_name, None)
 
-            # Advanced email is special case (not in registry as standalone)
-            results_dict["advanced_email"] = results.advanced_email
-
             # Display results (existing method handles this)
             self.display_results(domain, results_dict)
 

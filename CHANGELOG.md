@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Email Configuration Consolidated**: Merged `AdvancedEmailConfig` into `EmailConfig` for simplified configuration
+  - All email security settings (SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT) now in single `[email]` section
+  - Removed `[advanced_email]` section from config files
+  - Removed `skip_advanced_email` flag from analysis options
+  - GUI config editor now has single "Email" tab instead of separate "Advanced Email" tab
+  - **Breaking Change**: If you have `[advanced_email]` section in your config.toml, move settings to `[email]` section
+
 ## [0.3.0] - 2024-11-17
 
 ### Added
