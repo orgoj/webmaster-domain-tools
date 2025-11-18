@@ -41,7 +41,6 @@ export async function analyzeRobotsTxt(domain: string): Promise<RobotsTxtResult>
 
     // Parse robots.txt
     const lines = content.split('\n');
-    let currentUserAgent = '';
 
     for (const line of lines) {
       const trimmed = line.trim();
@@ -60,7 +59,6 @@ export async function analyzeRobotsTxt(domain: string): Promise<RobotsTxtResult>
 
       switch (directive) {
         case 'user-agent':
-          currentUserAgent = value;
           if (!result.rules.userAgents.includes(value)) {
             result.rules.userAgents.push(value);
           }

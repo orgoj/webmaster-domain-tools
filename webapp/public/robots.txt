@@ -4,5 +4,6 @@
 User-agent: *
 Allow: /
 
+# TODO: Replace your-domain.com with your production domain before deployment
 # Sitemaps
 Sitemap: https://your-domain.com/sitemap.xml

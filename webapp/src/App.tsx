@@ -56,6 +56,7 @@ function App() {
       <DarkModeToggle />
 
       {/* Top Ad - Banner */}
+      {/* TODO: Replace ad slot "1234567890" with your real AdSense slot ID */}
       <div className="max-w-4xl mx-auto mb-6">
         <GoogleAd adSlot="1234567890" adFormat="horizontal" className="w-full" />
       </div>
@@ -262,6 +263,7 @@ function App() {
             )}
 
             {/* Mid Ad - Rectangle (after content for AdSense policy compliance) */}
+            {/* TODO: Replace ad slot "2345678901" with your real AdSense slot ID */}
             <GoogleAd adSlot="2345678901" adFormat="rectangle" className="w-full" />
           </div>
         )}
@@ -269,6 +271,7 @@ function App() {
         {/* Footer */}
         <footer className="mt-12 space-y-6">
           {/* Bottom Ad - Banner */}
+          {/* TODO: Replace ad slot "3456789012" with your real AdSense slot ID */}
           <GoogleAd adSlot="3456789012" adFormat="horizontal" className="w-full" />
 
           <div className="text-center text-sm text-gray-500 dark:text-gray-400">
