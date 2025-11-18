@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2024-11-17
+
+### Added
+- **Web Application Major Update**
+  - SEO Analysis tools (robots.txt, sitemap.xml, favicon detection)
+  - Export functionality (JSON, CSV, TXT, HTML formats)
+  - Dark mode with localStorage persistence and system preference detection
+  - DKIM detection with common selector scanning
+  - Google AdSense integration with placeholder components
+  - Cloudflare Pages deployment configuration
+  - GitHub Actions CI/CD workflow for automatic deployment
+  - Comprehensive SEO meta tags (Open Graph, Twitter Cards)
+  - Google Analytics (GA4) integration
+  - Security headers (_headers file for Cloudflare)
+  - SPA routing support (_redirects file)
+  - Production environment variables template
+
+- **Comprehensive Testing**
+  - 60+ new unit tests for all new features
+  - Test coverage for SEO services, export functionality, dark mode
+  - DKIM detection tests with multiple selectors
+
+### Changed
+
 ### Changed
 - **Pre-commit Hooks Configuration Updated and Automated**
   - Updated all pre-commit hook versions to latest stable releases
