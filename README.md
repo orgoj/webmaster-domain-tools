@@ -228,7 +228,17 @@ wdt-app
 
 # Or if running from source
 uv run wdt-app
+
+# Launch with specific profile and domain pre-filled
+wdt-app --config myprofile example.com
+
+# Short form
+wdt-app -c myprofile example.com
 ```
+
+**CLI Arguments:**
+- `--config` / `-c`: Configuration profile name to use (from saved profiles)
+- `domain`: Domain to pre-fill in the input field
 
 **System Requirements for GUI:**
 
