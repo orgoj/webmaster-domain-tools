@@ -275,21 +275,9 @@ def run_domain_analysis(
     timeout: float | None = None,
     max_redirects: int | None = None,
     warn_www_not_cname: bool | None = None,
-    skip_www: bool | None = None,
     dkim_selectors: str | None = None,
     check_path: str | None = None,
     verify: list[str] | None = None,
-    # Skip flags
-    skip_whois: bool = False,
-    skip_dns: bool = False,
-    skip_http: bool = False,
-    skip_ssl: bool = False,
-    skip_email: bool = False,
-    skip_headers: bool = False,
-    skip_site_verification: bool = False,
-    skip_seo: bool = False,
-    skip_favicon: bool = False,
-    do_rbl_check: bool = False,
     # Progress callback for GUI
     progress_callback: Callable[[str], None] | None = None,
 ) -> DomainAnalysisResults:
@@ -299,27 +287,20 @@ def run_domain_analysis(
     This is the SINGLE SOURCE OF TRUTH for running domain analysis.
     Both CLI and GUI should call this function.
 
+    Skip flags are now part of each analyzer's config section:
+    - config.dns.skip, config.http.skip, config.ssl.skip, etc.
+
     Args:
         domain: Domain name to analyze
-        config: Configuration object
+        config: Configuration object (contains all skip flags per section)
         nameservers: Optional comma-separated nameserver IPs (overrides config)
         timeout: Optional timeout in seconds (overrides config)
         max_redirects: Optional max redirects (overrides config)
         warn_www_not_cname: Optional www CNAME warning flag (overrides config)
-        skip_www: Optional flag to skip www subdomain checks (overrides config)
         dkim_selectors: Optional comma-separated DKIM selectors (overrides config)
         check_path: Optional path to check on final URL
         verify: Optional list of verification IDs in "Service:ID" format
-        skip_whois: Skip WHOIS analysis
-        skip_dns: Skip DNS analysis
-        skip_http: Skip HTTP analysis
-        skip_ssl: Skip SSL analysis
-        skip_email: Skip email security analysis
-        skip_headers: Skip security headers analysis
-        skip_site_verification: Skip site verification analysis
-        skip_seo: Skip SEO files analysis (robots.txt, sitemap.xml, llms.txt)
-        skip_favicon: Skip favicon detection
-        do_rbl_check: Enable RBL blacklist checking
+        progress_callback: Callback for progress updates (GUI)
 
     Returns:
         DomainAnalysisResults containing all analysis results
@@ -327,7 +308,7 @@ def run_domain_analysis(
     results = DomainAnalysisResults(domain=domain)
 
     # WHOIS Analysis
-    if not skip_whois:
+    if not config.whois.skip:
         if progress_callback:
             progress_callback("Running WHOIS analysis...")
         logger.info("Running WHOIS analysis...")
@@ -338,7 +319,7 @@ def run_domain_analysis(
         results.whois = whois_analyzer.analyze(domain)
 
     # DNS Analysis
-    if not skip_dns:
+    if not config.dns.skip:
         if progress_callback:
             progress_callback("Running DNS analysis...")
         logger.info("Running DNS analysis...")
@@ -350,19 +331,19 @@ def run_domain_analysis(
                 if warn_www_not_cname is not None
                 else config.dns.warn_www_not_cname
             ),
-            skip_www=skip_www if skip_www else config.analysis.skip_www,
+            skip_www=config.dns.skip_www,
         )
         results.dns = dns_analyzer.analyze(domain)
 
     # HTTP/HTTPS Analysis
-    if not skip_http:
+    if not config.http.skip:
         if progress_callback:
             progress_callback("Running HTTP/HTTPS analysis...")
         logger.info("Running HTTP/HTTPS analysis...")
         http_analyzer = HTTPAnalyzer(
             timeout=timeout if timeout else config.http.timeout,
             max_redirects=max_redirects if max_redirects else config.http.max_redirects,
-            skip_www=skip_www if skip_www else config.analysis.skip_www,
+            skip_www=config.dns.skip_www,
         )
         results.http = http_analyzer.analyze(domain)
 
@@ -379,7 +360,7 @@ def run_domain_analysis(
             results.http.path_check_result = path_result
 
     # CDN Detection (uses DNS CNAME + HTTP headers)
-    if not config.analysis.skip_cdn_detection and results.http:
+    if not config.http.skip_cdn_detection and results.http:
         if progress_callback:
             progress_callback("Detecting CDN...")
         logger.info("Detecting CDN...")
@@ -410,7 +391,7 @@ def run_domain_analysis(
                 results.cdn = cdn_detector.combine_results(domain, header_result, cname_result)
 
     # SSL/TLS Analysis
-    if not skip_ssl:
+    if not config.ssl.skip:
         if progress_callback:
             progress_callback("Running SSL/TLS analysis...")
         logger.info("Running SSL/TLS analysis...")
@@ -422,7 +403,7 @@ def run_domain_analysis(
         results.ssl = ssl_analyzer.analyze(domain)
 
     # Email Security Analysis (SPF, DKIM, DMARC + BIMI, MTA-STS, TLS-RPT)
-    if not skip_email:
+    if not config.email.skip:
         if progress_callback:
             progress_callback("Running email security analysis...")
         logger.info("Running email security analysis...")
@@ -438,7 +419,7 @@ def run_domain_analysis(
         results.email = email_analyzer.analyze(domain)
 
     # Security Headers Analysis
-    if not skip_headers and results.http:
+    if not config.security_headers.skip and results.http:
         if progress_callback:
             progress_callback("Running security headers analysis...")
         logger.info("Running security headers analysis...")
@@ -470,7 +451,7 @@ def run_domain_analysis(
             results.headers = [headers_result]
 
     # Site Verification Analysis (Google, Facebook, Pinterest, etc.)
-    if not skip_site_verification:
+    if not config.site_verification.skip:
         # Build list of service configurations from config
         services = []
         for service_cfg in config.site_verification.services:
@@ -551,7 +532,7 @@ def run_domain_analysis(
             )
 
     # RBL (Blacklist) Check
-    if do_rbl_check and results.dns:
+    if config.email.check_rbl and results.dns:
         if progress_callback:
             progress_callback("Running RBL blacklist check...")
         logger.info("Running RBL blacklist check...")
@@ -566,7 +547,7 @@ def run_domain_analysis(
             logger.debug("No IP addresses found for RBL check")
 
     # SEO Files Analysis (robots.txt, sitemap.xml, llms.txt)
-    if not skip_seo and results.http and results.http.preferred_final_url:
+    if not config.seo.skip and results.http and results.http.preferred_final_url:
         if progress_callback:
             progress_callback("Running SEO files analysis...")
         logger.info("Running SEO files analysis...")
@@ -579,7 +560,7 @@ def run_domain_analysis(
         results.seo = seo_analyzer.analyze(results.http.preferred_final_url)
 
     # Favicon Detection
-    if not skip_favicon and results.http and results.http.preferred_final_url:
+    if not config.favicon.skip and results.http and results.http.preferred_final_url:
         if progress_callback:
             progress_callback("Running favicon detection...")
         logger.info("Running favicon detection...")

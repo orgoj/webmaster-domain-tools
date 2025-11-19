@@ -394,32 +394,37 @@ class DomainAnalyzerApp:
         domain = domain.replace("http://", "").replace("https://", "").rstrip("/")
         return domain
 
-    def _build_skip_params(self) -> dict[str, bool]:
+    def _apply_checkbox_states_to_config(self, config: "Config") -> None:
         """
-        Build skip parameters dynamically from checkbox states using registry.
+        Apply checkbox states to config object.
 
-        Returns dict of skip parameter names to values, ready to pass to run_domain_analysis().
-        No more hardcoded mapping - uses ANALYZER_REGISTRY as single source of truth!
+        Modifies the config in place to set skip flags based on checkbox states.
         """
-        skip_params = {}
+        # Map analyzer keys to their config section and skip attribute
+        checkbox_config_map = {
+            "whois": (config.whois, "skip"),
+            "dns": (config.dns, "skip"),
+            "http": (config.http, "skip"),
+            "ssl": (config.ssl, "skip"),
+            "email": (config.email, "skip"),
+            "headers": (config.security_headers, "skip"),
+            "rbl": (config.email, "check_rbl"),  # RBL is inverted - checked means enable
+            "seo": (config.seo, "skip"),
+            "favicon": (config.favicon, "skip"),
+            "site_verification": (config.site_verification, "skip"),
+        }
 
-        for analyzer_key, metadata in ANALYZER_REGISTRY.items():
-            if not metadata.has_checkbox or not metadata.skip_param_name:
-                continue
-
+        for analyzer_key, (config_section, attr_name) in checkbox_config_map.items():
             checkbox = self.analyzer_checkboxes.get(analyzer_key)
             if not checkbox:
                 continue
 
-            # Build parameter value based on checkbox state
-            if metadata.skip_param_inverted:
-                # Inverted params like "do_rbl_check": checked=True means enable
-                skip_params[metadata.skip_param_name] = checkbox.value
+            if analyzer_key == "rbl":
+                # RBL is inverted: checked=True means enable (check_rbl=True)
+                setattr(config_section, attr_name, checkbox.value)
             else:
-                # Normal skip params: checked=True means enable, so skip=False
-                skip_params[metadata.skip_param_name] = not checkbox.value
-
-        return skip_params
+                # Normal skip: checked=True means enabled, so skip=False
+                setattr(config_section, attr_name, not checkbox.value)
 
     def run_analysis(self) -> None:
         """Run domain analysis."""
@@ -456,16 +461,14 @@ class DomainAnalyzerApp:
             # Copy config to avoid side effects
             config = self.config.model_copy(deep=True)
 
-            # Build skip parameters dynamically from checkboxes (DRY!)
-            # No more hardcoded mapping - uses ANALYZER_REGISTRY
-            skip_params = self._build_skip_params()
+            # Apply checkbox states to config (skip flags are now in config sections)
+            self._apply_checkbox_states_to_config(config)
 
-            # Call CORE analysis (same as CLI!) with dynamic skip parameters
+            # Call CORE analysis (same as CLI!)
             results = run_domain_analysis(
                 domain,
                 config,
                 progress_callback=self.update_status,
-                **skip_params,  # Dynamic parameters from registry!
             )
 
             # Convert to dict for display_results - build dynamically from registry (DRY!)

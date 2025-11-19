@@ -1,12 +1,17 @@
 """Tests for configuration management."""
 
 from webmaster_domain_tool.config import (
-    AnalysisConfig,
     Config,
     DNSConfig,
     EmailConfig,
+    FaviconConfig,
     HTTPConfig,
     OutputConfig,
+    SecurityHeadersConfig,
+    SEOConfig,
+    SiteVerificationConfig,
+    SSLConfig,
+    WhoisConfig,
     _merge_configs,
     load_config,
 )
@@ -43,14 +48,19 @@ def test_output_config_defaults():
     assert config.verbosity == "normal"
 
 
-def test_analysis_config_defaults():
-    """Test Analysis config has correct defaults."""
-    config = AnalysisConfig()
-    assert config.skip_dns is False
-    assert config.skip_http is False
-    assert config.skip_ssl is False
-    assert config.skip_email is False
-    assert config.skip_headers is False
+def test_skip_flags_in_config_sections():
+    """Test skip flags are in each analyzer config section."""
+    config = Config()
+    # Each analyzer section now has its own skip flag
+    assert config.dns.skip is False
+    assert config.http.skip is False
+    assert config.ssl.skip is False
+    assert config.email.skip is False
+    assert config.security_headers.skip is False
+    assert config.seo.skip is False
+    assert config.favicon.skip is False
+    assert config.whois.skip is False
+    assert config.site_verification.skip is False
 
 
 def test_main_config_defaults():
@@ -58,9 +68,14 @@ def test_main_config_defaults():
     config = Config()
     assert isinstance(config.dns, DNSConfig)
     assert isinstance(config.http, HTTPConfig)
+    assert isinstance(config.ssl, SSLConfig)
     assert isinstance(config.email, EmailConfig)
+    assert isinstance(config.security_headers, SecurityHeadersConfig)
+    assert isinstance(config.seo, SEOConfig)
+    assert isinstance(config.favicon, FaviconConfig)
+    assert isinstance(config.whois, WhoisConfig)
+    assert isinstance(config.site_verification, SiteVerificationConfig)
     assert isinstance(config.output, OutputConfig)
-    assert isinstance(config.analysis, AnalysisConfig)
 
 
 def test_merge_configs_simple():

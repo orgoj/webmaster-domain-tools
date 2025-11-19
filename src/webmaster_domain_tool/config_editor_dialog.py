@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import flet as ft
@@ -39,7 +40,7 @@ class ConfigEditorDialog:
         self.whois_fields: dict[str, ft.Control] = {}
         self.seo_fields: dict[str, ft.Control] = {}
         self.favicon_fields: dict[str, ft.Control] = {}
-        self.analysis_fields: dict[str, ft.Control] = {}
+        self.site_verification_fields: dict[str, ft.Control] = {}
         self.output_fields: dict[str, ft.Control] = {}
 
         # Build dialog
@@ -59,7 +60,7 @@ class ConfigEditorDialog:
                 self._create_seo_tab(),
                 self._create_favicon_tab(),
                 self._create_whois_tab(),
-                self._create_analysis_tab(),
+                self._create_site_verification_tab(),
                 self._create_output_tab(),
             ],
             expand=1,
@@ -74,6 +75,8 @@ class ConfigEditorDialog:
                 height=500,
             ),
             actions=[
+                ft.TextButton("Import TOML", on_click=lambda _: self._import_toml()),
+                ft.TextButton("Export TOML", on_click=lambda _: self._export_toml()),
                 ft.TextButton("Cancel", on_click=lambda _: self._close_dialog()),
                 ft.ElevatedButton("Save", on_click=lambda _: self._save_and_close()),
             ],
@@ -84,6 +87,10 @@ class ConfigEditorDialog:
 
     def _create_dns_tab(self) -> ft.Tab:
         """Create DNS configuration tab."""
+        self.dns_fields["skip"] = ft.Checkbox(
+            label="Skip DNS analysis",
+            value=self.config.dns.skip,
+        )
         self.dns_fields["nameservers"] = ft.TextField(
             label="DNS Nameservers (comma-separated)",
             value=", ".join(self.config.dns.nameservers),
@@ -103,6 +110,10 @@ class ConfigEditorDialog:
             label="Warn if www is not CNAME (best practice)",
             value=self.config.dns.warn_www_not_cname,
         )
+        self.dns_fields["skip_www"] = ft.Checkbox(
+            label="Skip testing www subdomain",
+            value=self.config.dns.skip_www,
+        )
 
         return ft.Tab(
             text="DNS",
@@ -110,10 +121,13 @@ class ConfigEditorDialog:
             content=ft.Container(
                 content=ft.Column(
                     [
+                        self.dns_fields["skip"],
+                        ft.Divider(),
                         self.dns_fields["nameservers"],
                         self.dns_fields["timeout"],
                         self.dns_fields["check_dnssec"],
                         self.dns_fields["warn_www_not_cname"],
+                        self.dns_fields["skip_www"],
                     ],
                     spacing=10,
                     scroll=ft.ScrollMode.AUTO,
@@ -124,6 +138,10 @@ class ConfigEditorDialog:
 
     def _create_http_tab(self) -> ft.Tab:
         """Create HTTP configuration tab."""
+        self.http_fields["skip"] = ft.Checkbox(
+            label="Skip HTTP/HTTPS analysis",
+            value=self.config.http.skip,
+        )
         self.http_fields["timeout"] = ft.TextField(
             label="HTTP Timeout (seconds)",
             value=str(self.config.http.timeout),
@@ -139,6 +157,10 @@ class ConfigEditorDialog:
             value=self.config.http.user_agent or "",
             hint_text="Leave empty for default",
         )
+        self.http_fields["skip_cdn_detection"] = ft.Checkbox(
+            label="Skip CDN detection",
+            value=self.config.http.skip_cdn_detection,
+        )
 
         return ft.Tab(
             text="HTTP",
@@ -146,9 +168,12 @@ class ConfigEditorDialog:
             content=ft.Container(
                 content=ft.Column(
                     [
+                        self.http_fields["skip"],
+                        ft.Divider(),
                         self.http_fields["timeout"],
                         self.http_fields["max_redirects"],
                         self.http_fields["user_agent"],
+                        self.http_fields["skip_cdn_detection"],
                     ],
                     spacing=10,
                     scroll=ft.ScrollMode.AUTO,
@@ -159,6 +184,10 @@ class ConfigEditorDialog:
 
     def _create_ssl_tab(self) -> ft.Tab:
         """Create SSL configuration tab."""
+        self.ssl_fields["skip"] = ft.Checkbox(
+            label="Skip SSL/TLS analysis",
+            value=self.config.ssl.skip,
+        )
         self.ssl_fields["cert_expiry_warning_days"] = ft.TextField(
             label="Certificate Expiry Warning (days)",
             value=str(self.config.ssl.cert_expiry_warning_days),
@@ -177,6 +206,8 @@ class ConfigEditorDialog:
             content=ft.Container(
                 content=ft.Column(
                     [
+                        self.ssl_fields["skip"],
+                        ft.Divider(),
                         self.ssl_fields["cert_expiry_warning_days"],
                         self.ssl_fields["cert_expiry_critical_days"],
                     ],
@@ -189,6 +220,10 @@ class ConfigEditorDialog:
 
     def _create_email_tab(self) -> ft.Tab:
         """Create email security configuration tab."""
+        self.email_fields["skip"] = ft.Checkbox(
+            label="Skip email security analysis",
+            value=self.config.email.skip,
+        )
         self.email_fields["dkim_selectors"] = ft.TextField(
             label="DKIM Selectors (comma-separated)",
             value=", ".join(self.config.email.dkim_selectors),
@@ -228,6 +263,8 @@ class ConfigEditorDialog:
             content=ft.Container(
                 content=ft.Column(
                     [
+                        self.email_fields["skip"],
+                        ft.Divider(),
                         self.email_fields["dkim_selectors"],
                         self.email_fields["check_rbl"],
                         self.email_fields["rbl_servers"],
@@ -246,6 +283,11 @@ class ConfigEditorDialog:
 
     def _create_security_headers_tab(self) -> ft.Tab:
         """Create security headers configuration tab."""
+        self.security_headers_fields["skip"] = ft.Checkbox(
+            label="Skip security headers analysis",
+            value=self.config.security_headers.skip,
+        )
+
         headers = [
             ("check_strict_transport_security", "Strict-Transport-Security (HSTS)"),
             ("check_content_security_policy", "Content-Security-Policy (CSP)"),
@@ -258,7 +300,7 @@ class ConfigEditorDialog:
             ("check_cors", "CORS (Access-Control-Allow-Origin)"),
         ]
 
-        controls = []
+        controls = [self.security_headers_fields["skip"], ft.Divider()]
         for field_name, label in headers:
             current_value = getattr(self.config.security_headers, field_name)
             checkbox = ft.Checkbox(label=f"Check {label}", value=current_value)
@@ -280,6 +322,10 @@ class ConfigEditorDialog:
 
     def _create_seo_tab(self) -> ft.Tab:
         """Create SEO configuration tab."""
+        self.seo_fields["skip"] = ft.Checkbox(
+            label="Skip SEO files analysis",
+            value=self.config.seo.skip,
+        )
         self.seo_fields["check_robots"] = ft.Checkbox(
             label="Check robots.txt",
             value=self.config.seo.check_robots,
@@ -299,6 +345,8 @@ class ConfigEditorDialog:
             content=ft.Container(
                 content=ft.Column(
                     [
+                        self.seo_fields["skip"],
+                        ft.Divider(),
                         self.seo_fields["check_robots"],
                         self.seo_fields["check_llms_txt"],
                         self.seo_fields["check_sitemap"],
@@ -312,6 +360,10 @@ class ConfigEditorDialog:
 
     def _create_favicon_tab(self) -> ft.Tab:
         """Create favicon configuration tab."""
+        self.favicon_fields["skip"] = ft.Checkbox(
+            label="Skip favicon detection",
+            value=self.config.favicon.skip,
+        )
         self.favicon_fields["check_html"] = ft.Checkbox(
             label="Parse HTML for favicon links",
             value=self.config.favicon.check_html,
@@ -327,6 +379,8 @@ class ConfigEditorDialog:
             content=ft.Container(
                 content=ft.Column(
                     [
+                        self.favicon_fields["skip"],
+                        ft.Divider(),
                         self.favicon_fields["check_html"],
                         self.favicon_fields["check_defaults"],
                     ],
@@ -339,6 +393,10 @@ class ConfigEditorDialog:
 
     def _create_whois_tab(self) -> ft.Tab:
         """Create WHOIS configuration tab."""
+        self.whois_fields["skip"] = ft.Checkbox(
+            label="Skip WHOIS analysis",
+            value=self.config.whois.skip,
+        )
         self.whois_fields["expiry_warning_days"] = ft.TextField(
             label="Domain Expiry Warning (days)",
             value=str(self.config.whois.expiry_warning_days),
@@ -356,6 +414,8 @@ class ConfigEditorDialog:
             content=ft.Container(
                 content=ft.Column(
                     [
+                        self.whois_fields["skip"],
+                        ft.Divider(),
                         self.whois_fields["expiry_warning_days"],
                         self.whois_fields["expiry_critical_days"],
                     ],
@@ -366,35 +426,53 @@ class ConfigEditorDialog:
             ),
         )
 
-    def _create_analysis_tab(self) -> ft.Tab:
-        """Create analysis options configuration tab."""
-        skip_options = [
-            ("skip_dns", "Skip DNS analysis"),
-            ("skip_http", "Skip HTTP/HTTPS analysis"),
-            ("skip_ssl", "Skip SSL/TLS analysis"),
-            ("skip_email", "Skip email security analysis"),
-            ("skip_headers", "Skip security headers analysis"),
-            ("skip_site_verification", "Skip site verification analysis"),
-            ("skip_whois", "Skip WHOIS analysis"),
-            ("skip_www", "Skip testing www subdomain"),
-            ("skip_seo", "Skip SEO files analysis"),
-            ("skip_favicon", "Skip favicon detection"),
-            ("skip_cdn_detection", "Skip CDN detection"),
-        ]
+    def _create_site_verification_tab(self) -> ft.Tab:
+        """Create site verification configuration tab with TOML editor."""
+        self.site_verification_fields["skip"] = ft.Checkbox(
+            label="Skip site verification analysis",
+            value=self.config.site_verification.skip,
+        )
 
-        controls = []
-        for field_name, label in skip_options:
-            current_value = getattr(self.config.analysis, field_name)
-            checkbox = ft.Checkbox(label=label, value=current_value)
-            self.analysis_fields[field_name] = checkbox
-            controls.append(checkbox)
+        # Generate TOML for site_verification.services
+        try:
+            import tomli_w
+
+            services_dict = {
+                "services": [
+                    s.model_dump(mode="json") for s in self.config.site_verification.services
+                ]
+            }
+            toml_content = tomli_w.dumps(services_dict)
+        except ImportError:
+            toml_content = (
+                "# tomli_w not installed - cannot display TOML\n# Install with: pip install tomli-w"
+            )
+        except Exception as e:
+            toml_content = f"# Error generating TOML: {e}"
+
+        self.site_verification_fields["toml_editor"] = ft.TextField(
+            label="Site Verification Services (TOML format)",
+            value=toml_content,
+            multiline=True,
+            min_lines=15,
+            max_lines=20,
+            text_style=ft.TextStyle(font_family="monospace"),
+        )
 
         return ft.Tab(
-            text="Analysis Options",
-            icon=ft.Icons.SETTINGS,
+            text="Site Verification",
+            icon=ft.Icons.VERIFIED,
             content=ft.Container(
                 content=ft.Column(
-                    controls,
+                    [
+                        self.site_verification_fields["skip"],
+                        ft.Divider(),
+                        ft.Text(
+                            "Edit services configuration in TOML format:",
+                            weight=ft.FontWeight.BOLD,
+                        ),
+                        self.site_verification_fields["toml_editor"],
+                    ],
                     spacing=10,
                     scroll=ft.ScrollMode.AUTO,
                 ),
@@ -436,6 +514,139 @@ class ConfigEditorDialog:
             ),
         )
 
+    # ========== TOML IMPORT/EXPORT ==========
+
+    def _import_toml(self) -> None:
+        """Import configuration from TOML file."""
+
+        def on_file_picked(e: ft.FilePickerResultEvent):
+            if e.files and len(e.files) > 0:
+                file_path = e.files[0].path
+                try:
+                    imported_config = Config.from_toml_file(Path(file_path))
+                    # Update our working config
+                    self.config = imported_config
+                    # Refresh dialog fields with imported values
+                    self._refresh_all_fields()
+                    self._show_success(f"Imported config from: {file_path}")
+                except Exception as ex:
+                    logger.error(f"Failed to import config: {ex}")
+                    self._show_error(f"Failed to import config: {ex}")
+
+        file_picker = ft.FilePicker(on_result=on_file_picked)
+        self.page.overlay.append(file_picker)
+        self.page.update()
+        file_picker.pick_files(
+            dialog_title="Import TOML Configuration",
+            allowed_extensions=["toml"],
+            allow_multiple=False,
+        )
+
+    def _export_toml(self) -> None:
+        """Export configuration to TOML file."""
+
+        def on_file_picked(e: ft.FilePickerResultEvent):
+            if e.path:
+                try:
+                    # Build config from current UI state
+                    config = self._validate_and_build_config()
+                    if config:
+                        config.to_toml_file(Path(e.path))
+                        self._show_success(f"Exported config to: {e.path}")
+                except Exception as ex:
+                    logger.error(f"Failed to export config: {ex}")
+                    self._show_error(f"Failed to export config: {ex}")
+
+        file_picker = ft.FilePicker(on_result=on_file_picked)
+        self.page.overlay.append(file_picker)
+        self.page.update()
+        file_picker.save_file(
+            dialog_title="Export TOML Configuration",
+            file_name="wdt-config.toml",
+            allowed_extensions=["toml"],
+        )
+
+    def _refresh_all_fields(self) -> None:
+        """Refresh all UI fields with current config values."""
+        # DNS
+        self.dns_fields["skip"].value = self.config.dns.skip
+        self.dns_fields["nameservers"].value = ", ".join(self.config.dns.nameservers)
+        self.dns_fields["timeout"].value = str(self.config.dns.timeout)
+        self.dns_fields["check_dnssec"].value = self.config.dns.check_dnssec
+        self.dns_fields["warn_www_not_cname"].value = self.config.dns.warn_www_not_cname
+        self.dns_fields["skip_www"].value = self.config.dns.skip_www
+
+        # HTTP
+        self.http_fields["skip"].value = self.config.http.skip
+        self.http_fields["timeout"].value = str(self.config.http.timeout)
+        self.http_fields["max_redirects"].value = str(self.config.http.max_redirects)
+        self.http_fields["user_agent"].value = self.config.http.user_agent or ""
+        self.http_fields["skip_cdn_detection"].value = self.config.http.skip_cdn_detection
+
+        # SSL
+        self.ssl_fields["skip"].value = self.config.ssl.skip
+        self.ssl_fields["cert_expiry_warning_days"].value = str(
+            self.config.ssl.cert_expiry_warning_days
+        )
+        self.ssl_fields["cert_expiry_critical_days"].value = str(
+            self.config.ssl.cert_expiry_critical_days
+        )
+
+        # Email
+        self.email_fields["skip"].value = self.config.email.skip
+        self.email_fields["dkim_selectors"].value = ", ".join(self.config.email.dkim_selectors)
+        self.email_fields["check_rbl"].value = self.config.email.check_rbl
+        self.email_fields["rbl_servers"].value = ", ".join(self.config.email.rbl_servers)
+        self.email_fields["check_bimi"].value = self.config.email.check_bimi
+        self.email_fields["check_mta_sts"].value = self.config.email.check_mta_sts
+        self.email_fields["check_tls_rpt"].value = self.config.email.check_tls_rpt
+
+        # Security Headers
+        self.security_headers_fields["skip"].value = self.config.security_headers.skip
+        for field_name in self.security_headers_fields:
+            if field_name != "skip" and hasattr(self.config.security_headers, field_name):
+                self.security_headers_fields[field_name].value = getattr(
+                    self.config.security_headers, field_name
+                )
+
+        # SEO
+        self.seo_fields["skip"].value = self.config.seo.skip
+        self.seo_fields["check_robots"].value = self.config.seo.check_robots
+        self.seo_fields["check_llms_txt"].value = self.config.seo.check_llms_txt
+        self.seo_fields["check_sitemap"].value = self.config.seo.check_sitemap
+
+        # Favicon
+        self.favicon_fields["skip"].value = self.config.favicon.skip
+        self.favicon_fields["check_html"].value = self.config.favicon.check_html
+        self.favicon_fields["check_defaults"].value = self.config.favicon.check_defaults
+
+        # WHOIS
+        self.whois_fields["skip"].value = self.config.whois.skip
+        self.whois_fields["expiry_warning_days"].value = str(self.config.whois.expiry_warning_days)
+        self.whois_fields["expiry_critical_days"].value = str(
+            self.config.whois.expiry_critical_days
+        )
+
+        # Site Verification
+        self.site_verification_fields["skip"].value = self.config.site_verification.skip
+        try:
+            import tomli_w
+
+            services_dict = {
+                "services": [
+                    s.model_dump(mode="json") for s in self.config.site_verification.services
+                ]
+            }
+            self.site_verification_fields["toml_editor"].value = tomli_w.dumps(services_dict)
+        except Exception:
+            pass
+
+        # Output
+        self.output_fields["color"].value = self.config.output.color
+        self.output_fields["verbosity"].value = self.config.output.verbosity
+
+        self.page.update()
+
     # ========== VALIDATION & SAVE ==========
 
     def _validate_and_build_config(self) -> Config | None:
@@ -453,22 +664,27 @@ class ConfigEditorDialog:
             nameservers_str = self.dns_fields["nameservers"].value
             nameservers = [ns.strip() for ns in nameservers_str.split(",") if ns.strip()]
             config_dict["dns"] = {
+                "skip": self.dns_fields["skip"].value,
                 "nameservers": nameservers,
                 "timeout": float(self.dns_fields["timeout"].value),
                 "check_dnssec": self.dns_fields["check_dnssec"].value,
                 "warn_www_not_cname": self.dns_fields["warn_www_not_cname"].value,
+                "skip_www": self.dns_fields["skip_www"].value,
             }
 
             # HTTP
             user_agent = self.http_fields["user_agent"].value.strip()
             config_dict["http"] = {
+                "skip": self.http_fields["skip"].value,
                 "timeout": float(self.http_fields["timeout"].value),
                 "max_redirects": int(self.http_fields["max_redirects"].value),
                 "user_agent": user_agent if user_agent else None,
+                "skip_cdn_detection": self.http_fields["skip_cdn_detection"].value,
             }
 
             # SSL
             config_dict["ssl"] = {
+                "skip": self.ssl_fields["skip"].value,
                 "cert_expiry_warning_days": int(self.ssl_fields["cert_expiry_warning_days"].value),
                 "cert_expiry_critical_days": int(
                     self.ssl_fields["cert_expiry_critical_days"].value
@@ -481,6 +697,7 @@ class ConfigEditorDialog:
             rbl_servers_str = self.email_fields["rbl_servers"].value
             rbl_servers = [s.strip() for s in rbl_servers_str.split(",") if s.strip()]
             config_dict["email"] = {
+                "skip": self.email_fields["skip"].value,
                 "dkim_selectors": dkim_selectors,
                 "check_rbl": self.email_fields["check_rbl"].value,
                 "rbl_servers": rbl_servers,
@@ -490,40 +707,61 @@ class ConfigEditorDialog:
             }
 
             # Security Headers
-            config_dict["security_headers"] = {
-                field_name: checkbox.value
-                for field_name, checkbox in self.security_headers_fields.items()
-            }
+            security_headers_dict = {"skip": self.security_headers_fields["skip"].value}
+            for field_name, checkbox in self.security_headers_fields.items():
+                if field_name != "skip":
+                    security_headers_dict[field_name] = checkbox.value
+            config_dict["security_headers"] = security_headers_dict
 
             # SEO
             config_dict["seo"] = {
-                field_name: checkbox.value for field_name, checkbox in self.seo_fields.items()
+                "skip": self.seo_fields["skip"].value,
+                "check_robots": self.seo_fields["check_robots"].value,
+                "check_llms_txt": self.seo_fields["check_llms_txt"].value,
+                "check_sitemap": self.seo_fields["check_sitemap"].value,
             }
 
             # Favicon
             config_dict["favicon"] = {
-                field_name: checkbox.value for field_name, checkbox in self.favicon_fields.items()
+                "skip": self.favicon_fields["skip"].value,
+                "check_html": self.favicon_fields["check_html"].value,
+                "check_defaults": self.favicon_fields["check_defaults"].value,
             }
 
             # WHOIS
             config_dict["whois"] = {
+                "skip": self.whois_fields["skip"].value,
                 "expiry_warning_days": int(self.whois_fields["expiry_warning_days"].value),
                 "expiry_critical_days": int(self.whois_fields["expiry_critical_days"].value),
             }
 
-            # Analysis
-            config_dict["analysis"] = {
-                field_name: checkbox.value for field_name, checkbox in self.analysis_fields.items()
-            }
+            # Site Verification - parse TOML from editor
+            site_verification_dict = {"skip": self.site_verification_fields["skip"].value}
+            try:
+                import tomllib
+
+                toml_content = self.site_verification_fields["toml_editor"].value
+                parsed = tomllib.loads(toml_content)
+                if "services" in parsed:
+                    site_verification_dict["services"] = parsed["services"]
+                else:
+                    # Keep existing services if TOML doesn't have services key
+                    site_verification_dict["services"] = [
+                        s.model_dump(mode="json") for s in self.config.site_verification.services
+                    ]
+            except Exception as e:
+                logger.warning(f"Failed to parse site verification TOML: {e}")
+                # Keep existing services
+                site_verification_dict["services"] = [
+                    s.model_dump(mode="json") for s in self.config.site_verification.services
+                ]
+            config_dict["site_verification"] = site_verification_dict
 
             # Output
             config_dict["output"] = {
                 "color": self.output_fields["color"].value,
                 "verbosity": self.output_fields["verbosity"].value,
             }
-
-            # Site verification - keep from original config (too complex for GUI editing)
-            config_dict["site_verification"] = self.config.site_verification.model_dump(mode="json")
 
             # Create and validate Config
             return Config(**config_dict)
@@ -538,6 +776,16 @@ class ConfigEditorDialog:
         snackbar = ft.SnackBar(
             content=ft.Text(message, color="white"),
             bgcolor="red",
+        )
+        self.page.overlay.append(snackbar)
+        snackbar.open = True
+        self.page.update()
+
+    def _show_success(self, message: str) -> None:
+        """Show success snackbar."""
+        snackbar = ft.SnackBar(
+            content=ft.Text(message, color="white"),
+            bgcolor="green",
         )
         self.page.overlay.append(snackbar)
         snackbar.open = True

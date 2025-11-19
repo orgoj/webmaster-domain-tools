@@ -24,16 +24,18 @@ class TestProgressCallback:
             progress_messages.append(message)
 
         # Run analysis with all checks disabled except WHOIS (fastest)
+        config.dns.skip = True
+        config.http.skip = True
+        config.ssl.skip = True
+        config.email.skip = True
+        config.security_headers.skip = True
+        config.site_verification.skip = True
+        config.seo.skip = True
+        config.favicon.skip = True
+
         run_domain_analysis(
             "example.com",
             config,
-            skip_dns=True,
-            skip_http=True,
-            skip_ssl=True,
-            skip_email=True,
-            skip_headers=True,
-            skip_site_verification=True,
-            do_rbl_check=False,
             progress_callback=progress_callback,
         )
 
@@ -45,17 +47,20 @@ class TestProgressCallback:
         """Test that analysis works when progress_callback is None."""
         config = load_config()
 
+        # Skip most analyzers for speed
+        config.dns.skip = True
+        config.http.skip = True
+        config.ssl.skip = True
+        config.email.skip = True
+        config.security_headers.skip = True
+        config.site_verification.skip = True
+        config.seo.skip = True
+        config.favicon.skip = True
+
         # Should not raise any errors
         result = run_domain_analysis(
             "example.com",
             config,
-            skip_dns=True,
-            skip_http=True,
-            skip_ssl=True,
-            skip_email=True,
-            skip_headers=True,
-            skip_site_verification=True,
-            do_rbl_check=False,
             progress_callback=None,  # Explicitly None
         )
 
@@ -71,14 +76,16 @@ class TestProgressCallback:
             progress_messages.append(message)
 
         # Run with just a few analyzers to keep test fast
+        config.http.skip = True  # Skip slow ones
+        config.ssl.skip = True
+        config.security_headers.skip = True
+        config.site_verification.skip = True
+        config.seo.skip = True
+        config.favicon.skip = True
+
         run_domain_analysis(
             "example.com",
             config,
-            skip_http=True,  # Skip slow ones
-            skip_ssl=True,
-            skip_headers=True,
-            skip_site_verification=True,
-            do_rbl_check=False,
             progress_callback=progress_callback,
         )
 

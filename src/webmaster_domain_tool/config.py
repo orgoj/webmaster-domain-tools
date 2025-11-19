@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 class DNSConfig(BaseModel):
     """DNS analysis configuration."""
 
+    skip: bool = Field(default=False, description="Skip DNS analysis")
     nameservers: list[str] = Field(
         default_factory=lambda: ["8.8.8.8", "8.8.4.4", "1.1.1.1"],
         description="DNS nameservers to use",
@@ -28,22 +29,29 @@ class DNSConfig(BaseModel):
         default=False,
         description="Warn if www subdomain is not a CNAME record",
     )
+    skip_www: bool = Field(
+        default=False,
+        description="Skip testing www subdomain (useful for subdomains or domains without www)",
+    )
 
 
 class HTTPConfig(BaseModel):
     """HTTP/HTTPS analysis configuration."""
 
+    skip: bool = Field(default=False, description="Skip HTTP/HTTPS analysis")
     timeout: float = Field(default=10.0, description="HTTP request timeout in seconds")
     max_redirects: int = Field(default=10, description="Maximum number of redirects to follow")
     user_agent: str | None = Field(
         default=None,
         description="Custom user agent string",
     )
+    skip_cdn_detection: bool = Field(default=False, description="Skip CDN detection")
 
 
 class SSLConfig(BaseModel):
     """SSL/TLS analysis configuration."""
 
+    skip: bool = Field(default=False, description="Skip SSL/TLS analysis")
     cert_expiry_warning_days: int = Field(
         default=14,
         description="Number of days before certificate expiry to show warning (default: 14 for Let's Encrypt auto-renewal)",
@@ -57,6 +65,7 @@ class SSLConfig(BaseModel):
 class SecurityHeadersConfig(BaseModel):
     """Security headers check configuration."""
 
+    skip: bool = Field(default=False, description="Skip security headers analysis")
     check_strict_transport_security: bool = Field(
         default=True,
         description="Check Strict-Transport-Security (HSTS) header",
@@ -98,6 +107,7 @@ class SecurityHeadersConfig(BaseModel):
 class SEOConfig(BaseModel):
     """SEO files configuration."""
 
+    skip: bool = Field(default=False, description="Skip SEO files analysis")
     check_robots: bool = Field(default=True, description="Check robots.txt")
     check_llms_txt: bool = Field(default=True, description="Check /llms.txt for AI crawlers")
     check_sitemap: bool = Field(default=True, description="Check sitemap.xml")
@@ -106,6 +116,7 @@ class SEOConfig(BaseModel):
 class FaviconConfig(BaseModel):
     """Favicon detection configuration."""
 
+    skip: bool = Field(default=False, description="Skip favicon detection")
     check_html: bool = Field(default=True, description="Parse HTML for favicon links")
     check_defaults: bool = Field(default=True, description="Check default favicon paths")
 
@@ -113,6 +124,7 @@ class FaviconConfig(BaseModel):
 class EmailConfig(BaseModel):
     """Email security configuration."""
 
+    skip: bool = Field(default=False, description="Skip email security analysis")
     dkim_selectors: list[str] = Field(
         default_factory=lambda: [
             "default",
@@ -149,6 +161,7 @@ class EmailConfig(BaseModel):
 class WhoisConfig(BaseModel):
     """WHOIS registration information configuration."""
 
+    skip: bool = Field(default=False, description="Skip WHOIS analysis")
     expiry_warning_days: int = Field(
         default=30,
         description="Number of days before domain expiry to show warning",
@@ -239,33 +252,11 @@ def _get_default_verification_services() -> list[ServiceVerificationConfig]:
 class SiteVerificationConfig(BaseModel):
     """Site verification configuration for multiple services."""
 
+    skip: bool = Field(default=False, description="Skip site verification analysis")
     services: list[ServiceVerificationConfig] = Field(
         default_factory=_get_default_verification_services,
         description="List of verification services to check",
     )
-
-
-class AnalysisConfig(BaseModel):
-    """Analysis options configuration."""
-
-    skip_dns: bool = Field(default=False, description="Skip DNS analysis")
-    skip_http: bool = Field(default=False, description="Skip HTTP/HTTPS analysis")
-    skip_ssl: bool = Field(default=False, description="Skip SSL/TLS analysis")
-    skip_email: bool = Field(default=False, description="Skip email security analysis")
-    skip_headers: bool = Field(default=False, description="Skip security headers analysis")
-    skip_site_verification: bool = Field(
-        default=False, description="Skip site verification analysis"
-    )
-    skip_whois: bool = Field(default=False, description="Skip WHOIS analysis")
-    skip_www: bool = Field(
-        default=False,
-        description="Skip testing www subdomain (useful for subdomains or domains without www)",
-    )
-    skip_seo: bool = Field(
-        default=False, description="Skip SEO files analysis (robots.txt, sitemap.xml)"
-    )
-    skip_favicon: bool = Field(default=False, description="Skip favicon detection")
-    skip_cdn_detection: bool = Field(default=False, description="Skip CDN detection")
 
 
 class Config(BaseSettings):
@@ -285,7 +276,72 @@ class Config(BaseSettings):
     seo: SEOConfig = Field(default_factory=SEOConfig)
     favicon: FaviconConfig = Field(default_factory=FaviconConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
-    analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
+
+    def to_toml(self) -> str:
+        """
+        Export configuration to TOML string.
+
+        Returns:
+            TOML formatted configuration string
+        """
+        try:
+            import tomli_w
+        except ImportError:
+            raise ImportError(
+                "tomli_w is required for TOML export. Install with: pip install tomli-w"
+            )
+
+        config_dict = self.model_dump(mode="json")
+        return tomli_w.dumps(config_dict)
+
+    def to_toml_file(self, path: Path) -> None:
+        """
+        Export configuration to TOML file.
+
+        Args:
+            path: Path to save the TOML file
+        """
+        try:
+            import tomli_w
+        except ImportError:
+            raise ImportError(
+                "tomli_w is required for TOML export. Install with: pip install tomli-w"
+            )
+
+        config_dict = self.model_dump(mode="json")
+        with open(path, "wb") as f:
+            tomli_w.dump(config_dict, f)
+        logger.info(f"Exported config to: {path}")
+
+    @classmethod
+    def from_toml_string(cls, toml_string: str) -> "Config":
+        """
+        Import configuration from TOML string.
+
+        Args:
+            toml_string: TOML formatted configuration string
+
+        Returns:
+            Config object
+        """
+        config_data = tomllib.loads(toml_string)
+        return cls(**config_data)
+
+    @classmethod
+    def from_toml_file(cls, path: Path) -> "Config":
+        """
+        Import configuration from TOML file.
+
+        Args:
+            path: Path to the TOML file
+
+        Returns:
+            Config object
+        """
+        with open(path, "rb") as f:
+            config_data = tomllib.load(f)
+        logger.info(f"Imported config from: {path}")
+        return cls(**config_data)
 
 
 def get_config_paths() -> list[Path]:
@@ -408,117 +464,9 @@ def create_default_user_config() -> Path:
         shutil.copy(default_config_path, config_path)
         logger.info(f"Created config file: {config_path}")
     else:
-        # Create minimal config
-        config_path.write_text(
-            """# Webmaster Domain Tool Configuration
-
-[dns]
-# DNS nameservers to use (default: Google DNS, Cloudflare DNS)
-nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1"]
-timeout = 5.0
-check_dnssec = true
-# Warn if www subdomain is not a CNAME record (best practice)
-warn_www_not_cname = false
-
-[http]
-timeout = 10.0
-max_redirects = 10
-# user_agent = "Custom User Agent"
-
-[ssl]
-# Certificate expiry warning threshold (days before expiry)
-cert_expiry_warning_days = 14
-cert_expiry_critical_days = 7
-
-[security_headers]
-# Enable or disable individual security header checks
-check_strict_transport_security = true
-check_content_security_policy = true
-check_x_frame_options = true
-check_x_content_type_options = true
-check_referrer_policy = true
-check_permissions_policy = true
-check_x_xss_protection = true
-check_content_type = true
-
-[email]
-dkim_selectors = ["default", "google", "k1", "k2", "selector1", "selector2"]
-check_rbl = false
-rbl_servers = ["zen.spamhaus.org", "bl.spamcop.net", "b.barracudacentral.org", "dnsbl.sorbs.net"]
-check_bimi = true
-check_mta_sts = true
-check_tls_rpt = true
-
-[whois]
-# Domain expiry warning thresholds (days before expiry)
-expiry_warning_days = 30
-expiry_critical_days = 7
-
-# Site Verification - predefined services (Google, Facebook, Pinterest, Bing, Yandex)
-# Add your verification IDs to the 'ids' array or use CLI args (--google-id, --facebook-id, etc.)
-
-[[site_verification.services]]
-name = "Google"
-ids = []  # Add your Google Site Verification IDs here or use --google-id
-dns_pattern = "google-site-verification={id}"
-file_pattern = "google{id}.html"
-meta_name = "google-site-verification"
-auto_detect = true
-
-[[site_verification.services]]
-name = "Facebook"
-ids = []  # Add your Facebook Domain Verification IDs here or use --facebook-id
-dns_pattern = "facebook-domain-verification={id}"
-meta_name = "facebook-domain-verification"
-auto_detect = true
-
-[[site_verification.services]]
-name = "Pinterest"
-ids = []  # Add your Pinterest Domain Verification IDs here or use --pinterest-id
-meta_name = "p:domain_verify"
-auto_detect = true
-
-[[site_verification.services]]
-name = "Bing"
-ids = []  # Add your Bing Site Verification IDs here or use --bing-id
-file_pattern = "BingSiteAuth.xml"
-meta_name = "msvalidate.01"
-auto_detect = true
-
-[[site_verification.services]]
-name = "Yandex"
-ids = []  # Add your Yandex Webmaster Verification IDs here or use --yandex-id
-file_pattern = "yandex_{id}.html"
-meta_name = "yandex-verification"
-auto_detect = true
-
-[output]
-color = true
-verbosity = "normal"  # quiet, normal, verbose, debug
-
-[seo]
-check_robots = true
-check_llms_txt = true
-check_sitemap = true
-
-[favicon]
-check_html = true
-check_defaults = true
-
-[analysis]
-skip_dns = false
-skip_http = false
-skip_ssl = false
-skip_email = false
-skip_headers = false
-skip_site_verification = false
-skip_whois = false
-skip_www = false  # Skip testing www subdomain (useful for subdomains or domains without www)
-skip_seo = false
-skip_favicon = false
-skip_cdn_detection = false
-"""
-        )
+        # Fallback: create from Config defaults
+        default_config = Config()
+        default_config.to_toml_file(config_path)
         logger.info(f"Created default config file: {config_path}")
 
     return config_path

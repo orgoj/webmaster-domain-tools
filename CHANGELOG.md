@@ -14,7 +14,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Example: `wdt-app --config myprofile example.com`
   - Enables scripting and quick access to specific profiles
 
+- **TOML Config Export/Import**: Added methods to Config class for TOML serialization
+  - `Config.to_toml()` - Export config to TOML string
+  - `Config.to_toml_file(path)` - Export config to TOML file
+  - `Config.from_toml_string(toml_string)` - Import config from TOML string
+  - `Config.from_toml_file(path)` - Import config from TOML file
+  - GUI config editor now has Import/Export TOML buttons
+
 ### Changed
+- **Config Structure Standardization**: Each analyzer now has its own skip field in its config section
+  - Moved skip flags from centralized `AnalysisConfig` to per-analyzer config sections
+  - `config.dns.skip`, `config.http.skip`, `config.ssl.skip`, etc.
+  - Removed `AnalysisConfig` class entirely
+  - **Breaking Change**: If you have `[analysis]` section with `skip_*` flags in config.toml, move them to respective analyzer sections (e.g., `skip_dns = true` → `[dns] skip = true`)
+
+- **GUI Config Editor Refactored**: Skip checkbox now at top of each analyzer tab
+  - Each tab shows its own skip option rather than separate "Analysis Options" page
+  - Site Verification tab uses TOML text editor for complex service configuration
+  - Cleaner, more intuitive per-analyzer configuration
+
 - **Email Configuration Consolidated**: Merged `AdvancedEmailConfig` into `EmailConfig` for simplified configuration
   - All email security settings (SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT) now in single `[email]` section
   - Removed `[advanced_email]` section from config files

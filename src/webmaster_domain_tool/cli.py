@@ -26,7 +26,7 @@ rich.panel.Panel.__init__ = _no_border_panel_init
 # flake8: noqa: E402
 # ruff: noqa: E402
 from .config import create_default_user_config, load_config
-from .core import ANALYZER_REGISTRY, run_domain_analysis
+from .core import run_domain_analysis
 from .utils.logger import VerbosityLevel, setup_logger
 from .utils.output import OutputFormatter
 
@@ -38,34 +38,6 @@ app = typer.Typer(
 )
 
 console = Console()
-
-
-def build_skip_params_from_cli_args(**cli_args):
-    """
-    Build skip parameters dict from CLI arguments using ANALYZER_REGISTRY.
-
-    This maps CLI argument names to their values based on registry metadata,
-    handling both normal skip_* params and inverted do_* params.
-
-    Args:
-        **cli_args: CLI arguments (skip_dns=True, do_rbl_check=False, etc.)
-
-    Returns:
-        dict of skip parameter names to values for passing to run_domain_analysis()
-    """
-    skip_params = {}
-
-    for analyzer_key, metadata in ANALYZER_REGISTRY.items():
-        if not metadata.skip_param_name:
-            continue
-
-        param_name = metadata.skip_param_name
-
-        # Get value from CLI args if present
-        if param_name in cli_args:
-            skip_params[param_name] = cli_args[param_name]
-
-    return skip_params
 
 
 # Validation functions
@@ -299,23 +271,29 @@ def analyze(
     # Print header
     formatter.print_header(domain)
 
-    # Build skip parameters from CLI args using registry (DRY!)
-    # No more hardcoded merge - uses ANALYZER_REGISTRY as single source of truth
-    cli_skip_args = {
-        "skip_dns": skip_dns,
-        "skip_http": skip_http,
-        "skip_ssl": skip_ssl,
-        "skip_email": skip_email,
-        "skip_headers": skip_headers,
-        "skip_site_verification": skip_site_verification,
-        "skip_whois": skip_whois,
-        "do_rbl_check": check_rbl if check_rbl is not None else config.email.check_rbl,
-    }
-
-    skip_params = build_skip_params_from_cli_args(**cli_skip_args)
+    # Apply CLI skip flags to config (CLI takes precedence)
+    # This modifies a copy of config with CLI overrides
+    if skip_dns:
+        config.dns.skip = True
+    if skip_http:
+        config.http.skip = True
+    if skip_ssl:
+        config.ssl.skip = True
+    if skip_email:
+        config.email.skip = True
+    if skip_headers:
+        config.security_headers.skip = True
+    if skip_site_verification:
+        config.site_verification.skip = True
+    if skip_whois:
+        config.whois.skip = True
+    if skip_www:
+        config.dns.skip_www = True
+    if check_rbl is not None:
+        config.email.check_rbl = check_rbl
 
     try:
-        # Run all analysis using core module with dynamic skip params
+        # Run all analysis using core module
         results = run_domain_analysis(
             domain=domain,
             config=config,
@@ -323,11 +301,9 @@ def analyze(
             timeout=timeout,
             max_redirects=max_redirects,
             warn_www_not_cname=warn_www_not_cname,
-            skip_www=skip_www,
             dkim_selectors=dkim_selectors,
             check_path=check_path,
             verify=verify,
-            **skip_params,  # Dynamic parameters from registry!
         )
 
         # Print results using formatter
