@@ -1,5 +1,6 @@
 """Flet multiplatform GUI application for webmaster-domain-tool."""
 
+import argparse
 import ipaddress
 import logging
 import re
@@ -19,6 +20,34 @@ from .core.analyzer import (
 from .flet_config_manager import FletConfigProfileManager
 
 logger = logging.getLogger(__name__)
+
+
+def parse_cli_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments for the GUI application.
+
+    Returns:
+        Parsed arguments with config and domain attributes
+    """
+    parser = argparse.ArgumentParser(
+        description="Webmaster Domain Tool - GUI Application",
+        prog="wdt-app",
+    )
+    parser.add_argument(
+        "-c",
+        "--config",
+        type=str,
+        default=None,
+        help="Configuration profile name to use",
+    )
+    parser.add_argument(
+        "domain",
+        nargs="?",
+        default=None,
+        help="Domain to analyze (e.g., example.com)",
+    )
+
+    return parser.parse_args()
 
 
 @dataclass
@@ -79,8 +108,20 @@ class UITheme:
 class DomainAnalyzerApp:
     """Main Flet application for domain analysis."""
 
-    def __init__(self, page: ft.Page) -> None:
-        """Initialize the application."""
+    def __init__(
+        self,
+        page: ft.Page,
+        initial_profile: str | None = None,
+        initial_domain: str | None = None,
+    ) -> None:
+        """
+        Initialize the application.
+
+        Args:
+            page: Flet page instance
+            initial_profile: Optional profile name to load (overrides last selected)
+            initial_domain: Optional domain to pre-fill in the input field
+        """
         self.page = page
         self.page.title = "Webmaster Domain Tool"
         self.page.theme_mode = ft.ThemeMode.LIGHT
@@ -93,17 +134,26 @@ class DomainAnalyzerApp:
         self.theme = UITheme()
         self.page.padding = self.theme.padding_large
 
-        # Initialize profile manager and load last selected profile
+        # Initialize profile manager
         self.profile_manager = FletConfigProfileManager(self.page)
-        self.current_profile_name = self.profile_manager.get_last_selected_profile()
+
+        # Determine which profile to load (CLI arg > last selected > default)
+        if initial_profile and self.profile_manager.profile_exists(initial_profile):
+            self.current_profile_name = initial_profile
+        else:
+            # Use last selected profile or fall back
+            self.current_profile_name = self.profile_manager.get_last_selected_profile()
 
         # Load the profile (create default if needed)
         if self.profile_manager.profile_exists(self.current_profile_name):
             self.config = self.profile_manager.load_profile(self.current_profile_name)
         else:
-            # Fallback to default if last selected doesn't exist
+            # Fallback to default if selected profile doesn't exist
             self.current_profile_name = "default"
             self.config = self.profile_manager.get_or_create_default()
+
+        # Store initial domain for pre-filling input
+        self._initial_domain = initial_domain
 
         # UI Components
         self.domain_input = ft.TextField(
@@ -112,6 +162,7 @@ class DomainAnalyzerApp:
             prefix_icon=ft.Icons.LANGUAGE,
             expand=True,
             autofocus=True,
+            value=self._initial_domain or "",
             on_submit=lambda _: self.run_analysis(),
         )
 
@@ -1868,10 +1919,16 @@ class DomainAnalyzerApp:
 
 def main() -> None:
     """Main entry point for Flet app."""
+    # Parse CLI arguments
+    args = parse_cli_args()
 
     def create_app(page: ft.Page) -> None:
         """Create and initialize the app."""
-        DomainAnalyzerApp(page)
+        DomainAnalyzerApp(
+            page,
+            initial_profile=args.config,
+            initial_domain=args.domain,
+        )
 
     ft.app(target=create_app)
 

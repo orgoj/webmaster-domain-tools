@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **GUI Application CLI Arguments**: Added command-line argument support for wdt-app
+  - `--config` / `-c`: Specify configuration profile name to use
+  - Domain argument: Pre-fill domain input field
+  - Example: `wdt-app --config myprofile example.com`
+  - Enables scripting and quick access to specific profiles
+
 ### Changed
 - **Email Configuration Consolidated**: Merged `AdvancedEmailConfig` into `EmailConfig` for simplified configuration
   - All email security settings (SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT) now in single `[email]` section
