@@ -2019,11 +2019,6 @@ class DomainAnalyzerApp:
 
     def _show_save_profile_dialog(self, e: ft.ControlEvent) -> None:
         """Show dialog to save current config as new profile."""
-        profile_name_field = ft.TextField(
-            label="Profile Name",
-            hint_text="e.g., fast, full, security",
-            autofocus=True,
-        )
 
         def save_new_profile(dialog_e: ft.ControlEvent) -> None:
             """Save config as new profile."""
@@ -2052,6 +2047,9 @@ class DomainAnalyzerApp:
                 # Save as last selected profile for next session
                 self.profile_manager.set_last_selected_profile(name)
 
+                # Update button states for new profile (no longer default)
+                self._update_profile_buttons()
+
                 # Close dialog
                 dialog.open = False
 
@@ -2071,6 +2069,14 @@ class DomainAnalyzerApp:
                 if error_text not in dialog.content.controls:
                     dialog.content.controls.append(error_text)
                     self.page.update()
+
+        # Create TextField with Enter key handler
+        profile_name_field = ft.TextField(
+            label="Profile Name",
+            hint_text="e.g., fast, full, security",
+            autofocus=True,
+            on_submit=save_new_profile,  # Enter key triggers Save
+        )
 
         dialog = ft.AlertDialog(
             modal=True,

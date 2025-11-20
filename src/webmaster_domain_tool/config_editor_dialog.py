@@ -112,6 +112,7 @@ class ConfigEditorDialog:
                     destinations=nav_rail_destinations,
                     on_change=self._on_nav_change,
                     bgcolor=ft.Colors.GREY_300,
+                    expand=True,  # Fix: NavigationRail needs expand for bounded height
                 ),
             ],
             scroll=ft.ScrollMode.AUTO,

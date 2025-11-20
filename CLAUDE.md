@@ -812,6 +812,11 @@ If you find yourself committing code changes without updating:
 5. **Not setting verbosity levels on OutputRows** → Data shows at wrong verbosity
 6. **Editing CLI/config/renderers when adding analyzer** → Only edit analyzer file!
 7. **Using `Any` type hints** → Be specific with types for better validation
+8. **Not updating dependent UI state after changes (GUI)** → When state changes (e.g., profile name), ALL dependent UI elements must be updated immediately
+   - Example: After saving new profile, button states must be updated via `_update_profile_buttons()`
+   - Example: After changing profile, dropdown value AND button states must sync
+   - Rule: **Think thoroughly about what else depends on the state you're changing**
+   - Always ask: "What UI elements read this state? Do they need to be updated?"
 
 ## Recent Major Changes
 
