@@ -15,18 +15,11 @@ import dns.resolver
 import httpx
 from pydantic import Field
 
-from ..constants import (
-    DEFAULT_USER_AGENT,
-    TRACKING_PATTERNS,
-)
+from ..constants import DEFAULT_USER_AGENT, TRACKING_PATTERNS
 from ..core.registry import registry
 from .base import BaseAnalysisResult, BaseAnalyzer
 from .dns_utils import create_resolver
-from .protocol import (
-    AnalyzerConfig,
-    OutputDescriptor,
-    VerbosityLevel,
-)
+from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
 
 logger = logging.getLogger(__name__)
 

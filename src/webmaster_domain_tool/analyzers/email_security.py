@@ -12,18 +12,10 @@ import dns.resolver
 import httpx
 from pydantic import Field
 
-from ..constants import (
-    DEFAULT_DKIM_SELECTORS,
-    SPF_MAX_INCLUDES_LIMIT,
-    SPF_MAX_INCLUDES_WARNING,
-)
+from ..constants import DEFAULT_DKIM_SELECTORS, SPF_MAX_INCLUDES_LIMIT, SPF_MAX_INCLUDES_WARNING
 from ..core.registry import registry
 from .dns_utils import create_resolver
-from .protocol import (
-    AnalyzerConfig,
-    OutputDescriptor,
-    VerbosityLevel,
-)
+from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
 
 logger = logging.getLogger(__name__)
 

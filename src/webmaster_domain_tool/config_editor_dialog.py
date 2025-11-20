@@ -1,68 +1,73 @@
-"""Configuration editor dialog for Flet GUI."""
+"""Configuration editor dialog for Flet GUI - Migrated to new modular architecture."""
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import flet as ft
 
-from .config import Config
-
-if TYPE_CHECKING:
-    pass
+from .core.registry import registry
+from .gui_config_adapter import GUIConfigAdapter
 
 logger = logging.getLogger(__name__)
 
 
 class ConfigEditorDialog:
-    """Comprehensive configuration editor dialog with tabbed interface."""
+    """
+    Configuration editor dialog with dynamic tabs based on analyzer registry.
 
-    def __init__(self, page: ft.Page, config: Config, on_save: Callable[[Config], None]) -> None:
+    Automatically generates editor UI for all registered analyzers.
+    """
+
+    def __init__(
+        self,
+        page: ft.Page,
+        config_adapter: GUIConfigAdapter,
+        on_save: Callable[[GUIConfigAdapter], None],
+    ) -> None:
         """
         Initialize config editor dialog.
 
         Args:
             page: Flet page
-            config: Current configuration to edit
-            on_save: Callback when config is saved (receives Config object)
+            config_adapter: Current configuration adapter to edit
+            on_save: Callback when config is saved
         """
         self.page = page
-        self.config = config.model_copy(deep=True)  # Work on a copy
+        # Work on a copy
+        temp_dict = config_adapter.to_dict()
+        self.config_adapter = GUIConfigAdapter()
+        self.config_adapter.from_dict(temp_dict)
         self.on_save = on_save
 
-        # UI field references (grouped by section)
-        self.dns_fields: dict[str, ft.Control] = {}
-        self.http_fields: dict[str, ft.Control] = {}
-        self.ssl_fields: dict[str, ft.Control] = {}
-        self.security_headers_fields: dict[str, ft.Control] = {}
-        self.email_fields: dict[str, ft.Control] = {}
-        self.whois_fields: dict[str, ft.Control] = {}
-        self.seo_fields: dict[str, ft.Control] = {}
-        self.favicon_fields: dict[str, ft.Control] = {}
-        self.analysis_fields: dict[str, ft.Control] = {}
-        self.output_fields: dict[str, ft.Control] = {}
+        # UI field references (analyzer_id -> field_name -> control)
+        self.analyzer_fields: dict[str, dict[str, ft.Control]] = {}
 
         # Build dialog
         self.dialog = self._build_dialog()
 
     def _build_dialog(self) -> ft.AlertDialog:
         """Build the main dialog with tabs."""
+        # Build tabs dynamically from registry
+        tabs_list = []
+
+        # Add global settings tab first
+        tabs_list.append(self._create_global_tab())
+
+        # Add tabs for each analyzer
+        for analyzer_id, metadata in sorted(
+            registry.get_all().items(), key=lambda x: (x[1].category, x[1].name)
+        ):
+            tab = self._create_analyzer_tab(analyzer_id, metadata)
+            if tab:
+                tabs_list.append(tab)
+
         tabs = ft.Tabs(
             selected_index=0,
             animation_duration=300,
-            tabs=[
-                self._create_dns_tab(),
-                self._create_http_tab(),
-                self._create_ssl_tab(),
-                self._create_email_tab(),
-                self._create_security_headers_tab(),
-                self._create_seo_tab(),
-                self._create_favicon_tab(),
-                self._create_whois_tab(),
-                self._create_analysis_tab(),
-                self._create_output_tab(),
-            ],
+            tabs=tabs_list,
             expand=1,
+            scrollable=True,
         )
 
         return ft.AlertDialog(
@@ -80,337 +85,14 @@ class ConfigEditorDialog:
             actions_alignment=ft.MainAxisAlignment.END,
         )
 
-    # ========== TAB CREATORS ==========
+    def _create_global_tab(self) -> ft.Tab:
+        """Create global settings tab."""
+        global_config = self.config_adapter.config_manager.global_config
 
-    def _create_dns_tab(self) -> ft.Tab:
-        """Create DNS configuration tab."""
-        self.dns_fields["nameservers"] = ft.TextField(
-            label="DNS Nameservers (comma-separated)",
-            value=", ".join(self.config.dns.nameservers),
-            hint_text="8.8.8.8, 8.8.4.4, 1.1.1.1",
-            multiline=False,
-        )
-        self.dns_fields["timeout"] = ft.TextField(
-            label="DNS Timeout (seconds)",
-            value=str(self.config.dns.timeout),
-            keyboard_type=ft.KeyboardType.NUMBER,
-        )
-        self.dns_fields["check_dnssec"] = ft.Checkbox(
-            label="Check DNSSEC validation",
-            value=self.config.dns.check_dnssec,
-        )
-        self.dns_fields["warn_www_not_cname"] = ft.Checkbox(
-            label="Warn if www is not CNAME (best practice)",
-            value=self.config.dns.warn_www_not_cname,
-        )
-
-        return ft.Tab(
-            text="DNS",
-            icon=ft.Icons.DNS,
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        self.dns_fields["nameservers"],
-                        self.dns_fields["timeout"],
-                        self.dns_fields["check_dnssec"],
-                        self.dns_fields["warn_www_not_cname"],
-                    ],
-                    spacing=10,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                padding=20,
-            ),
-        )
-
-    def _create_http_tab(self) -> ft.Tab:
-        """Create HTTP configuration tab."""
-        self.http_fields["timeout"] = ft.TextField(
-            label="HTTP Timeout (seconds)",
-            value=str(self.config.http.timeout),
-            keyboard_type=ft.KeyboardType.NUMBER,
-        )
-        self.http_fields["max_redirects"] = ft.TextField(
-            label="Maximum Redirects",
-            value=str(self.config.http.max_redirects),
-            keyboard_type=ft.KeyboardType.NUMBER,
-        )
-        self.http_fields["user_agent"] = ft.TextField(
-            label="Custom User Agent (optional)",
-            value=self.config.http.user_agent or "",
-            hint_text="Leave empty for default",
-        )
-
-        return ft.Tab(
-            text="HTTP",
-            icon=ft.Icons.HTTP,
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        self.http_fields["timeout"],
-                        self.http_fields["max_redirects"],
-                        self.http_fields["user_agent"],
-                    ],
-                    spacing=10,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                padding=20,
-            ),
-        )
-
-    def _create_ssl_tab(self) -> ft.Tab:
-        """Create SSL configuration tab."""
-        self.ssl_fields["cert_expiry_warning_days"] = ft.TextField(
-            label="Certificate Expiry Warning (days)",
-            value=str(self.config.ssl.cert_expiry_warning_days),
-            keyboard_type=ft.KeyboardType.NUMBER,
-            hint_text="Default: 14 (Let's Encrypt auto-renewal)",
-        )
-        self.ssl_fields["cert_expiry_critical_days"] = ft.TextField(
-            label="Certificate Expiry Critical (days)",
-            value=str(self.config.ssl.cert_expiry_critical_days),
-            keyboard_type=ft.KeyboardType.NUMBER,
-        )
-
-        return ft.Tab(
-            text="SSL/TLS",
-            icon=ft.Icons.LOCK,
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        self.ssl_fields["cert_expiry_warning_days"],
-                        self.ssl_fields["cert_expiry_critical_days"],
-                    ],
-                    spacing=10,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                padding=20,
-            ),
-        )
-
-    def _create_email_tab(self) -> ft.Tab:
-        """Create email security configuration tab."""
-        self.email_fields["dkim_selectors"] = ft.TextField(
-            label="DKIM Selectors (comma-separated)",
-            value=", ".join(self.config.email.dkim_selectors),
-            hint_text="default, google, k1, k2, selector1, selector2",
-            multiline=True,
-            min_lines=2,
-            max_lines=3,
-        )
-        self.email_fields["check_rbl"] = ft.Checkbox(
-            label="Check RBL (Realtime Blacklists)",
-            value=self.config.email.check_rbl,
-        )
-        self.email_fields["rbl_servers"] = ft.TextField(
-            label="RBL Servers (comma-separated)",
-            value=", ".join(self.config.email.rbl_servers),
-            hint_text="zen.spamhaus.org, bl.spamcop.net",
-            multiline=True,
-            min_lines=2,
-            max_lines=3,
-        )
-        self.email_fields["check_bimi"] = ft.Checkbox(
-            label="Check BIMI records",
-            value=self.config.email.check_bimi,
-        )
-        self.email_fields["check_mta_sts"] = ft.Checkbox(
-            label="Check MTA-STS",
-            value=self.config.email.check_mta_sts,
-        )
-        self.email_fields["check_tls_rpt"] = ft.Checkbox(
-            label="Check TLS-RPT",
-            value=self.config.email.check_tls_rpt,
-        )
-
-        return ft.Tab(
-            text="Email",
-            icon=ft.Icons.EMAIL,
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        self.email_fields["dkim_selectors"],
-                        self.email_fields["check_rbl"],
-                        self.email_fields["rbl_servers"],
-                        ft.Divider(),
-                        ft.Text("Advanced Email Security", weight=ft.FontWeight.BOLD),
-                        self.email_fields["check_bimi"],
-                        self.email_fields["check_mta_sts"],
-                        self.email_fields["check_tls_rpt"],
-                    ],
-                    spacing=10,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                padding=20,
-            ),
-        )
-
-    def _create_security_headers_tab(self) -> ft.Tab:
-        """Create security headers configuration tab."""
-        headers = [
-            ("check_strict_transport_security", "Strict-Transport-Security (HSTS)"),
-            ("check_content_security_policy", "Content-Security-Policy (CSP)"),
-            ("check_x_frame_options", "X-Frame-Options"),
-            ("check_x_content_type_options", "X-Content-Type-Options"),
-            ("check_referrer_policy", "Referrer-Policy"),
-            ("check_permissions_policy", "Permissions-Policy"),
-            ("check_x_xss_protection", "X-XSS-Protection"),
-            ("check_content_type", "Content-Type"),
-            ("check_cors", "CORS (Access-Control-Allow-Origin)"),
-        ]
-
-        controls = []
-        for field_name, label in headers:
-            current_value = getattr(self.config.security_headers, field_name)
-            checkbox = ft.Checkbox(label=f"Check {label}", value=current_value)
-            self.security_headers_fields[field_name] = checkbox
-            controls.append(checkbox)
-
-        return ft.Tab(
-            text="Security Headers",
-            icon=ft.Icons.SHIELD,
-            content=ft.Container(
-                content=ft.Column(
-                    controls,
-                    spacing=10,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                padding=20,
-            ),
-        )
-
-    def _create_seo_tab(self) -> ft.Tab:
-        """Create SEO configuration tab."""
-        self.seo_fields["check_robots"] = ft.Checkbox(
-            label="Check robots.txt",
-            value=self.config.seo.check_robots,
-        )
-        self.seo_fields["check_llms_txt"] = ft.Checkbox(
-            label="Check llms.txt (AI crawlers)",
-            value=self.config.seo.check_llms_txt,
-        )
-        self.seo_fields["check_sitemap"] = ft.Checkbox(
-            label="Check sitemap.xml",
-            value=self.config.seo.check_sitemap,
-        )
-
-        return ft.Tab(
-            text="SEO",
-            icon=ft.Icons.SEARCH,
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        self.seo_fields["check_robots"],
-                        self.seo_fields["check_llms_txt"],
-                        self.seo_fields["check_sitemap"],
-                    ],
-                    spacing=10,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                padding=20,
-            ),
-        )
-
-    def _create_favicon_tab(self) -> ft.Tab:
-        """Create favicon configuration tab."""
-        self.favicon_fields["check_html"] = ft.Checkbox(
-            label="Parse HTML for favicon links",
-            value=self.config.favicon.check_html,
-        )
-        self.favicon_fields["check_defaults"] = ft.Checkbox(
-            label="Check default favicon paths",
-            value=self.config.favicon.check_defaults,
-        )
-
-        return ft.Tab(
-            text="Favicon",
-            icon=ft.Icons.IMAGE,
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        self.favicon_fields["check_html"],
-                        self.favicon_fields["check_defaults"],
-                    ],
-                    spacing=10,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                padding=20,
-            ),
-        )
-
-    def _create_whois_tab(self) -> ft.Tab:
-        """Create WHOIS configuration tab."""
-        self.whois_fields["expiry_warning_days"] = ft.TextField(
-            label="Domain Expiry Warning (days)",
-            value=str(self.config.whois.expiry_warning_days),
-            keyboard_type=ft.KeyboardType.NUMBER,
-        )
-        self.whois_fields["expiry_critical_days"] = ft.TextField(
-            label="Domain Expiry Critical (days)",
-            value=str(self.config.whois.expiry_critical_days),
-            keyboard_type=ft.KeyboardType.NUMBER,
-        )
-
-        return ft.Tab(
-            text="WHOIS",
-            icon=ft.Icons.INFO,
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        self.whois_fields["expiry_warning_days"],
-                        self.whois_fields["expiry_critical_days"],
-                    ],
-                    spacing=10,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                padding=20,
-            ),
-        )
-
-    def _create_analysis_tab(self) -> ft.Tab:
-        """Create analysis options configuration tab."""
-        skip_options = [
-            ("skip_dns", "Skip DNS analysis"),
-            ("skip_http", "Skip HTTP/HTTPS analysis"),
-            ("skip_ssl", "Skip SSL/TLS analysis"),
-            ("skip_email", "Skip email security analysis"),
-            ("skip_headers", "Skip security headers analysis"),
-            ("skip_site_verification", "Skip site verification analysis"),
-            ("skip_whois", "Skip WHOIS analysis"),
-            ("skip_www", "Skip testing www subdomain"),
-            ("skip_seo", "Skip SEO files analysis"),
-            ("skip_favicon", "Skip favicon detection"),
-            ("skip_cdn_detection", "Skip CDN detection"),
-        ]
-
-        controls = []
-        for field_name, label in skip_options:
-            current_value = getattr(self.config.analysis, field_name)
-            checkbox = ft.Checkbox(label=label, value=current_value)
-            self.analysis_fields[field_name] = checkbox
-            controls.append(checkbox)
-
-        return ft.Tab(
-            text="Analysis Options",
-            icon=ft.Icons.SETTINGS,
-            content=ft.Container(
-                content=ft.Column(
-                    controls,
-                    spacing=10,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                padding=20,
-            ),
-        )
-
-    def _create_output_tab(self) -> ft.Tab:
-        """Create output configuration tab."""
-        self.output_fields["color"] = ft.Checkbox(
-            label="Enable colored output (CLI only)",
-            value=self.config.output.color,
-        )
-        self.output_fields["verbosity"] = ft.Dropdown(
-            label="Verbosity Level (CLI only)",
-            value=self.config.output.verbosity,
+        self.analyzer_fields["global"] = {}
+        self.analyzer_fields["global"]["verbosity"] = ft.Dropdown(
+            label="Verbosity Level",
+            value=global_config.verbosity,
             options=[
                 ft.dropdown.Option("quiet"),
                 ft.dropdown.Option("normal"),
@@ -418,16 +100,25 @@ class ConfigEditorDialog:
                 ft.dropdown.Option("debug"),
             ],
         )
+        self.analyzer_fields["global"]["color"] = ft.Checkbox(
+            label="Enable colored output",
+            value=global_config.color,
+        )
+        self.analyzer_fields["global"]["parallel"] = ft.Checkbox(
+            label="Run independent analyzers in parallel",
+            value=global_config.parallel,
+        )
 
         return ft.Tab(
-            text="Output",
-            icon=ft.Icons.OUTPUT,
+            text="Global",
+            icon=ft.Icons.SETTINGS,
             content=ft.Container(
                 content=ft.Column(
                     [
-                        ft.Text("Note: These settings affect CLI output only", italic=True),
-                        self.output_fields["color"],
-                        self.output_fields["verbosity"],
+                        ft.Text("Global Settings", weight=ft.FontWeight.BOLD),
+                        self.analyzer_fields["global"]["verbosity"],
+                        self.analyzer_fields["global"]["color"],
+                        self.analyzer_fields["global"]["parallel"],
                     ],
                     spacing=10,
                     scroll=ft.ScrollMode.AUTO,
@@ -436,102 +127,173 @@ class ConfigEditorDialog:
             ),
         )
 
-    # ========== VALIDATION & SAVE ==========
-
-    def _validate_and_build_config(self) -> Config | None:
+    def _create_analyzer_tab(self, analyzer_id: str, metadata: Any) -> ft.Tab | None:
         """
-        Validate all fields and build Config object.
+        Create tab for analyzer configuration.
+
+        Args:
+            analyzer_id: Analyzer ID
+            metadata: Analyzer metadata
 
         Returns:
-            Config object if validation passes, None otherwise
+            Tab for this analyzer
         """
         try:
-            # Build config dict from UI fields
-            config_dict: dict[str, Any] = {}
+            config = self.config_adapter.get_analyzer_config(analyzer_id)
+            fields = {}
 
-            # DNS
-            nameservers_str = self.dns_fields["nameservers"].value
-            nameservers = [ns.strip() for ns in nameservers_str.split(",") if ns.strip()]
-            config_dict["dns"] = {
-                "nameservers": nameservers,
-                "timeout": float(self.dns_fields["timeout"].value),
-                "check_dnssec": self.dns_fields["check_dnssec"].value,
-                "warn_www_not_cname": self.dns_fields["warn_www_not_cname"].value,
-            }
+            # Enabled checkbox (all analyzers have this)
+            fields["enabled"] = ft.Checkbox(
+                label=f"Enable {metadata.name}",
+                value=config.enabled,
+            )
 
-            # HTTP
-            user_agent = self.http_fields["user_agent"].value.strip()
-            config_dict["http"] = {
-                "timeout": float(self.http_fields["timeout"].value),
-                "max_redirects": int(self.http_fields["max_redirects"].value),
-                "user_agent": user_agent if user_agent else None,
-            }
+            controls = [
+                fields["enabled"],
+                ft.Divider(),
+            ]
 
-            # SSL
-            config_dict["ssl"] = {
-                "cert_expiry_warning_days": int(self.ssl_fields["cert_expiry_warning_days"].value),
-                "cert_expiry_critical_days": int(
-                    self.ssl_fields["cert_expiry_critical_days"].value
+            # Add fields for each config property
+            config_dict = config.model_dump()
+            for field_name, value in config_dict.items():
+                if field_name == "enabled":
+                    continue  # Already added
+
+                # Create appropriate control based on type
+                if isinstance(value, bool):
+                    field = ft.Checkbox(
+                        label=field_name.replace("_", " ").title(),
+                        value=value,
+                    )
+                    fields[field_name] = field
+                    controls.append(field)
+                elif isinstance(value, (int, float)):
+                    field = ft.TextField(
+                        label=field_name.replace("_", " ").title(),
+                        value=str(value),
+                        keyboard_type=ft.KeyboardType.NUMBER,
+                    )
+                    fields[field_name] = field
+                    controls.append(field)
+                elif isinstance(value, str):
+                    field = ft.TextField(
+                        label=field_name.replace("_", " ").title(),
+                        value=value,
+                    )
+                    fields[field_name] = field
+                    controls.append(field)
+                elif isinstance(value, list) and value and isinstance(value[0], str):
+                    # List of strings - show as comma-separated
+                    field = ft.TextField(
+                        label=field_name.replace("_", " ").title() + " (comma-separated)",
+                        value=", ".join(value),
+                        multiline=True,
+                        min_lines=2,
+                        max_lines=4,
+                    )
+                    fields[field_name] = field
+                    controls.append(field)
+                elif value is None:
+                    # Optional field that's None
+                    field = ft.TextField(
+                        label=field_name.replace("_", " ").title() + " (optional)",
+                        value="",
+                    )
+                    fields[field_name] = field
+                    controls.append(field)
+
+            self.analyzer_fields[analyzer_id] = fields
+
+            # Get appropriate icon
+            icon_name = getattr(ft.Icons, metadata.icon.upper(), ft.Icons.SETTINGS)
+
+            return ft.Tab(
+                text=metadata.name,
+                icon=icon_name,
+                content=ft.Container(
+                    content=ft.Column(
+                        controls,
+                        spacing=10,
+                        scroll=ft.ScrollMode.AUTO,
+                    ),
+                    padding=20,
                 ),
-            }
+            )
 
-            # Email
-            dkim_selectors_str = self.email_fields["dkim_selectors"].value
-            dkim_selectors = [s.strip() for s in dkim_selectors_str.split(",") if s.strip()]
-            rbl_servers_str = self.email_fields["rbl_servers"].value
-            rbl_servers = [s.strip() for s in rbl_servers_str.split(",") if s.strip()]
-            config_dict["email"] = {
-                "dkim_selectors": dkim_selectors,
-                "check_rbl": self.email_fields["check_rbl"].value,
-                "rbl_servers": rbl_servers,
-                "check_bimi": self.email_fields["check_bimi"].value,
-                "check_mta_sts": self.email_fields["check_mta_sts"].value,
-                "check_tls_rpt": self.email_fields["check_tls_rpt"].value,
-            }
-
-            # Security Headers
-            config_dict["security_headers"] = {
-                field_name: checkbox.value
-                for field_name, checkbox in self.security_headers_fields.items()
-            }
-
-            # SEO
-            config_dict["seo"] = {
-                field_name: checkbox.value for field_name, checkbox in self.seo_fields.items()
-            }
-
-            # Favicon
-            config_dict["favicon"] = {
-                field_name: checkbox.value for field_name, checkbox in self.favicon_fields.items()
-            }
-
-            # WHOIS
-            config_dict["whois"] = {
-                "expiry_warning_days": int(self.whois_fields["expiry_warning_days"].value),
-                "expiry_critical_days": int(self.whois_fields["expiry_critical_days"].value),
-            }
-
-            # Analysis
-            config_dict["analysis"] = {
-                field_name: checkbox.value for field_name, checkbox in self.analysis_fields.items()
-            }
-
-            # Output
-            config_dict["output"] = {
-                "color": self.output_fields["color"].value,
-                "verbosity": self.output_fields["verbosity"].value,
-            }
-
-            # Site verification - keep from original config (too complex for GUI editing)
-            config_dict["site_verification"] = self.config.site_verification.model_dump(mode="json")
-
-            # Create and validate Config
-            return Config(**config_dict)
-
-        except (ValueError, KeyError) as e:
-            logger.error(f"Config validation failed: {e}")
-            self._show_error(f"Invalid configuration: {e}")
+        except Exception as e:
+            logger.error(f"Failed to create tab for {analyzer_id}: {e}")
             return None
+
+    def _validate_and_save(self) -> bool:
+        """
+        Validate all fields and save to config adapter.
+
+        Returns:
+            True if validation passed, False otherwise
+        """
+        try:
+            # Update global config
+            if "global" in self.analyzer_fields:
+                global_fields = self.analyzer_fields["global"]
+                self.config_adapter.config_manager.global_config.verbosity = global_fields[
+                    "verbosity"
+                ].value
+                self.config_adapter.config_manager.global_config.color = global_fields[
+                    "color"
+                ].value
+                self.config_adapter.config_manager.global_config.parallel = global_fields[
+                    "parallel"
+                ].value
+
+            # Update analyzer configs
+            for analyzer_id, fields in self.analyzer_fields.items():
+                if analyzer_id == "global":
+                    continue
+
+                metadata = registry.get(analyzer_id)
+                if not metadata:
+                    continue
+
+                # Build config dict from UI fields
+                config_dict = {}
+                current_config = self.config_adapter.get_analyzer_config(analyzer_id)
+
+                for field_name, control in fields.items():
+                    if isinstance(control, ft.Checkbox):
+                        config_dict[field_name] = control.value
+                    elif isinstance(control, ft.TextField):
+                        value_str = control.value.strip()
+
+                        # Get original type from current config
+                        original_value = getattr(current_config, field_name, None)
+
+                        if original_value is None:
+                            # Optional field
+                            config_dict[field_name] = value_str if value_str else None
+                        elif isinstance(original_value, list):
+                            # List of strings
+                            config_dict[field_name] = [
+                                s.strip() for s in value_str.split(",") if s.strip()
+                            ]
+                        elif isinstance(original_value, int):
+                            config_dict[field_name] = int(value_str) if value_str else 0
+                        elif isinstance(original_value, float):
+                            config_dict[field_name] = float(value_str) if value_str else 0.0
+                        else:
+                            config_dict[field_name] = value_str
+                    elif isinstance(control, ft.Dropdown):
+                        config_dict[field_name] = control.value
+
+                # Create new config instance
+                new_config = metadata.config_class(**config_dict)
+                self.config_adapter.set_analyzer_config(analyzer_id, new_config)
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Config validation failed: {e}", exc_info=True)
+            self._show_error(f"Invalid configuration: {e}")
+            return False
 
     def _show_error(self, message: str) -> None:
         """Show error snackbar."""
@@ -545,9 +307,8 @@ class ConfigEditorDialog:
 
     def _save_and_close(self) -> None:
         """Validate, save, and close dialog."""
-        config = self._validate_and_build_config()
-        if config:
-            self.on_save(config)
+        if self._validate_and_save():
+            self.on_save(self.config_adapter)
             self._close_dialog()
 
     def _close_dialog(self) -> None:

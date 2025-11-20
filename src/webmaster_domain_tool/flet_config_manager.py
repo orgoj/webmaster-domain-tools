@@ -4,9 +4,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from pydantic import ValidationError
-
-from .config import Config
+from .gui_config_adapter import GUIConfigAdapter
 
 if TYPE_CHECKING:
     import flet as ft
@@ -50,13 +48,13 @@ class FletConfigProfileManager:
                 return []
         return []
 
-    def save_profile(self, name: str, config: Config) -> None:
+    def save_profile(self, name: str, config_adapter: GUIConfigAdapter) -> None:
         """
         Save configuration as named profile in client storage.
 
         Args:
             name: Profile name
-            config: Configuration to save
+            config_adapter: Configuration adapter to save
 
         Raises:
             ValueError: If profile name is invalid
@@ -65,7 +63,7 @@ class FletConfigProfileManager:
             raise ValueError(f"Invalid profile name: {name}")
 
         # Convert config to JSON string
-        config_dict = config.model_dump(mode="json")
+        config_dict = config_adapter.to_dict()
         config_json = json.dumps(config_dict, indent=2)
 
         # Store in client storage
@@ -80,7 +78,7 @@ class FletConfigProfileManager:
 
         logger.info(f"Saved profile to client storage: {name}")
 
-    def load_profile(self, name: str) -> Config:
+    def load_profile(self, name: str) -> GUIConfigAdapter:
         """
         Load configuration from named profile in client storage.
 
@@ -88,7 +86,7 @@ class FletConfigProfileManager:
             name: Profile name
 
         Returns:
-            Loaded configuration
+            Loaded configuration adapter
 
         Raises:
             FileNotFoundError: If profile doesn't exist
@@ -107,11 +105,12 @@ class FletConfigProfileManager:
 
         try:
             config_dict = json.loads(config_json)
-            config = Config(**config_dict)
+            adapter = GUIConfigAdapter()
+            adapter.from_dict(config_dict)
             logger.info(f"Loaded profile from client storage: {name}")
-            return config
+            return adapter
 
-        except (json.JSONDecodeError, ValidationError) as e:
+        except (json.JSONDecodeError, Exception) as e:
             raise ValueError(f"Invalid profile {name}: {e}") from e
 
     def delete_profile(self, name: str) -> None:
@@ -153,20 +152,20 @@ class FletConfigProfileManager:
         key = f"{self.KEY_PREFIX}{name}"
         return self.page.client_storage.contains_key(key)
 
-    def get_or_create_default(self) -> Config:
+    def get_or_create_default(self) -> GUIConfigAdapter:
         """
         Get default profile or create if doesn't exist.
 
         Returns:
-            Default configuration profile
+            Default configuration adapter
         """
         if self.profile_exists("default"):
             return self.load_profile("default")
         else:
-            # Create default from Config defaults
-            config = Config()
-            self.save_profile("default", config)
-            return config
+            # Create default configuration
+            adapter = GUIConfigAdapter()
+            self.save_profile("default", adapter)
+            return adapter
 
     def set_last_selected_profile(self, profile_name: str) -> None:
         """

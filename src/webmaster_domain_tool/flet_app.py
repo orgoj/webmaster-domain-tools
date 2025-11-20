@@ -11,13 +11,24 @@ from typing import Any
 
 import flet as ft
 
-from .config import Config
-from .config_editor_dialog import ConfigEditorDialog
-from .core.analyzer import (
-    ANALYZER_REGISTRY,
-    run_domain_analysis,
+# Import all analyzers so they register themselves
+from .analyzers import (  # noqa: F401
+    cdn_detector,
+    dns_analyzer,
+    email_security,
+    favicon_analyzer,
+    http_analyzer,
+    rbl_checker,
+    security_headers,
+    seo_files_analyzer,
+    site_verification_analyzer,
+    ssl_analyzer,
+    whois_analyzer,
 )
+from .config_editor_dialog import ConfigEditorDialog
+from .core.registry import registry
 from .flet_config_manager import FletConfigProfileManager
+from .gui_config_adapter import GUIConfigAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -146,11 +157,11 @@ class DomainAnalyzerApp:
 
         # Load the profile (create default if needed)
         if self.profile_manager.profile_exists(self.current_profile_name):
-            self.config = self.profile_manager.load_profile(self.current_profile_name)
+            self.config_adapter = self.profile_manager.load_profile(self.current_profile_name)
         else:
             # Fallback to default if selected profile doesn't exist
             self.current_profile_name = "default"
-            self.config = self.profile_manager.get_or_create_default()
+            self.config_adapter = self.profile_manager.get_or_create_default()
 
         # Store initial domain for pre-filling input
         self._initial_domain = initial_domain
@@ -211,15 +222,15 @@ class DomainAnalyzerApp:
         )
 
         # Analysis options checkboxes - generated dynamically from registry (DRY!)
-        # No more hardcoded checkboxes - uses ANALYZER_REGISTRY as single source of truth
+        # Uses registry as single source of truth
         self.analyzer_checkboxes: dict[str, ft.Checkbox] = {}
-        for analyzer_key, metadata in ANALYZER_REGISTRY.items():
-            if metadata.has_checkbox:
-                label = metadata.checkbox_label or metadata.title
-                self.analyzer_checkboxes[analyzer_key] = ft.Checkbox(
-                    label=label,
-                    value=metadata.checkbox_default,
-                )
+        for analyzer_id, metadata in registry.get_all().items():
+            # Create checkbox for each analyzer
+            config = self.config_adapter.get_analyzer_config(analyzer_id)
+            self.analyzer_checkboxes[analyzer_id] = ft.Checkbox(
+                label=metadata.name,
+                value=config.enabled,  # Use enabled flag from config
+            )
 
         # Results container (aligned left, not centered)
         self.results_column = ft.Column(
@@ -394,32 +405,18 @@ class DomainAnalyzerApp:
         domain = domain.replace("http://", "").replace("https://", "").rstrip("/")
         return domain
 
-    def _build_skip_params(self) -> dict[str, bool]:
+    def _get_enabled_analyzers(self) -> set[str]:
         """
-        Build skip parameters dynamically from checkbox states using registry.
+        Get set of analyzer IDs that are enabled based on checkbox states.
 
-        Returns dict of skip parameter names to values, ready to pass to run_domain_analysis().
-        No more hardcoded mapping - uses ANALYZER_REGISTRY as single source of truth!
+        Returns:
+            Set of enabled analyzer IDs
         """
-        skip_params = {}
-
-        for analyzer_key, metadata in ANALYZER_REGISTRY.items():
-            if not metadata.has_checkbox or not metadata.skip_param_name:
-                continue
-
-            checkbox = self.analyzer_checkboxes.get(analyzer_key)
-            if not checkbox:
-                continue
-
-            # Build parameter value based on checkbox state
-            if metadata.skip_param_inverted:
-                # Inverted params like "do_rbl_check": checked=True means enable
-                skip_params[metadata.skip_param_name] = checkbox.value
-            else:
-                # Normal skip params: checked=True means enable, so skip=False
-                skip_params[metadata.skip_param_name] = not checkbox.value
-
-        return skip_params
+        enabled = set()
+        for analyzer_id, checkbox in self.analyzer_checkboxes.items():
+            if checkbox.value:
+                enabled.add(analyzer_id)
+        return enabled
 
     def run_analysis(self) -> None:
         """Run domain analysis."""
@@ -448,33 +445,63 @@ class DomainAnalyzerApp:
         thread.start()
 
     def _run_analysis_sync(self, domain: str) -> None:
-        """Run analysis synchronously in background thread."""
+        """Run analysis synchronously in background thread using new modular architecture."""
         try:
             # Update status for user
             self.update_status(f"Analyzing {domain}...")
 
-            # Copy config to avoid side effects
-            config = self.config.model_copy(deep=True)
+            # Get enabled analyzers from checkboxes
+            enabled_analyzers_set = self._get_enabled_analyzers()
 
-            # Build skip parameters dynamically from checkboxes (DRY!)
-            # No more hardcoded mapping - uses ANALYZER_REGISTRY
-            skip_params = self._build_skip_params()
+            # Get all analyzer IDs
+            all_analyzer_ids = list(registry.get_all_ids())
 
-            # Call CORE analysis (same as CLI!) with dynamic skip parameters
-            results = run_domain_analysis(
-                domain,
-                config,
-                progress_callback=self.update_status,
-                **skip_params,  # Dynamic parameters from registry!
-            )
+            # Filter to only enabled ones
+            enabled_analyzers = [aid for aid in all_analyzer_ids if aid in enabled_analyzers_set]
 
-            # Convert to dict for display_results - build dynamically from registry (DRY!)
-            results_dict = {}
-            for metadata in ANALYZER_REGISTRY.values():
-                field_name = metadata.result_field
-                results_dict[field_name] = getattr(results, field_name, None)
+            # Calculate skip set (inverse of enabled)
+            skip_set = set(all_analyzer_ids) - enabled_analyzers_set
 
-            # Display results (existing method handles this)
+            # Resolve dependencies
+            try:
+                execution_order = registry.resolve_dependencies(enabled_analyzers, skip_set)
+            except ValueError as e:
+                self.show_error(f"Dependency error: {e}")
+                return
+
+            if not execution_order:
+                self.show_error("No analyzers selected!")
+                return
+
+            # Execute analyzers in order
+            results_dict: dict[str, Any] = {}
+
+            for analyzer_id in execution_order:
+                self.update_status(f"Running {analyzer_id}...")
+
+                metadata = registry.get(analyzer_id)
+                if not metadata:
+                    logger.error(f"Analyzer not found: {analyzer_id}")
+                    continue
+
+                config = self.config_adapter.get_analyzer_config(analyzer_id)
+
+                try:
+                    # Instantiate analyzer
+                    analyzer = metadata.plugin_class()
+
+                    # Run analysis
+                    result = analyzer.analyze(domain, config)
+
+                    # Store result
+                    results_dict[analyzer_id] = result
+
+                except Exception as e:
+                    logger.error(f"Analyzer '{analyzer_id}' failed: {e}", exc_info=True)
+                    # Store None to indicate failure
+                    results_dict[analyzer_id] = None
+
+            # Display results
             self.display_results(domain, results_dict)
 
         except Exception as e:
@@ -567,38 +594,37 @@ class DomainAnalyzerApp:
         )
         self.results_column.controls.append(summary_card)
 
-        # Individual results - iterate through analyzer registry (DRY)
-        # No hardcoded if statements! Uses ANALYZER_REGISTRY as single source of truth
-        for analyzer_key, metadata in ANALYZER_REGISTRY.items():
-            result_field = metadata.result_field
+        # Individual results - iterate through analyzer registry
+        # Map analyzer_id to custom panel methods (GUI-specific rendering)
+        custom_renderers = {
+            "whois": self._create_whois_panel,
+            "dns": self._create_dns_panel,
+            "http": self._create_http_panel,
+            "ssl": self._create_ssl_panel,
+            "email": self._create_email_panel,
+            "security-headers": self._create_headers_panel,
+            "rbl": self._create_rbl_panel,
+            "seo-files": self._create_seo_panel,
+            "favicon": self._create_favicon_panel,
+            "site-verification": self._create_site_verification_panel,
+            "cdn": self._create_cdn_panel,
+        }
 
-            # Skip if analyzer not in results or result is None (disabled)
-            if result_field not in results or results[result_field] is None:
+        for analyzer_id in results.keys():
+            metadata = registry.get(analyzer_id)
+            if not metadata:
                 continue
 
-            result = results[result_field]
+            # Skip if result is None (disabled)
+            result = results.get(analyzer_id)
+            if result is None:
+                continue
 
-            # Route to appropriate renderer based on custom_renderer metadata
-            if metadata.custom_renderer:
-                # Use custom renderer method
-                renderer_method_name = f"_create_{metadata.custom_renderer}_panel"
-                renderer_method = getattr(self, renderer_method_name, None)
-
-                if renderer_method:
-                    # Build arguments dynamically from additional_result_fields (DRY!)
-                    # No more hardcoded "if analyzer_key == 'email'" checks
-                    renderer_args = [result]
-                    if metadata.additional_result_fields:
-                        for additional_field in metadata.additional_result_fields:
-                            additional_result = results.get(additional_field)
-                            renderer_args.append(additional_result)
-
-                    panel = renderer_method(*renderer_args)
-                    self.results_column.controls.append(panel)
-                else:
-                    logger.warning(
-                        f"Custom renderer {renderer_method_name} not found for {analyzer_key}"
-                    )
+            # Route to appropriate renderer
+            if analyzer_id in custom_renderers:
+                # Use custom GUI renderer
+                panel = custom_renderers[analyzer_id](result)
+                self.results_column.controls.append(panel)
             else:
                 # Use default auto-display renderer
                 panel = self._create_default_auto_display_panel(metadata, result)
@@ -1705,7 +1731,7 @@ class DomainAnalyzerApp:
 
         # Ensure default profile exists
         if "default" not in profiles:
-            self.profile_manager.save_profile("default", self.config)
+            self.profile_manager.save_profile("default", self.config_adapter)
             profiles = self.profile_manager.list_profiles()
 
         # Populate dropdown
@@ -1721,7 +1747,7 @@ class DomainAnalyzerApp:
 
         try:
             # Load the selected profile
-            self.config = self.profile_manager.load_profile(new_profile_name)
+            self.config_adapter = self.profile_manager.load_profile(new_profile_name)
             self.current_profile_name = new_profile_name
 
             # Save as last selected profile for next session
@@ -1749,11 +1775,11 @@ class DomainAnalyzerApp:
     def _show_config_editor(self, e: ft.ControlEvent) -> None:
         """Show configuration editor dialog."""
 
-        def on_save(new_config: Config) -> None:
+        def on_save(new_config_adapter: GUIConfigAdapter) -> None:
             """Callback when config is saved in editor."""
-            self.config = new_config
+            self.config_adapter = new_config_adapter
             # Also save to current profile
-            self.profile_manager.save_profile(self.current_profile_name, new_config)
+            self.profile_manager.save_profile(self.current_profile_name, new_config_adapter)
             logger.info(f"Updated configuration for profile: {self.current_profile_name}")
 
             # Show confirmation
@@ -1765,7 +1791,7 @@ class DomainAnalyzerApp:
             snackbar.open = True
             self.page.update()
 
-        editor = ConfigEditorDialog(self.page, self.config, on_save)
+        editor = ConfigEditorDialog(self.page, self.config_adapter, on_save)
         editor.show()
 
     def _show_save_profile_dialog(self, e: ft.ControlEvent) -> None:
@@ -1783,7 +1809,7 @@ class DomainAnalyzerApp:
                 return
 
             try:
-                self.profile_manager.save_profile(name, self.config)
+                self.profile_manager.save_profile(name, self.config_adapter)
                 logger.info(f"Saved new profile: {name}")
 
                 # Reload profile list and select new profile
@@ -1846,7 +1872,7 @@ class DomainAnalyzerApp:
 
                 # Switch to default profile
                 self.current_profile_name = "default"
-                self.config = self.profile_manager.load_profile("default")
+                self.config_adapter = self.profile_manager.load_profile("default")
 
                 # Save default as last selected profile for next session
                 self.profile_manager.set_last_selected_profile("default")

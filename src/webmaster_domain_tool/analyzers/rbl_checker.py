@@ -16,11 +16,7 @@ from pydantic import Field
 from ..constants import DEFAULT_RBL_SERVERS, DEFAULT_RBL_TIMEOUT
 from ..core.registry import registry
 from .dns_utils import create_resolver
-from .protocol import (
-    AnalyzerConfig,
-    OutputDescriptor,
-    VerbosityLevel,
-)
+from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
 
 if TYPE_CHECKING:
     from .dns_analyzer import DNSAnalysisResult

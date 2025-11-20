@@ -18,11 +18,7 @@ from ..constants import (
     DEFAULT_SSL_PORT,
 )
 from ..core.registry import registry
-from .protocol import (
-    AnalyzerConfig,
-    OutputDescriptor,
-    VerbosityLevel,
-)
+from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
 
 logger = logging.getLogger(__name__)
 
