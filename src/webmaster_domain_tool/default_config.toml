@@ -38,7 +38,7 @@ warn_www_not_cname = false
 [whois]
 enabled = true
 # WHOIS query timeout in seconds
-timeout = 10.0
+timeout = 5.0
 # Days before expiration to show warning
 expiry_warning_days = 30
 
@@ -48,7 +48,7 @@ expiry_warning_days = 30
 [http]
 enabled = true
 # HTTP request timeout in seconds
-timeout = 10.0
+timeout = 5.0
 # Maximum number of redirects to follow
 max_redirects = 10
 # Custom user agent string (optional)
@@ -60,7 +60,7 @@ user_agent = "webmaster-domain-tool/1.0.0"
 [ssl]
 enabled = true
 # SSL connection timeout in seconds
-timeout = 10.0
+timeout = 5.0
 # Port to connect to (default: 443)
 port = 443
 # Check which TLS versions are supported
@@ -78,7 +78,7 @@ expiry_critical_days = 7
 [email]
 enabled = true
 # Email check timeout in seconds
-timeout = 10.0
+timeout = 5.0
 # Enable individual email security checks
 check_spf = true
 check_dkim = true
@@ -106,7 +106,7 @@ dkim_selectors = [
 [headers]
 enabled = true
 # HTTP request timeout in seconds
-timeout = 10.0
+timeout = 5.0
 # Enable or disable individual security header checks
 check_hsts = true
 check_csp = true
@@ -123,7 +123,7 @@ check_content_type = true
 [verification]
 enabled = true
 # HTTP/DNS check timeout in seconds
-timeout = 10.0
+timeout = 5.0
 # Enable individual platform checks
 check_google = true
 check_facebook = true
@@ -167,7 +167,7 @@ check_cname = true
 [seo]
 enabled = true
 # HTTP request timeout in seconds
-timeout = 10.0
+timeout = 5.0
 # Enable individual SEO file checks
 check_robots = true
 check_sitemap = true
@@ -179,7 +179,7 @@ check_llms_txt = true
 [favicon]
 enabled = true
 # HTTP request timeout in seconds
-timeout = 10.0
+timeout = 5.0
 # Check HTML for favicon link tags
 check_html = true
 # Check default paths (/favicon.ico, /favicon.svg, etc.)

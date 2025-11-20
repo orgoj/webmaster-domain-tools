@@ -320,20 +320,25 @@ class FaviconAnalyzer:
     # Required Protocol Methods
     # ========================================================================
 
-    def analyze(self, domain: str, config: FaviconConfig) -> FaviconAnalysisResult:
+    def analyze(
+        self,
+        domain: str,
+        config: FaviconConfig,
+        context: dict[str, object] | None = None,
+    ) -> FaviconAnalysisResult:
         """
         Analyze favicons for a given domain.
 
         Args:
             domain: Domain to analyze (e.g., "example.com")
             config: Favicon analyzer configuration
+            context: Optional context from previous analyzers (e.g., HTTP result)
 
         Returns:
             FaviconAnalysisResult with all found favicons
         """
-        # Construct base URL from domain
-        # Assume HTTPS first, could fallback to HTTP if needed
-        base_url = f"https://{domain}" if not domain.startswith("http") else domain
+        # Get base URL from HTTP analyzer if available, otherwise use HTTPS fallback
+        base_url = self._get_base_url(domain, context)
 
         # Extract clean domain for result
         parsed = urlparse(base_url)
@@ -388,6 +393,33 @@ class FaviconAnalyzer:
             result.warnings.append("Default /favicon.ico not found (recommended for compatibility)")
 
         return result
+
+    def _get_base_url(self, domain: str, context: dict[str, object] | None) -> str:
+        """
+        Get the base URL to check for favicons.
+
+        Tries to use preferred_final_url from HTTP analyzer if available.
+        Falls back to https://{domain} if no HTTP result.
+
+        Args:
+            domain: Domain to analyze
+            context: Context dict with results from other analyzers
+
+        Returns:
+            Base URL to fetch favicons from
+        """
+        if context and "http" in context:
+            http_result = context["http"]
+            if hasattr(http_result, "preferred_final_url") and http_result.preferred_final_url:
+                logger.info(
+                    f"Using preferred URL from HTTP analyzer: {http_result.preferred_final_url}"
+                )
+                return http_result.preferred_final_url
+
+        # Fall back to HTTPS
+        fallback_url = f"https://{domain}" if not domain.startswith("http") else domain
+        logger.info(f"No HTTP result available, using fallback URL: {fallback_url}")
+        return fallback_url
 
     def _parse_html_favicons(self, base_url: str, config: FaviconConfig) -> list[FaviconInfo]:
         """Parse HTML to find favicon links, meta tags, and manifest."""
