@@ -243,6 +243,9 @@ class HTTPAnalyzer:
         start_time = datetime.now()
 
         while redirect_count <= config.max_redirects:
+            logger.debug(f"→ HTTP GET: {current_url} (timeout={config.timeout}s)")
+            request_start = datetime.now()
+
             try:
                 # Make request without following redirects
                 with httpx.Client(
@@ -250,12 +253,15 @@ class HTTPAnalyzer:
                     follow_redirects=False,
                     verify=True,
                 ) as client:
-                    request_start = datetime.now()
                     response = client.get(
                         current_url,
                         headers={"User-Agent": config.user_agent},
                     )
                     response_time = (datetime.now() - request_start).total_seconds()
+
+                    logger.debug(
+                        f"✓ HTTP {response.status_code}: {current_url} ({response_time:.2f}s)"
+                    )
 
                     # Create HTTPResponse object
                     http_response = HTTPResponse(
@@ -296,7 +302,7 @@ class HTTPAnalyzer:
 
             except httpx.ConnectError as e:
                 # ConnectError includes SSL errors, connection refused, etc.
-                logger.debug(f"Connection error for {current_url}: {e}")
+                elapsed = (datetime.now() - request_start).total_seconds()
 
                 # Check if it's SSL-related error by looking at the error message
                 error_msg = str(e).lower()
@@ -304,18 +310,25 @@ class HTTPAnalyzer:
                     ssl_term in error_msg for ssl_term in ["ssl", "certificate", "tls"]
                 )
 
+                if is_ssl_error:
+                    logger.debug(f"✗ SSL error: {current_url} ({elapsed:.2f}s)")
+                else:
+                    logger.debug(f"✗ Connection error: {current_url} ({elapsed:.2f}s)")
+
                 http_response = HTTPResponse(
                     url=current_url,
                     status_code=0,
                     headers={},
                     error=f"SSL error: {str(e)}" if is_ssl_error else f"Connection error: {str(e)}",
                     ssl_verified=False if is_ssl_error else True,
+                    response_time=elapsed,
                 )
                 chain.responses.append(http_response)
                 break
 
             except httpx.TimeoutException:
-                logger.debug(f"Timeout for {current_url}")
+                elapsed = (datetime.now() - request_start).total_seconds()
+                logger.debug(f"✗ Timeout: {current_url} ({elapsed:.2f}s, limit={config.timeout}s)")
                 http_response = HTTPResponse(
                     url=current_url,
                     status_code=0,
