@@ -13,7 +13,7 @@ try:
 except ImportError:
     import tomli as tomllib  # type: ignore
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .registry import registry
 
@@ -23,15 +23,14 @@ logger = logging.getLogger(__name__)
 class GlobalConfig(BaseModel):
     """Global configuration (not analyzer-specific)."""
 
+    model_config = ConfigDict(extra="ignore")
+
     verbosity: str = Field(
         default="normal",
         description="Output verbosity: quiet, normal, verbose, debug",
     )
     color: bool = Field(default=True, description="Enable colored output")
     parallel: bool = Field(default=False, description="Run independent analyzers in parallel")
-
-    class Config:
-        extra = "ignore"
 
 
 class ConfigManager:
@@ -181,10 +180,10 @@ class ConfigManager:
         Args:
             path: Output file path
         """
-        data = {"global": self.global_config.model_dump()}
+        data = {"global": self.global_config.model_dump(exclude_none=True)}
 
         for analyzer_id, config in self.analyzer_configs.items():
-            data[analyzer_id] = config.model_dump()
+            data[analyzer_id] = config.model_dump(exclude_none=True)
 
         # Convert to TOML (requires tomli_w)
         try:

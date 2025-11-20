@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class VerbosityLevel(Enum):
@@ -159,11 +159,10 @@ class AnalyzerConfig(BaseModel):
             check_dnssec: bool = Field(default=True)
     """
 
+    model_config = ConfigDict(extra="allow")  # Allow analyzer-specific fields
+
     enabled: bool = True
     timeout: float = 10.0
-
-    class Config:
-        extra = "allow"  # Allow analyzer-specific fields
 
 
 TConfig = TypeVar("TConfig", bound=AnalyzerConfig)
