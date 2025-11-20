@@ -107,6 +107,32 @@ class GUIConfigAdapter:
         """
         self.config_manager.analyzer_configs[analyzer_id] = config
 
+    def export_to_toml_string(self) -> str:
+        """
+        Export current configuration to TOML string.
+
+        Returns:
+            TOML-formatted configuration string
+
+        Raises:
+            ImportError: If tomli_w is not installed
+        """
+        try:
+            import tomli_w
+        except ImportError:
+            logger.error("tomli_w not installed, cannot export TOML")
+            raise ImportError("tomli_w package is required for TOML export")
+
+        # Build config data (same as export_to_toml in ConfigManager)
+        data = {"global": self.config_manager.global_config.model_dump(exclude_none=True)}
+
+        for analyzer_id, config in self.config_manager.analyzer_configs.items():
+            data[analyzer_id] = config.model_dump(exclude_none=True)
+
+        # Convert to TOML string
+        toml_bytes = tomli_w.dumps(data)
+        return toml_bytes
+
     @classmethod
     def from_config_manager(cls, config_manager: ConfigManager) -> "GUIConfigAdapter":
         """

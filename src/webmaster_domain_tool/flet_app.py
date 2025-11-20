@@ -197,6 +197,12 @@ class DomainAnalyzerApp:
             on_click=self._show_config_editor,
         )
 
+        self.export_config_button = ft.IconButton(
+            icon=ft.Icons.DOWNLOAD,
+            tooltip="Export config to TOML",
+            on_click=self._show_export_dialog,
+        )
+
         self.save_profile_button = ft.IconButton(
             icon=ft.Icons.SAVE,
             tooltip="Save current config as new profile",
@@ -285,6 +291,7 @@ class DomainAnalyzerApp:
                         [
                             self.profile_dropdown,
                             self.config_editor_button,
+                            self.export_config_button,
                             self.save_profile_button,
                             self.delete_profile_button,
                         ],
@@ -1781,6 +1788,128 @@ class DomainAnalyzerApp:
 
         editor = ConfigEditorDialog(self.page, self.config_adapter, on_save)
         editor.show()
+
+    def _show_export_dialog(self, e: ft.ControlEvent) -> None:
+        """Show TOML export dialog with preview and copy/save buttons."""
+        try:
+            # Generate TOML string from current config
+            toml_content = self.config_adapter.export_to_toml_string()
+        except Exception as ex:
+            logger.error(f"Failed to generate TOML: {ex}")
+            self.show_error(f"Failed to generate TOML: {ex}")
+            return
+
+        # Create text area with TOML content
+        toml_text_field = ft.TextField(
+            value=toml_content,
+            multiline=True,
+            read_only=True,
+            min_lines=20,
+            max_lines=30,
+            text_size=12,
+            width=600,
+        )
+
+        def copy_to_clipboard(dialog_e: ft.ControlEvent) -> None:
+            """Copy TOML to clipboard."""
+            try:
+                self.page.set_clipboard(toml_content)
+                # Show success snackbar
+                snackbar = ft.SnackBar(
+                    content=ft.Text("TOML copied to clipboard!"),
+                    bgcolor=ft.Colors.GREEN,
+                )
+                self.page.overlay.append(snackbar)
+                snackbar.open = True
+                self.page.update()
+            except Exception as ex:
+                logger.error(f"Failed to copy to clipboard: {ex}")
+                self.show_error(f"Failed to copy: {ex}")
+
+        def save_to_file(dialog_e: ft.ControlEvent) -> None:
+            """Save TOML to file using FilePicker."""
+
+            def on_file_picker_result(e: ft.FilePickerResultEvent) -> None:
+                """Handle file picker result."""
+                if e.path:
+                    try:
+                        # Write TOML to selected file
+                        from pathlib import Path
+
+                        file_path = Path(e.path)
+                        file_path.write_text(toml_content, encoding="utf-8")
+                        logger.info(f"Exported config to {file_path}")
+
+                        # Close export dialog
+                        export_dialog.open = False
+
+                        # Show success snackbar
+                        snackbar = ft.SnackBar(
+                            content=ft.Text(f"Configuration saved to {file_path.name}"),
+                            bgcolor=ft.Colors.GREEN,
+                        )
+                        self.page.overlay.append(snackbar)
+                        snackbar.open = True
+                        self.page.update()
+
+                    except Exception as ex:
+                        logger.error(f"Failed to save TOML file: {ex}")
+                        self.show_error(f"Failed to save file: {ex}")
+
+            # Create file picker
+            file_picker = ft.FilePicker(on_result=on_file_picker_result)
+            self.page.overlay.append(file_picker)
+            self.page.update()
+
+            # Show save dialog with default name
+            file_picker.save_file(
+                file_name=f"{self.current_profile_name}.toml",
+                allowed_extensions=["toml"],
+            )
+
+        export_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Export Configuration to TOML"),
+            content=ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "Copy or save this TOML configuration for use with CLI --config option:",
+                            size=12,
+                        ),
+                        toml_text_field,
+                    ],
+                    spacing=10,
+                    tight=True,
+                ),
+                width=650,
+            ),
+            actions=[
+                ft.TextButton(
+                    "Close",
+                    on_click=lambda _: setattr(export_dialog, "open", False) or self.page.update(),
+                ),
+                ft.ElevatedButton(
+                    "Copy to Clipboard",
+                    icon=ft.Icons.COPY,
+                    on_click=copy_to_clipboard,
+                ),
+                ft.ElevatedButton(
+                    "Save to File",
+                    icon=ft.Icons.SAVE,
+                    on_click=save_to_file,
+                    style=ft.ButtonStyle(
+                        bgcolor=ft.Colors.BLUE,
+                        color=ft.Colors.WHITE,
+                    ),
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        self.page.overlay.append(export_dialog)
+        export_dialog.open = True
+        self.page.update()
 
     @staticmethod
     def _validate_profile_name(name: str) -> tuple[bool, str | None]:
