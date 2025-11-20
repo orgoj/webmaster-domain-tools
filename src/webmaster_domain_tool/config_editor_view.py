@@ -105,7 +105,7 @@ class ConfigEditorView:
                 )
             )
 
-        # NavigationRail - expand to fill full height
+        # NavigationRail - directly in row (from Flet docs example)
         nav_rail = ft.NavigationRail(
             selected_index=self.current_index,
             label_type=ft.NavigationRailLabelType.ALL,
@@ -113,18 +113,6 @@ class ConfigEditorView:
             destinations=nav_rail_destinations,
             on_change=self._on_nav_change,
             bgcolor=ft.Colors.GREY_300,
-            expand=True,  # Fill parent Column height
-        )
-
-        # Sidebar - full height scrollable column
-        sidebar = ft.Container(
-            width=200,
-            bgcolor=ft.Colors.GREY_300,
-            content=ft.Column(
-                [nav_rail],
-                scroll=ft.ScrollMode.AUTO,  # Auto scroll when too many items
-                expand=True,  # Fill container height
-            ),
         )
 
         # Content area - full height
@@ -133,15 +121,16 @@ class ConfigEditorView:
             expand=True,
         )
 
-        # Main content row - sidebar + content (full height)
+        # Main content row - NavigationRail + content (from official docs)
+        # Row with expand=True provides bounded dimensions for NavigationRail
         content_row = ft.Row(
             [
-                sidebar,
+                nav_rail,
                 ft.VerticalDivider(width=1),
                 content_area,
             ],
             spacing=0,
-            expand=True,  # Fill available vertical space
+            expand=True,  # THIS provides bounded height for NavigationRail
         )
 
         # Header with Back and Save buttons
