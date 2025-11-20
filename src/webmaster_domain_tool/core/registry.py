@@ -90,6 +90,15 @@ class AnalyzerRegistry:
 
         analyzer_id = plugin_class.analyzer_id
 
+        # Validate protocol methods
+        required_methods = ["analyze", "describe_output", "to_dict"]
+        for method in required_methods:
+            if not hasattr(plugin_class, method) or not callable(getattr(plugin_class, method)):
+                raise TypeError(
+                    f"Analyzer {plugin_class.__name__} doesn't implement AnalyzerPlugin protocol: "
+                    f"missing or non-callable method '{method}'"
+                )
+
         # Check for duplicates
         if analyzer_id in self._plugins:
             logger.warning(f"Analyzer '{analyzer_id}' already registered, overwriting")

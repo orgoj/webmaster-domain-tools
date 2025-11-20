@@ -61,7 +61,15 @@ class ConfigManager:
         check_certificate_transparency = true
     """
 
-    def __init__(self):
+    def __init__(self, strict: bool = False):
+        """
+        Initialize ConfigManager.
+
+        Args:
+            strict: If True, raise exceptions on config validation errors.
+                   If False (default), log warnings and use defaults.
+        """
+        self.strict = strict
         self.global_config = GlobalConfig()
         self.analyzer_configs: dict[str, Any] = {}
 
@@ -90,6 +98,8 @@ class ConfigManager:
                     merged_data = self._merge_dicts(merged_data, file_data)
                     logger.info(f"Loaded config from {path}")
             except Exception as e:
+                if self.strict:
+                    raise RuntimeError(f"Failed to load config from {path}: {e}") from e
                 logger.warning(f"Failed to load config from {path}: {e}")
 
         # Parse global config
@@ -97,6 +107,8 @@ class ConfigManager:
             try:
                 self.global_config = GlobalConfig(**merged_data["global"])
             except ValidationError as e:
+                if self.strict:
+                    raise
                 logger.error(f"Invalid global config: {e}")
 
         # Parse analyzer configs
@@ -107,6 +119,10 @@ class ConfigManager:
                     self.analyzer_configs[analyzer_id] = config
                     logger.debug(f"Loaded config for {analyzer_id}")
                 except ValidationError as e:
+                    if self.strict:
+                        raise ValidationError(
+                            f"Invalid config for analyzer '{analyzer_id}': {e}"
+                        ) from e
                     logger.warning(f"Invalid config for {analyzer_id}: {e}")
                     # Use default config
                     self.analyzer_configs[analyzer_id] = metadata.config_class()

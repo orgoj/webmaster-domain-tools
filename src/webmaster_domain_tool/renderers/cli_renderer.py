@@ -11,7 +11,7 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
-from ..analyzers.protocol import OutputDescriptor, VerbosityLevel
+from ..analyzers.protocol import OutputDescriptor, OutputRow, VerbosityLevel
 from .base import BaseRenderer
 
 
@@ -115,7 +115,7 @@ class CLIRenderer(BaseRenderer):
             for row in section_rows:
                 self._render_row(row)
 
-    def _render_row(self, row):
+    def _render_row(self, row: OutputRow) -> None:
         """
         Render a single output row.
 

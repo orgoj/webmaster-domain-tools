@@ -1782,6 +1782,28 @@ class DomainAnalyzerApp:
         editor = ConfigEditorDialog(self.page, self.config_adapter, on_save)
         editor.show()
 
+    @staticmethod
+    def _validate_profile_name(name: str) -> tuple[bool, str | None]:
+        """
+        Validate profile name for filesystem safety.
+
+        Args:
+            name: Profile name to validate
+
+        Returns:
+            Tuple of (is_valid, error_message). error_message is None if valid.
+        """
+        if not name:
+            return False, "Profile name cannot be empty"
+        if len(name) > 50:
+            return False, "Profile name must be 50 characters or less"
+        if not re.match(r"^[a-zA-Z0-9_-]+$", name):
+            return (
+                False,
+                "Profile name can only contain letters, numbers, dashes, and underscores",
+            )
+        return True, None
+
     def _show_save_profile_dialog(self, e: ft.ControlEvent) -> None:
         """Show dialog to save current config as new profile."""
         profile_name_field = ft.TextField(
@@ -1794,6 +1816,15 @@ class DomainAnalyzerApp:
             """Save config as new profile."""
             name = profile_name_field.value.strip()
             if not name:
+                return
+
+            # Validate profile name
+            is_valid, error_msg = self._validate_profile_name(name)
+            if not is_valid:
+                error_text = ft.Text(error_msg, color=ft.Colors.RED, size=12)
+                # Clear previous errors
+                dialog.content.controls = [profile_name_field, error_text]
+                self.page.update()
                 return
 
             try:

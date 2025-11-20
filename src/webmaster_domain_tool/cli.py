@@ -19,7 +19,7 @@ from rich.console import Console
 _original_panel_init = rich.panel.Panel.__init__
 
 
-def _no_border_panel_init(self, *args, **kwargs):
+def _no_border_panel_init(self, *args, **kwargs) -> None:
     kwargs["box"] = box.HORIZONTALS
     return _original_panel_init(self, *args, **kwargs)
 
@@ -272,7 +272,7 @@ def analyze(
 
 
 @app.command()
-def list_analyzers():
+def list_analyzers() -> None:
     """
     List all available analyzers.
 
@@ -342,7 +342,7 @@ def create_config(
 
 
 @app.command()
-def version():
+def version() -> None:
     """Show version information."""
     try:
         import importlib.metadata
@@ -358,7 +358,7 @@ def version():
 # ============================================================================
 
 
-def main():
+def main() -> None:
     """Main entry point for CLI."""
     try:
         app()
