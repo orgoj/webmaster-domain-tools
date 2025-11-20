@@ -109,7 +109,7 @@ class ConfigEditorDialog:
             min_extended_width=200,
             destinations=nav_rail_destinations,
             on_change=self._on_nav_change,
-            bgcolor=ft.Colors.SURFACE_VARIANT,
+            bgcolor=ft.colors.SURFACE_VARIANT,
         )
 
         # Main layout: Row with nav rail on left, content on right

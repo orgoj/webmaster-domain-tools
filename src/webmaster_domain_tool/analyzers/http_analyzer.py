@@ -11,7 +11,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 import httpx
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from ..constants import (
     DEFAULT_HTTP_MAX_REDIRECTS,
@@ -42,6 +42,14 @@ class HTTPConfig(AnalyzerConfig):
         default=False,
         description="Skip testing www subdomain (useful for subdomains or domains without www)",
     )
+
+    @field_validator("user_agent", mode="before")
+    @classmethod
+    def validate_user_agent(cls, v):
+        """Ensure user_agent is never None - use default if missing."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return DEFAULT_USER_AGENT
+        return v
 
 
 # ============================================================================
