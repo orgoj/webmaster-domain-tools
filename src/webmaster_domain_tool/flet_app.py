@@ -14,7 +14,6 @@ import flet as ft
 
 # Import analyzers package which auto-imports all analyzer modules
 from . import analyzers  # noqa: F401  # Triggers analyzer registration
-from .config_editor_dialog import ConfigEditorDialog
 from .core.registry import registry
 from .flet_config_manager import FletConfigProfileManager
 from .gui_config_adapter import GUIConfigAdapter
@@ -284,7 +283,24 @@ class DomainAnalyzerApp:
         )
 
     def _build_ui(self) -> None:
-        """Build the user interface."""
+        """Build the user interface with view switching."""
+        # Create container for current view (will hold either main view or config view)
+        self.current_view_content = ft.Container(
+            content=None,  # Will be set by _switch_to_main_view()
+            expand=True,
+        )
+
+        # Add view container to page
+        self.page.add(self.current_view_content)
+
+        # Start with main view
+        self._switch_to_main_view()
+
+        # Load profile list after UI is built
+        self._load_profile_list()
+
+    def _build_main_view(self) -> ft.Column:
+        """Build main analysis view."""
         # Header with profile management controls
         header = ft.Container(
             content=ft.Column(
@@ -381,10 +397,46 @@ class DomainAnalyzerApp:
             expand=True,
         )
 
-        self.page.add(main_column)
+        return main_column
 
-        # Load profile list after UI is built
-        self._load_profile_list()
+    def _switch_to_main_view(self) -> None:
+        """Switch to main analysis view."""
+        self.current_view_content.content = self._build_main_view()
+        self.page.update()
+
+    def _switch_to_config_view(self) -> None:
+        """Switch to config editor view."""
+        # Import here to avoid circular dependency
+        from .config_editor_view import ConfigEditorView
+
+        config_view = ConfigEditorView(
+            page=self.page,
+            config_adapter=self.config_adapter,
+            on_save=self._on_config_saved,
+            on_cancel=self._switch_to_main_view,
+            theme=self.theme,
+        )
+
+        self.current_view_content.content = config_view.build()
+        self.page.update()
+
+    def _on_config_saved(self, new_config_adapter: GUIConfigAdapter) -> None:
+        """Handle config save from config editor view."""
+        # Update config adapter
+        self.config_adapter = new_config_adapter
+
+        # Save profile if not default
+        if self.current_profile_name != "default":
+            self.profile_manager.save_profile(self.current_profile_name, self.config_adapter)
+            logger.info(f"Saved configuration to profile: {self.current_profile_name}")
+
+        # Rebuild analyzer checkboxes with new config
+        for analyzer_id, checkbox in self.analyzer_checkboxes.items():
+            config = self.config_adapter.get_analyzer_config(analyzer_id)
+            checkbox.value = config.enabled
+
+        # Switch back to main view
+        self._switch_to_main_view()
 
     def validate_domain(self, domain: str) -> bool:
         """Validate domain name format."""
@@ -1844,7 +1896,7 @@ class DomainAnalyzerApp:
             self.show_error(f"Failed to load profile: {e}")
 
     def _show_config_editor(self, e: ft.ControlEvent) -> None:
-        """Show configuration editor dialog."""
+        """Show configuration editor view (full-page, not dialog)."""
         # Block editing of default profile
         if self.current_profile_name == "default":
             self.show_error(
@@ -1854,24 +1906,8 @@ class DomainAnalyzerApp:
             )
             return
 
-        def on_save(new_config_adapter: GUIConfigAdapter) -> None:
-            """Callback when config is saved in editor."""
-            self.config_adapter = new_config_adapter
-            # Also save to current profile
-            self.profile_manager.save_profile(self.current_profile_name, new_config_adapter)
-            logger.info(f"Updated configuration for profile: {self.current_profile_name}")
-
-            # Show confirmation
-            snackbar = ft.SnackBar(
-                content=ft.Text(f"Configuration saved to profile: {self.current_profile_name}"),
-                bgcolor=ft.Colors.GREEN,
-            )
-            self.page.overlay.append(snackbar)
-            snackbar.open = True
-            self.page.update()
-
-        editor = ConfigEditorDialog(self.page, self.config_adapter, on_save)
-        editor.show()
+        # Switch to config editor view (full-page)
+        self._switch_to_config_view()
 
     def _show_export_dialog(self, e: ft.ControlEvent) -> None:
         """Show TOML export dialog with preview and copy/save buttons."""
