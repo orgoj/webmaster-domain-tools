@@ -109,8 +109,8 @@ class CLIRenderer(BaseRenderer):
         # Render each section
         for section_name, section_rows in sections.items():
             if section_name != "_default":
+                self.console.print()  # Blank line BEFORE section name (separator)
                 self.console.print(f"  [cyan]{section_name}[/cyan]")
-                self.console.print()
 
             for row in section_rows:
                 self._render_row(row)
