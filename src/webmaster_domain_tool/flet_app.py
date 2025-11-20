@@ -1,6 +1,7 @@
 """Flet multiplatform GUI application for webmaster-domain-tool."""
 
 import argparse
+import inspect
 import ipaddress
 import logging
 import re
@@ -470,6 +471,7 @@ class DomainAnalyzerApp:
 
             # Execute analyzers in order
             results_dict: dict[str, Any] = {}
+            analysis_context: dict[str, Any] = {}  # Shared data between analyzers
 
             for analyzer_id in execution_order:
                 self.update_status(f"Running {analyzer_id}...")
@@ -485,10 +487,17 @@ class DomainAnalyzerApp:
                     # Instantiate analyzer
                     analyzer = metadata.plugin_class()
 
-                    # Run analysis
-                    result = analyzer.analyze(domain, config)
+                    # Run analysis - pass context if analyzer supports it
+                    analyze_signature = inspect.signature(analyzer.analyze)
+                    if "context" in analyze_signature.parameters:
+                        result = analyzer.analyze(domain, config, context=analysis_context)
+                    else:
+                        result = analyzer.analyze(domain, config)
 
-                    # Store result
+                    # Store result in context for dependent analyzers
+                    analysis_context[analyzer_id] = result
+
+                    # Store result for display
                     results_dict[analyzer_id] = result
 
                 except Exception as e:

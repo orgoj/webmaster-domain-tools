@@ -4,6 +4,7 @@ This is the main CLI entry point using the modular analyzer system.
 All analyzers are auto-discovered via the registry.
 """
 
+import inspect
 import logging
 import re
 import sys
@@ -273,8 +274,12 @@ def analyze(
             # Instantiate analyzer
             analyzer = metadata.plugin_class()
 
-            # Run analysis
-            result = analyzer.analyze(domain, config)
+            # Run analysis - pass context if analyzer supports it
+            analyze_signature = inspect.signature(analyzer.analyze)
+            if "context" in analyze_signature.parameters:
+                result = analyzer.analyze(domain, config, context=analysis_context)
+            else:
+                result = analyzer.analyze(domain, config)
 
             # Store in context for dependent analyzers
             analysis_context[analyzer_id] = result

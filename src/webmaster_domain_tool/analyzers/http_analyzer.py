@@ -173,7 +173,58 @@ class HTTPAnalyzer:
             # Validate redirect chain
             self._validate_chain(chain, result)
 
+        # Determine preferred final URL (where site actually runs)
+        # Priority: HTTPS www > HTTPS bare > HTTP www > HTTP bare
+        result.preferred_final_url = self._determine_preferred_url(result, domain, config)
+
         return result
+
+    def _determine_preferred_url(
+        self, result: HTTPAnalysisResult, domain: str, config: HTTPConfig
+    ) -> str | None:
+        """
+        Determine the preferred final URL where the site runs.
+
+        Priority order:
+        1. https://www.{domain} with 200 status
+        2. https://{domain} with 200 status
+        3. http://www.{domain} with 200 status
+        4. http://{domain} with 200 status
+        5. Any other successful URL
+
+        Args:
+            result: HTTP analysis result with chains
+            domain: Original domain
+            config: HTTP config
+
+        Returns:
+            Preferred final URL or None if no successful response
+        """
+        # Build priority list
+        priority_urls = [
+            f"https://www.{domain}",
+            f"https://{domain}",
+            f"http://www.{domain}",
+            f"http://{domain}",
+        ]
+
+        # Find chains that ended successfully (status 200)
+        successful_chains = []
+        for chain in result.chains:
+            if chain.responses and chain.responses[-1].status_code == 200:
+                successful_chains.append(chain)
+
+        if not successful_chains:
+            return None
+
+        # Check priority URLs first
+        for priority_url in priority_urls:
+            for chain in successful_chains:
+                if chain.start_url == priority_url:
+                    return chain.final_url
+
+        # Fall back to first successful final URL
+        return successful_chains[0].final_url
 
     def _follow_redirects(self, start_url: str, config: HTTPConfig) -> RedirectChain:
         """
@@ -293,16 +344,15 @@ class HTTPAnalyzer:
         return chain
 
     def _validate_chain(self, chain: RedirectChain, result: HTTPAnalysisResult) -> None:
-        """Validate redirect chain and add warnings/errors."""
+        """Validate redirect chain and add warnings."""
         if not chain.responses:
-            result.errors.append(f"No response received for {chain.start_url}")
+            # Don't add to errors - will be displayed as part of chain
             return
 
         last_response = chain.responses[-1]
 
-        # Check for errors
-        if last_response.error:
-            result.errors.append(f"{chain.start_url}: {last_response.error}")
+        # Note: Errors are shown in chain display, not added to result.errors
+        # This prevents duplicate error messages
 
         # Check for HTTP on final URL (should use HTTPS)
         ends_on_http = chain.final_url.startswith("http://") and last_response.status_code == 200
@@ -425,6 +475,17 @@ class HTTPAnalyzer:
             f"{len(r.chains)} endpoints successful"
         )
 
+        # Show final URL where site is running (successful HTTPS preferred)
+        if result.preferred_final_url:
+            descriptor.add_row(
+                label="Final URL",
+                value=result.preferred_final_url,
+                style_class="success",
+                severity="info",
+                icon="check",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
         # Show redirect chains
         for chain in result.chains:
             if not chain.responses:
@@ -432,56 +493,80 @@ class HTTPAnalyzer:
 
             last_response = chain.responses[-1]
 
-            # Chain summary
-            if last_response.error:
-                descriptor.add_row(
-                    label=chain.start_url,
-                    value=last_response.error,
-                    style_class="error",
-                    severity="error",
-                    icon="cross",
-                    verbosity=VerbosityLevel.NORMAL,
-                )
-            elif last_response.status_code == 200:
-                # Successful response
-                redirect_info = (
-                    f"{len(chain.responses)} hop(s)" if len(chain.responses) > 1 else "Direct"
-                )
-                descriptor.add_row(
-                    label=chain.start_url,
-                    value=f"{last_response.status_code} OK - {redirect_info} ({chain.total_time:.2f}s)",
-                    style_class="success",
-                    severity="info",
-                    icon="check",
-                    verbosity=VerbosityLevel.NORMAL,
-                )
-            else:
-                # Non-200 response
-                descriptor.add_row(
-                    label=chain.start_url,
-                    value=f"HTTP {last_response.status_code}",
-                    style_class="warning",
-                    severity="warning",
-                    icon="warning",
-                    verbosity=VerbosityLevel.NORMAL,
-                )
-
-            # Verbose: Show full redirect chain
+            # Build redirect chain display (always in NORMAL mode)
             if len(chain.responses) > 1:
-                chain_steps = []
-                for i, resp in enumerate(chain.responses):
-                    step = f"{resp.url} → {resp.status_code}"
+                # Multi-hop redirect: show chain with codes and times
+                chain_parts = []
+                for resp in chain.responses:
                     if resp.redirect_to:
-                        step += f" → {resp.redirect_to}"
-                    chain_steps.append(step)
+                        chain_parts.append(
+                            f"{resp.url} {resp.status_code} ({resp.response_time:.2f}s) →"
+                        )
+                    else:
+                        # Final response
+                        chain_parts.append(
+                            f"{resp.url} {resp.status_code} ({resp.response_time:.2f}s)"
+                        )
 
-                descriptor.add_row(
-                    label="  Redirect chain",
-                    value=chain_steps,
-                    section_type="list",
-                    style_class="info",
-                    verbosity=VerbosityLevel.VERBOSE,
-                )
+                chain_display = " ".join(chain_parts)
+
+                if last_response.error:
+                    descriptor.add_row(
+                        value=f"{chain_display} - {last_response.error}",
+                        section_type="text",
+                        style_class="error",
+                        severity="error",
+                        icon="cross",
+                        verbosity=VerbosityLevel.NORMAL,
+                    )
+                elif last_response.status_code == 200:
+                    descriptor.add_row(
+                        value=chain_display,
+                        section_type="text",
+                        style_class="success",
+                        severity="info",
+                        icon="check",
+                        verbosity=VerbosityLevel.NORMAL,
+                    )
+                else:
+                    descriptor.add_row(
+                        value=chain_display,
+                        section_type="text",
+                        style_class="warning",
+                        severity="warning",
+                        icon="warning",
+                        verbosity=VerbosityLevel.NORMAL,
+                    )
+
+            else:
+                # Single-hop (no redirect): simple display
+                if last_response.error:
+                    descriptor.add_row(
+                        label=chain.start_url,
+                        value=last_response.error,
+                        style_class="error",
+                        severity="error",
+                        icon="cross",
+                        verbosity=VerbosityLevel.NORMAL,
+                    )
+                elif last_response.status_code == 200:
+                    descriptor.add_row(
+                        label=chain.start_url,
+                        value=f"{last_response.status_code} OK - Direct ({chain.total_time:.2f}s)",
+                        style_class="success",
+                        severity="info",
+                        icon="check",
+                        verbosity=VerbosityLevel.NORMAL,
+                    )
+                else:
+                    descriptor.add_row(
+                        label=chain.start_url,
+                        value=f"HTTP {last_response.status_code}",
+                        style_class="warning",
+                        severity="warning",
+                        icon="warning",
+                        verbosity=VerbosityLevel.NORMAL,
+                    )
 
         # Path check result
         if result.path_check_result:
@@ -505,18 +590,7 @@ class HTTPAnalyzer:
                     verbosity=VerbosityLevel.NORMAL,
                 )
 
-        # Errors
-        for error in result.errors:
-            descriptor.add_row(
-                value=error,
-                section_type="text",
-                style_class="error",
-                severity="error",
-                icon="cross",
-                verbosity=VerbosityLevel.NORMAL,
-            )
-
-        # Warnings
+        # Warnings only (errors are already shown in chain display)
         for warning in result.warnings:
             descriptor.add_row(
                 value=warning,

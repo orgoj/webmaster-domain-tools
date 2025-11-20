@@ -139,19 +139,25 @@ class HTMLValidatorAnalyzer:
     # Required Protocol Methods
     # ========================================================================
 
-    def analyze(self, domain: str, config: HTMLValidatorConfig) -> HTMLValidationResult:
+    def analyze(
+        self,
+        domain: str,
+        config: HTMLValidatorConfig,
+        context: dict[str, object] | None = None,
+    ) -> HTMLValidationResult:
         """
         Validate HTML and check quality.
 
         Args:
             domain: Domain to analyze
             config: HTML validator configuration
+            context: Optional context from previous analyzers (e.g., HTTP result)
 
         Returns:
             HTMLValidationResult with validation data
         """
-        # Determine URL (prefer HTTPS)
-        url = f"https://{domain}"
+        # Get preferred URL from HTTP analyzer if available
+        url = self._get_url_to_analyze(domain, context)
         result = HTMLValidationResult(domain=domain, url=url)
 
         try:
@@ -193,6 +199,33 @@ class HTMLValidatorAnalyzer:
             result.errors.append(f"Validation failed: {e}")
 
         return result
+
+    def _get_url_to_analyze(self, domain: str, context: dict[str, object] | None) -> str:
+        """
+        Get the URL to analyze HTML from.
+
+        Tries to use preferred_final_url from HTTP analyzer if available.
+        Falls back to https://{domain} if no HTTP result.
+
+        Args:
+            domain: Domain to analyze
+            context: Context dict with results from other analyzers
+
+        Returns:
+            URL to fetch HTML from
+        """
+        if context and "http" in context:
+            http_result = context["http"]
+            if hasattr(http_result, "preferred_final_url") and http_result.preferred_final_url:
+                logger.info(
+                    f"Using preferred URL from HTTP analyzer: {http_result.preferred_final_url}"
+                )
+                return http_result.preferred_final_url
+
+        # Fall back to HTTPS
+        fallback_url = f"https://{domain}"
+        logger.info(f"No HTTP result available, using fallback URL: {fallback_url}")
+        return fallback_url
 
     def _fetch_html(self, url: str, config: HTMLValidatorConfig) -> str | None:
         """Fetch HTML content from URL."""
