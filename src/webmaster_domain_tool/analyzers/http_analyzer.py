@@ -19,15 +19,12 @@ from ..constants import (
     DEFAULT_USER_AGENT,
     MAX_REDIRECT_WARNING,
 )
+from ..core.registry import registry
 from .protocol import (
     AnalyzerConfig,
     OutputDescriptor,
     VerbosityLevel,
 )
-
-# NOTE: Registry import temporarily disabled to avoid circular import
-# from ..core.registry import registry
-# This will be re-enabled once core/analyzer.py uses lazy imports
 
 logger = logging.getLogger(__name__)
 
@@ -109,9 +106,7 @@ class HTTPAnalysisResult:
 # ============================================================================
 
 
-# NOTE: @registry.register temporarily disabled to avoid circular import
-# Will be re-enabled once core/analyzer.py uses lazy imports
-# @registry.register
+@registry.register
 class HTTPAnalyzer:
     """
     Analyzes HTTP/HTTPS responses and redirect chains.
