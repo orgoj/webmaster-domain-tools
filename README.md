@@ -369,94 +369,167 @@ wdt analyze -c myconfig.toml example.com
 **Example configuration:**
 
 ```toml
-[dns]
-nameservers = ["1.1.1.1", "8.8.8.8"]
-timeout = 5.0
-check_dnssec = true
-# Warn when www subdomain is not a CNAME (best practice for easier management)
-warn_www_not_cname = false
-
-[http]
-timeout = 10.0
-max_redirects = 10
-
-[email]
-dkim_selectors = ["default", "google", "k1"]
-check_rbl = true
-rbl_servers = ["zen.spamhaus.org", "bl.spamcop.net"]
-
-# Site verification - predefined services (Google, Facebook, Pinterest, Bing, Yandex)
-[[site_verification.services]]
-name = "Google"
-ids = ["abc123def456"]  # Add your IDs here or use --verify CLI arg
-
-[[site_verification.services]]
-name = "Facebook"
-ids = []  # Use --verify Facebook:your-id or add here
-
-[output]
+# Global output settings
+[global]
 color = true
 verbosity = "normal"  # quiet, normal, verbose, debug
 
-[analysis]
-skip_dns = false
-skip_email = false
-skip_site_verification = false
+# Per-analyzer configuration
+# Each analyzer has its own section with isolated settings
+
+[dns]
+enabled = true
+timeout = 5.0
+nameservers = ["1.1.1.1", "8.8.8.8"]
+check_dnssec = true
+# Warn when www subdomain is not a CNAME (best practice)
+warn_www_not_cname = false
+
+[whois]
+enabled = true
+timeout = 10.0
+expiry_warning_days = 30
+
+[http]
+enabled = true
+timeout = 10.0
+max_redirects = 10
+user_agent = "webmaster-domain-tool/1.0"
+
+[ssl]
+enabled = true
+timeout = 10.0
+check_tls_versions = true
+expiry_warning_days = 30
+expiry_critical_days = 7
+
+[email]
+enabled = true
+timeout = 10.0
+check_spf = true
+check_dkim = true
+check_dmarc = true
+check_bimi = true
+check_mta_sts = true
+check_tls_rpt = true
+dkim_selectors = ["default", "google", "k1", "k2"]
+
+[security-headers]
+enabled = true
+timeout = 10.0
+# Individual header checks can be disabled
+check_hsts = true
+check_csp = true
+check_x_frame_options = true
+# ... more headers ...
+
+[site-verification]
+enabled = true
+timeout = 10.0
+check_google = true
+check_facebook = true
+check_pinterest = true
+check_bing = true
+check_yandex = true
+
+[rbl]
+enabled = false  # Disabled by default (can be slow)
+timeout = 5.0
+check_a_records = true
+check_mx_records = true
+rbl_servers = [
+    "zen.spamhaus.org",
+    "bl.spamcop.net",
+    "b.barracudacentral.org",
+    "dnsbl.sorbs.net"
+]
+
+[cdn]
+enabled = true
+check_headers = true
+check_cname = true
+
+[seo-files]
+enabled = true
+timeout = 10.0
+check_robots = true
+check_sitemap = true
+check_llms_txt = true
+
+[favicon]
+enabled = true
+timeout = 10.0
+check_html = true
+check_default_paths = true
+check_manifest = true
 ```
 
 ### Options
 
+#### Output Formats
+
+```bash
+# CLI output (default) - colored terminal output
+wdt analyze example.com
+wdt analyze --format cli example.com
+
+# JSON output - machine-readable format
+wdt analyze --format json example.com
+wdt analyze -f json example.com > output.json
+```
+
 #### Verbosity (output levels)
 
 ```bash
-# Quiet mode - errors only
-wdt analyze --quiet example.com
-wdt analyze -q example.com
+# Quiet mode - minimal output
+wdt analyze --verbosity quiet example.com
+wdt analyze -v quiet example.com
 
 # Normal mode - default
 wdt analyze example.com
+wdt analyze --verbosity normal example.com
 
 # Verbose mode - detailed information
-wdt analyze --verbose example.com
-wdt analyze -v example.com
+wdt analyze --verbosity verbose example.com
+wdt analyze -v verbose example.com
 
-# Debug mode - very detailed output
-wdt analyze --debug example.com
-wdt analyze -d example.com
+# Debug mode - maximum detail with debug logs
+wdt analyze --verbosity debug example.com
+wdt analyze -v debug example.com
 ```
 
 #### Skipping Certain Checks
 
-**Default state:**
-- ✅ DNS analysis - enabled
-- ✅ HTTP/HTTPS analysis - enabled
-- ✅ SSL/TLS analysis - enabled
-- ✅ Email security (SPF, DKIM, DMARC) - enabled
-- ✅ Security headers - enabled
-- ✅ Site verification - enabled (auto-detects verification IDs from multiple services)
-- ❌ RBL check - disabled (enable with `--check-rbl`)
+**All analyzers are enabled by default.** Use the unified `--skip` parameter to disable specific analyzers:
+
+**Available analyzers:**
+- `dns` - DNS records and DNSSEC validation
+- `whois` - Domain registration information
+- `http` - HTTP/HTTPS redirect analysis
+- `ssl` - SSL/TLS certificate analysis
+- `email` - Email security (SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT)
+- `security-headers` - Security headers checking
+- `site-verification` - Site verification and tracking codes
+- `rbl` - RBL blacklist checking
+- `cdn` - CDN detection
+- `seo-files` - robots.txt, sitemap.xml, llms.txt
+- `favicon` - Favicon analysis
 
 ```bash
-# Skip DNS analysis
-wdt analyze --skip-dns example.com
+# Skip single analyzer
+wdt analyze --skip dns example.com
 
-# Skip HTTP/HTTPS analysis
-wdt analyze --skip-http example.com
+# Skip multiple analyzers
+wdt analyze --skip dns --skip whois example.com
 
-# Skip SSL/TLS analysis
-wdt analyze --skip-ssl example.com
+# List all available analyzers
+wdt list-analyzers
 
-# Skip email security (SPF, DKIM, DMARC)
-wdt analyze --skip-email example.com
-
-# Skip security headers
-wdt analyze --skip-headers example.com
-
-# Skip site verification analysis
-wdt analyze --skip-site-verification example.com
-
-# Combination - DNS and SSL only
-wdt analyze --skip-http --skip-email --skip-headers --skip-site-verification example.com
+# Run only DNS and HTTP (skip everything else)
+wdt analyze --skip whois --skip ssl --skip email \
+    --skip security-headers --skip site-verification \
+    --skip rbl --skip cdn --skip seo-files --skip favicon \
+    example.com
 ```
 
 #### DKIM Selectors
@@ -584,21 +657,21 @@ wdt analyze --no-color example.com
 ### Complex Usage Examples
 
 ```bash
-# Quick check with custom DNS servers
-wdt analyze --nameservers "1.1.1.1,8.8.8.8" example.com
-
 # Detailed analysis with debug output
-wdt analyze --debug --timeout 15 example.com
+wdt analyze --verbosity debug example.com
 
-# Email security only with custom DKIM selectors
-wdt analyze --skip-dns --skip-http --skip-ssl --skip-headers \
-    --dkim-selectors "google,default,mail" example.com
+# Email and security checks only
+wdt analyze --skip dns --skip whois --skip http --skip ssl \
+    --skip cdn --skip seo-files --skip favicon example.com
 
-# Verbose output without colors (for logging)
-wdt analyze -v --no-color example.com > domain-report.txt
+# JSON output for automated processing
+wdt analyze --format json --verbosity verbose example.com > report.json
 
-# Quick check without email security
-wdt analyze --skip-email --timeout 5 example.com
+# Quick check (skip slow analyzers)
+wdt analyze --skip whois --skip rbl example.com
+
+# List all available analyzers and their categories
+wdt list-analyzers
 ```
 
 ## Output
@@ -706,39 +779,62 @@ webmaster-domain-tool/
 ├── src/
 │   └── webmaster_domain_tool/
 │       ├── __init__.py
-│       ├── cli.py                 # CLI interface (Typer)
-│       ├── config.py              # Config management
-│       ├── default_config.toml    # Default configuration
+│       ├── cli.py                      # CLI interface (Typer)
+│       ├── default_config.toml         # Default configuration
+│       ├── core/
+│       │   ├── __init__.py
+│       │   ├── registry.py             # Analyzer registry with auto-discovery
+│       │   └── config_manager.py       # Multi-layer config management
 │       ├── analyzers/
 │       │   ├── __init__.py
-│       │   ├── dns_analyzer.py        # DNS analysis + DNSSEC
-│       │   ├── http_analyzer.py       # HTTP/HTTPS analysis
-│       │   ├── ssl_analyzer.py        # SSL/TLS analysis
-│       │   ├── email_security.py      # SPF, DKIM, DMARC
-│       │   ├── security_headers.py    # Security headers
-│       │   ├── site_verification_analyzer.py  # Universal site verification (Google, Facebook, etc.) + tracking codes
-│       │   └── rbl_checker.py         # RBL blacklist check
+│       │   ├── protocol.py             # Protocol definitions (AnalyzerPlugin)
+│       │   ├── dns_analyzer.py         # DNS analysis + DNSSEC
+│       │   ├── whois_analyzer.py       # WHOIS information
+│       │   ├── http_analyzer.py        # HTTP/HTTPS redirect analysis
+│       │   ├── ssl_analyzer.py         # SSL/TLS certificate analysis
+│       │   ├── email_security.py       # SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT
+│       │   ├── security_headers.py     # Security headers checking
+│       │   ├── site_verification_analyzer.py  # Site verification + tracking codes
+│       │   ├── rbl_checker.py          # RBL blacklist checking
+│       │   ├── cdn_detector.py         # CDN provider detection
+│       │   ├── seo_files_analyzer.py   # robots.txt, sitemap.xml, llms.txt
+│       │   └── favicon_analyzer.py     # Favicon detection and analysis
+│       ├── renderers/
+│       │   ├── __init__.py
+│       │   ├── base.py                 # Base renderer protocol
+│       │   ├── cli_renderer.py         # CLI output with Rich
+│       │   └── json_renderer.py        # JSON export renderer
 │       └── utils/
 │           ├── __init__.py
-│           ├── logger.py       # Logging setup
-│           └── output.py       # Rich output formatting
+│           └── logger.py               # Logging setup
 ├── tests/
 ├── pyproject.toml
 ├── LICENSE
-└── README.md
+├── README.md
+├── CLAUDE.md                           # AI assistant guide
+└── CHANGELOG.md                        # Version history
 ```
 
 ## Roadmap / Future Improvements
 
+**Completed:**
 - [x] **DNSSEC validation** ✅
 - [x] **RBL (blacklist) check** ✅
 - [x] **Config file for default settings** ✅
-- [ ] Export to JSON/YAML/HTML formats
-- [ ] robots.txt / sitemap.xml checking
+- [x] **robots.txt / sitemap.xml / llms.txt checking** ✅
+- [x] **JSON export format** ✅
+- [x] **Modular plugin system for analyzers** ✅
+- [x] **GUI application (Flet-based)** ✅
+- [x] **CDN detection** ✅
+- [x] **Favicon analysis** ✅
+- [x] **Site verification (multiple platforms)** ✅
+
+**Planned:**
+- [ ] HTML/YAML export formats
 - [ ] Batch analysis of multiple domains
 - [ ] Continuous monitoring with alerting
-- [ ] Web UI / API
-- [ ] Plugin system for custom analyzers
+- [ ] Web UI / REST API
+- [ ] Custom analyzer plugins from external packages
 
 ## Contributing
 

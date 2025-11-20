@@ -1,6 +1,6 @@
 [project]
 name = "webmaster-domain-tool"
-version = "0.5.0"
+version = "1.0.0"
 description = "Comprehensive domain analysis tool for webmasters"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -10,7 +10,7 @@ authors = [
 license = { text = "MIT" }
 keywords = ["dns", "ssl", "security", "webmaster", "domain", "analysis"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",

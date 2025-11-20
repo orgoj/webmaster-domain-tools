@@ -7,20 +7,162 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2025-01-20
+
+**BREAKING CHANGES - MAJOR ARCHITECTURE REFACTORING**
+
+This is a complete rewrite of the internal architecture. While most user-facing functionality remains the same, there are breaking changes in CLI parameters and configuration file structure.
+
+### ⚠️ Migration Guide
+
+**CLI Changes:**
+- `--skip-dns --skip-whois` → `--skip dns --skip whois` (unified parameter)
+- `--quiet` / `-q` → `--verbosity quiet` / `-v quiet`
+- `--verbose` / `-v` → `--verbosity verbose` / `-v verbose`
+- `--debug` / `-d` → `--verbosity debug` / `-v debug`
+- New: `--format cli|json` for output format selection
+- New: `wdt list-analyzers` command to see all available analyzers
+
+**Configuration Changes:**
+- Config structure changed to per-analyzer sections
+- Each analyzer has isolated `[analyzer-name]` section in TOML
+- `enabled = true/false` field added to each analyzer section
+- Old flat config structure no longer supported
+- See README for complete new configuration example
+
+**API/Import Changes (for developers):**
+- Deleted: `core/analyzer.py` (old monolithic orchestration)
+- Deleted: `utils/output.py` (old coupled OutputFormatter)
+- Deleted: `config.py` (old monolithic Config class)
+- New: `analyzers/protocol.py` (AnalyzerPlugin protocol)
+- New: `core/registry.py` (analyzer auto-discovery)
+- New: `core/config_manager.py` (per-analyzer config)
+- New: `renderers/` directory (pluggable renderer system)
+
 ### Added
-- **GUI Application CLI Arguments**: Added command-line argument support for wdt-app
+
+- **Protocol-Based Plugin System**
+  - Analyzers implement `AnalyzerPlugin` protocol using `@runtime_checkable`
+  - Auto-discovery via `@registry.register` decorator
+  - Dependency resolution with topological sort
+  - Circular dependency detection
+  - Adding new analyzer now requires editing only ONE file
+
+- **Semantic Output Styling (Theme-Agnostic)**
+  - Analyzers define semantic styles: `success`, `error`, `warning`, `info`, `highlight`, `muted`
+  - Renderers map semantic styles to theme-specific colors/formatting
+  - Enables theme switching without code changes
+  - Future-proof for HTML, GUI renderers without analyzer modifications
+
+- **Per-Analyzer Configuration**
+  - Isolated TOML sections: `[dns]`, `[ssl]`, `[email]`, etc.
+  - Pydantic config classes defined in analyzer files
+  - Multi-layer config merging preserved
+  - No configuration cross-contamination
+
+- **Auto-Discovery System**
+  - Analyzers register themselves via decorator
+  - CLI automatically discovers all registered analyzers
+  - No manual integration in CLI code required
+  - Dependency resolution ensures correct execution order
+
+- **Unified Skip Parameter**
+  - `--skip analyzer1 --skip analyzer2` replaces individual `--skip-*` flags
+  - Cleaner, more scalable CLI interface
+  - Tab completion for analyzer names
+  - Validation with helpful error messages
+
+- **Output Format Selection**
+  - `--format cli` for colored terminal output (default)
+  - `--format json` for machine-readable JSON export
+  - Future formats (HTML, YAML) can be added without analyzer changes
+
+- **Zero-Coupling Architecture**
+  - Analyzers never import CLI, config, or renderers
+  - Renderers never import specific analyzer code
+  - Registry manages all coordination
+  - Complete decoupling for maintainability and testability
+
+### Changed
+
+- **CLI Command Structure** (BREAKING)
+  - Verbosity flags unified under `--verbosity` parameter
+  - Skip parameters unified under repeatable `--skip` parameter
+  - Added `wdt list-analyzers` command
+  - Improved validation and error messages
+
+- **Configuration System** (BREAKING)
+  - Migrated from flat config to per-analyzer sections
+  - Each analyzer section contains all analyzer-specific settings
+  - `enabled` field added to control analyzers via config
+  - Multi-layer merging logic preserved
+  - Better isolation and maintainability
+
+- **Output System**
+  - Decoupled from analyzers via `OutputDescriptor`
+  - Semantic styling instead of hardcoded colors
+  - Verbosity filtering via `VerbosityLevel` enum
+  - Error/warning tracking in renderers, not analyzers
+
+- **All 11 Analyzers Refactored**
+  - DNS, WHOIS, HTTP, SSL, Email, Security Headers, Site Verification, RBL, CDN, SEO Files, Favicon
+  - All follow new protocol-based pattern
+  - Self-contained with config, logic, and output formatting
+  - Zero coupling to rest of system
+
+### Removed
+
+- **Old Architecture Files** (BREAKING)
+  - `core/analyzer.py` (25KB) - monolithic orchestration removed
+  - `utils/output.py` (78KB) - coupled formatter removed
+  - `config.py` (16KB) - monolithic config removed
+  - Individual `--skip-*` CLI flags removed
+  - Shorthand verbosity flags (`-q`, `-v`, `-d`) removed
+
+### Technical Details
+
+- **Lines Changed**: +6,702 insertions, -3,699 deletions (26 files)
+- **New Protocol**: `AnalyzerPlugin` with 3 required methods: `analyze()`, `describe_output()`, `to_dict()`
+- **Registry**: Topological sort for dependency resolution, cycle detection
+- **Config Manager**: Recursive dict merging with precedence: system → user → local → CLI
+- **Renderers**: `BaseRenderer` → `CLIRenderer` (Rich-based) and `JSONRenderer`
+- **Test Coverage**: Existing tests updated, new test suite planned (see roadmap)
+
+### Developer Impact
+
+**Simplified Workflow for Adding Analyzers:**
+
+**Before (required 9 file edits):**
+1. Create analyzer file
+2. Edit config.py for schema
+3. Edit default_config.toml
+4. Edit cli.py for imports
+5. Edit cli.py for CLI args
+6. Edit cli.py for instantiation
+7. Edit output.py for display
+8. Edit analyzers/__init__.py
+9. Update README.md
+
+**After (requires 1 file edit):**
+1. Create analyzer file with `@registry.register`
+2. Update README.md (documentation only)
+
+This represents a **90% reduction** in code changes needed to add new features.
+
+### GUI Application CLI Arguments
+
+- Added command-line argument support for wdt-app
   - `--config` / `-c`: Specify configuration profile name to use
   - Domain argument: Pre-fill domain input field
   - Example: `wdt-app --config myprofile example.com`
   - Enables scripting and quick access to specific profiles
 
-### Changed
-- **Email Configuration Consolidated**: Merged `AdvancedEmailConfig` into `EmailConfig` for simplified configuration
+### Email Configuration Consolidated
+
+- Merged `AdvancedEmailConfig` into `EmailConfig` for simplified configuration
   - All email security settings (SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT) now in single `[email]` section
   - Removed `[advanced_email]` section from config files
   - Removed `skip_advanced_email` flag from analysis options
-  - GUI config editor now has single "Email" tab instead of separate "Advanced Email" tab
-  - **Breaking Change**: If you have `[advanced_email]` section in your config.toml, move settings to `[email]` section
 
 ## [0.3.0] - 2024-11-17
 
