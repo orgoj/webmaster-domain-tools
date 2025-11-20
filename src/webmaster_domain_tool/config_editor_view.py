@@ -105,7 +105,7 @@ class ConfigEditorView:
                 )
             )
 
-        # NavigationRail - needs height to avoid unbounded error
+        # NavigationRail - expand to fill full height
         nav_rail = ft.NavigationRail(
             selected_index=self.current_index,
             label_type=ft.NavigationRailLabelType.ALL,
@@ -113,37 +113,35 @@ class ConfigEditorView:
             destinations=nav_rail_destinations,
             on_change=self._on_nav_change,
             bgcolor=ft.Colors.GREY_300,
-            height=700,  # Fixed height to avoid "unbounded" error
+            expand=True,  # Fill parent Column height
         )
 
-        # Sidebar - scrollable column with NavigationRail
+        # Sidebar - full height scrollable column
         sidebar = ft.Container(
-            content=ft.Column(
-                [nav_rail],
-                scroll=ft.ScrollMode.AUTO,
-            ),
             width=200,
             bgcolor=ft.Colors.GREY_300,
+            content=ft.Column(
+                [nav_rail],
+                scroll=ft.ScrollMode.AUTO,  # Auto scroll when too many items
+                expand=True,  # Fill container height
+            ),
         )
 
-        # Content area
+        # Content area - full height
         content_area = ft.Container(
             content=self.content_container,
             expand=True,
         )
 
-        # Main content row (sidebar + content) - THIS needs fixed height
-        main_content = ft.Container(
-            content=ft.Row(
-                [
-                    sidebar,
-                    ft.VerticalDivider(width=1),
-                    content_area,
-                ],
-                spacing=0,
-                expand=True,
-            ),
-            expand=True,  # Fill available space below header
+        # Main content row - sidebar + content (full height)
+        content_row = ft.Row(
+            [
+                sidebar,
+                ft.VerticalDivider(width=1),
+                content_area,
+            ],
+            spacing=0,
+            expand=True,  # Fill available vertical space
         )
 
         # Header with Back and Save buttons
@@ -180,15 +178,15 @@ class ConfigEditorView:
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
-        # Full-page layout
+        # Full-page layout - header + content row
         return ft.Column(
             [
                 header,
                 ft.Divider(),
-                main_content,
+                content_row,
             ],
             spacing=10,
-            expand=True,
+            expand=True,  # Fill page height
         )
 
     def _on_nav_change(self, e: ft.ControlEvent) -> None:
