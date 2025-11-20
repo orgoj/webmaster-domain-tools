@@ -14,9 +14,10 @@ logger = logging.getLogger(__name__)
 
 class ConfigEditorDialog:
     """
-    Configuration editor dialog with dynamic tabs based on analyzer registry.
+    Configuration editor dialog with sidebar navigation.
 
     Automatically generates editor UI for all registered analyzers.
+    Uses left sidebar with icons for navigation.
     """
 
     def __init__(
@@ -43,40 +44,92 @@ class ConfigEditorDialog:
         # UI field references (analyzer_id -> field_name -> control)
         self.analyzer_fields: dict[str, dict[str, ft.Control]] = {}
 
+        # Build analyzer sections (id -> {name, icon, content})
+        self.sections: list[dict[str, Any]] = []
+        self._build_sections()
+
+        # Current selected index
+        self.current_index = 0
+
+        # Content container (will be updated when selecting different section)
+        self.content_container = ft.Container(
+            content=self.sections[0]["content"] if self.sections else ft.Text("No config"),
+            padding=20,
+            expand=True,
+        )
+
         # Build dialog
         self.dialog = self._build_dialog()
 
-    def _build_dialog(self) -> ft.AlertDialog:
-        """Build the main dialog with tabs."""
-        # Build tabs dynamically from registry
-        tabs_list = []
+    def _build_sections(self) -> None:
+        """Build all configuration sections (global + analyzers)."""
+        # Add global settings first
+        global_content = self._create_global_content()
+        self.sections.append(
+            {
+                "id": "global",
+                "name": "Global Settings",
+                "icon": ft.Icons.SETTINGS,
+                "content": global_content,
+            }
+        )
 
-        # Add global settings tab first
-        tabs_list.append(self._create_global_tab())
-
-        # Add tabs for each analyzer
+        # Add analyzer sections
         for analyzer_id, metadata in sorted(
             registry.get_all().items(), key=lambda x: (x[1].category, x[1].name)
         ):
-            tab = self._create_analyzer_tab(analyzer_id, metadata)
-            if tab:
-                tabs_list.append(tab)
+            content = self._create_analyzer_content(analyzer_id, metadata)
+            if content:
+                icon_name = getattr(ft.Icons, metadata.icon.upper(), ft.Icons.SETTINGS)
+                self.sections.append(
+                    {
+                        "id": analyzer_id,
+                        "name": metadata.name,
+                        "icon": icon_name,
+                        "content": content,
+                    }
+                )
 
-        tabs = ft.Tabs(
-            selected_index=0,
-            animation_duration=300,
-            tabs=tabs_list,
-            expand=1,
-            scrollable=True,
+    def _build_dialog(self) -> ft.AlertDialog:
+        """Build the main dialog with sidebar navigation."""
+        # Build navigation rail (left sidebar)
+        nav_rail_destinations = []
+        for section in self.sections:
+            nav_rail_destinations.append(
+                ft.NavigationRailDestination(
+                    icon=section["icon"],
+                    label=section["name"],
+                )
+            )
+
+        nav_rail = ft.NavigationRail(
+            selected_index=self.current_index,
+            label_type=ft.NavigationRailLabelType.ALL,
+            min_width=100,
+            min_extended_width=200,
+            destinations=nav_rail_destinations,
+            on_change=self._on_nav_change,
+            bgcolor=ft.Colors.SURFACE_VARIANT,
+        )
+
+        # Main layout: Row with nav rail on left, content on right
+        main_content = ft.Row(
+            [
+                nav_rail,
+                ft.VerticalDivider(width=1),
+                self.content_container,
+            ],
+            spacing=0,
+            expand=True,
         )
 
         return ft.AlertDialog(
             modal=True,
             title=ft.Text("Configuration Editor", size=20, weight="bold"),
             content=ft.Container(
-                content=tabs,
-                width=700,
-                height=500,
+                content=main_content,
+                width=1100,  # Larger width
+                height=700,  # Larger height
             ),
             actions=[
                 ft.TextButton("Cancel", on_click=lambda _: self._close_dialog()),
@@ -85,8 +138,17 @@ class ConfigEditorDialog:
             actions_alignment=ft.MainAxisAlignment.END,
         )
 
-    def _create_global_tab(self) -> ft.Tab:
-        """Create global settings tab."""
+    def _on_nav_change(self, e: ft.ControlEvent) -> None:
+        """Handle navigation rail selection change."""
+        self.current_index = e.control.selected_index
+
+        # Update content container
+        if 0 <= self.current_index < len(self.sections):
+            self.content_container.content = self.sections[self.current_index]["content"]
+            self.page.update()
+
+    def _create_global_content(self) -> ft.Column:
+        """Create global settings content."""
         global_config = self.config_adapter.config_manager.global_config
 
         self.analyzer_fields["global"] = {}
@@ -109,34 +171,29 @@ class ConfigEditorDialog:
             value=global_config.parallel,
         )
 
-        return ft.Tab(
-            text="Global",
-            icon=ft.Icons.SETTINGS,
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Text("Global Settings", weight=ft.FontWeight.BOLD),
-                        self.analyzer_fields["global"]["verbosity"],
-                        self.analyzer_fields["global"]["color"],
-                        self.analyzer_fields["global"]["parallel"],
-                    ],
-                    spacing=10,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                padding=20,
-            ),
+        return ft.Column(
+            [
+                ft.Text("Global Settings", size=18, weight=ft.FontWeight.BOLD),
+                ft.Divider(),
+                self.analyzer_fields["global"]["verbosity"],
+                self.analyzer_fields["global"]["color"],
+                self.analyzer_fields["global"]["parallel"],
+            ],
+            spacing=10,
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
         )
 
-    def _create_analyzer_tab(self, analyzer_id: str, metadata: Any) -> ft.Tab | None:
+    def _create_analyzer_content(self, analyzer_id: str, metadata: Any) -> ft.Column | None:
         """
-        Create tab for analyzer configuration.
+        Create content for analyzer configuration.
 
         Args:
             analyzer_id: Analyzer ID
             metadata: Analyzer metadata
 
         Returns:
-            Tab for this analyzer
+            Column with analyzer config controls
         """
         try:
             config = self.config_adapter.get_analyzer_config(analyzer_id)
@@ -149,6 +206,14 @@ class ConfigEditorDialog:
             )
 
             controls = [
+                ft.Text(metadata.name, size=18, weight=ft.FontWeight.BOLD),
+                ft.Text(
+                    metadata.description,
+                    size=12,
+                    color=ft.Colors.SECONDARY,
+                    italic=True,
+                ),
+                ft.Divider(),
                 fields["enabled"],
                 ft.Divider(),
             ]
@@ -204,24 +269,15 @@ class ConfigEditorDialog:
 
             self.analyzer_fields[analyzer_id] = fields
 
-            # Get appropriate icon
-            icon_name = getattr(ft.Icons, metadata.icon.upper(), ft.Icons.SETTINGS)
-
-            return ft.Tab(
-                text=metadata.name,
-                icon=icon_name,
-                content=ft.Container(
-                    content=ft.Column(
-                        controls,
-                        spacing=10,
-                        scroll=ft.ScrollMode.AUTO,
-                    ),
-                    padding=20,
-                ),
+            return ft.Column(
+                controls,
+                spacing=10,
+                scroll=ft.ScrollMode.AUTO,
+                expand=True,
             )
 
         except Exception as e:
-            logger.error(f"Failed to create tab for {analyzer_id}: {e}")
+            logger.error(f"Failed to create content for {analyzer_id}: {e}")
             return None
 
     def _validate_and_save(self) -> bool:
