@@ -126,6 +126,10 @@ class DomainAnalyzerApp:
         self.page.theme_mode = ft.ThemeMode.LIGHT
         self.page.scroll = ft.ScrollMode.AUTO
 
+        # CRITICAL: Enable stretch alignment for proper expand behavior
+        self.page.horizontal_alignment = ft.CrossAxisAlignment.STRETCH
+        self.page.vertical_alignment = ft.MainAxisAlignment.START
+
         # Handle window close event to prevent Flutter embedder error
         self.page.on_window_event = self._on_window_event
 
