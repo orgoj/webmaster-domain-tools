@@ -28,7 +28,19 @@ rich.panel.Panel.__init__ = _no_border_panel_init
 
 # Import modular system components
 # Import all analyzers so they register themselves
-from .analyzers import dns_analyzer  # noqa: F401, E402
+from .analyzers import (  # noqa: F401, E402
+    cdn_detector,
+    dns_analyzer,
+    email_security,
+    favicon_analyzer,
+    http_analyzer,
+    rbl_checker,
+    security_headers,
+    seo_files_analyzer,
+    site_verification_analyzer,
+    ssl_analyzer,
+    whois_analyzer,
+)
 from .analyzers.protocol import VerbosityLevel  # noqa: E402
 from .core.config_manager import ConfigManager  # noqa: E402
 from .core.registry import registry  # noqa: E402
