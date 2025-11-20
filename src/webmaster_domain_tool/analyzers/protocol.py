@@ -21,7 +21,7 @@ class VerbosityLevel(Enum):
     VERBOSE = "verbose"
     DEBUG = "debug"
 
-    def __ge__(self, other):
+    def __ge__(self, other: object) -> bool:
         """Allow >= comparison for verbosity filtering."""
         if not isinstance(other, VerbosityLevel):
             return NotImplemented
@@ -33,7 +33,7 @@ class VerbosityLevel(Enum):
         ]
         return levels.index(self) >= levels.index(other)
 
-    def __gt__(self, other):
+    def __gt__(self, other: object) -> bool:
         """Allow > comparison for verbosity filtering."""
         if not isinstance(other, VerbosityLevel):
             return NotImplemented

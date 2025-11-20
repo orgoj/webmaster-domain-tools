@@ -20,7 +20,7 @@ class JSONRenderer(BaseRenderer):
     theme interpretation.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.results: dict[str, dict[str, Any]] = {}
 

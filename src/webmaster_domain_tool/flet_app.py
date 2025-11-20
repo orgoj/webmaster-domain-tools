@@ -11,20 +11,8 @@ from typing import Any
 
 import flet as ft
 
-# Import all analyzers so they register themselves
-from .analyzers import (  # noqa: F401
-    cdn_detector,
-    dns_analyzer,
-    email_security,
-    favicon_analyzer,
-    http_analyzer,
-    rbl_checker,
-    security_headers,
-    seo_files_analyzer,
-    site_verification_analyzer,
-    ssl_analyzer,
-    whois_analyzer,
-)
+# Import analyzers package which auto-imports all analyzer modules
+from . import analyzers  # noqa: F401  # Triggers analyzer registration
 from .config_editor_dialog import ConfigEditorDialog
 from .core.registry import registry
 from .flet_config_manager import FletConfigProfileManager

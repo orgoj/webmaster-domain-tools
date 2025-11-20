@@ -27,20 +27,8 @@ def _no_border_panel_init(self, *args, **kwargs) -> None:
 rich.panel.Panel.__init__ = _no_border_panel_init
 
 # Import modular system components
-# Import all analyzers so they register themselves
-from .analyzers import (  # noqa: F401, E402
-    cdn_detector,
-    dns_analyzer,
-    email_security,
-    favicon_analyzer,
-    http_analyzer,
-    rbl_checker,
-    security_headers,
-    seo_files_analyzer,
-    site_verification_analyzer,
-    ssl_analyzer,
-    whois_analyzer,
-)
+# Import analyzers package which auto-imports all analyzer modules
+from . import analyzers  # noqa: F401, E402  # Triggers analyzer registration
 from .analyzers.protocol import VerbosityLevel  # noqa: E402
 from .core.config_manager import ConfigManager  # noqa: E402
 from .core.registry import registry  # noqa: E402

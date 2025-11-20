@@ -2,21 +2,20 @@
 
 import logging
 import sys
-from typing import Literal
 
-VerbosityLevel = Literal["quiet", "normal", "verbose", "debug"]
+from ..analyzers.protocol import VerbosityLevel
 
 
 def setup_logger(
     name: str = "webmaster_domain_tool",
-    level: VerbosityLevel = "normal",
+    level: VerbosityLevel = VerbosityLevel.NORMAL,
 ) -> logging.Logger:
     """
     Set up and configure logger.
 
     Args:
         name: Logger name
-        level: Verbosity level (quiet, normal, verbose, debug)
+        level: Verbosity level enum
 
     Returns:
         Configured logger
@@ -28,10 +27,10 @@ def setup_logger(
 
     # Map verbosity levels to logging levels
     level_map = {
-        "quiet": logging.ERROR,
-        "normal": logging.WARNING,
-        "verbose": logging.INFO,
-        "debug": logging.DEBUG,
+        VerbosityLevel.QUIET: logging.ERROR,
+        VerbosityLevel.NORMAL: logging.WARNING,
+        VerbosityLevel.VERBOSE: logging.INFO,
+        VerbosityLevel.DEBUG: logging.DEBUG,
     }
 
     logger.setLevel(level_map[level])
@@ -41,7 +40,7 @@ def setup_logger(
     handler.setLevel(level_map[level])
 
     # Create formatter
-    if level == "debug":
+    if level == VerbosityLevel.DEBUG:
         formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",

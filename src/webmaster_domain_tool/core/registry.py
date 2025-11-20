@@ -47,7 +47,7 @@ class AnalyzerRegistry:
         instance = metadata.plugin_class()
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._plugins: dict[str, AnalyzerMetadata] = {}
 
     def register(self, plugin_class: type[AnalyzerPlugin]) -> type[AnalyzerPlugin]:
@@ -176,7 +176,7 @@ class AnalyzerRegistry:
         visited: set[str] = set()
         visiting: set[str] = set()  # For cycle detection
 
-        def visit(analyzer_id: str):
+        def visit(analyzer_id: str) -> None:
             """Visit node in dependency graph."""
             if analyzer_id in skip:
                 return

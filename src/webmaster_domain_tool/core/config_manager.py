@@ -72,7 +72,7 @@ class ConfigManager:
         self.global_config = GlobalConfig()
         self.analyzer_configs: dict[str, Any] = {}
 
-    def load_from_files(self, extra_paths: list[Path] | None = None):
+    def load_from_files(self, extra_paths: list[Path] | None = None) -> None:
         """
         Load configuration from TOML files.
 
@@ -149,7 +149,7 @@ class ConfigManager:
 
         return self.analyzer_configs.get(analyzer_id)
 
-    def merge_cli_overrides(self, analyzer_id: str, overrides: dict[str, Any]):
+    def merge_cli_overrides(self, analyzer_id: str, overrides: dict[str, Any]) -> None:
         """
         Merge CLI overrides into analyzer config.
 
@@ -173,7 +173,7 @@ class ConfigManager:
             except ValidationError as e:
                 logger.error(f"Invalid CLI overrides for {analyzer_id}: {e}")
 
-    def export_to_toml(self, path: Path):
+    def export_to_toml(self, path: Path) -> None:
         """
         Export current config to TOML file.
 
@@ -250,7 +250,7 @@ class ConfigManager:
                 result[key] = value
         return result
 
-    def create_default_config_file(self, path: Path):
+    def create_default_config_file(self, path: Path) -> None:
         """
         Create a default config file with all analyzers.
 

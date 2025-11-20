@@ -46,7 +46,7 @@ class BaseRenderer(ABC):
         """Render summary of all analyses (errors, warnings, totals)."""
         ...
 
-    def collect_errors_warnings(self, descriptor: OutputDescriptor, category: str):
+    def collect_errors_warnings(self, descriptor: OutputDescriptor, category: str) -> None:
         """
         Collect errors and warnings from descriptor for summary.
 
@@ -55,10 +55,10 @@ class BaseRenderer(ABC):
             category: Category name for grouping
         """
         for row in descriptor.rows:
-            if row.section_type == "text":
-                if row.severity == "error" or row.style_class == "error":
-                    msg = str(row.value) if row.value else str(row.label)
-                    self.all_errors.append((category, msg))
-                elif row.severity == "warning" or row.style_class == "warning":
-                    msg = str(row.value) if row.value else str(row.label)
-                    self.all_warnings.append((category, msg))
+            # Primary check: severity (canonical source of truth)
+            if row.severity == "error":
+                msg = str(row.value) if row.value else str(row.label)
+                self.all_errors.append((category, msg))
+            elif row.severity == "warning":
+                msg = str(row.value) if row.value else str(row.label)
+                self.all_warnings.append((category, msg))

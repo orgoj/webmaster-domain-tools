@@ -223,7 +223,7 @@ class CLIRenderer(BaseRenderer):
             else:
                 self.console.print(f"{indent}{icon_str}{formatted_value}")
 
-    def _format_value(self, row) -> str:
+    def _format_value(self, row: OutputRow) -> str:
         """
         Format row value for display.
 
