@@ -105,7 +105,7 @@ class ConfigEditorView:
                 )
             )
 
-        # NavigationRail - directly in row (from Flet docs example)
+        # NavigationRail - expand to fill Row height (Row gets height from parent Column)
         nav_rail = ft.NavigationRail(
             selected_index=self.current_index,
             label_type=ft.NavigationRailLabelType.ALL,
@@ -113,6 +113,7 @@ class ConfigEditorView:
             destinations=nav_rail_destinations,
             on_change=self._on_nav_change,
             bgcolor=ft.Colors.GREY_300,
+            expand=True,  # Fill Row height (Row is bounded by parent Column)
         )
 
         # Content area - full height
