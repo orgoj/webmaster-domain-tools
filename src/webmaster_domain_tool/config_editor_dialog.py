@@ -102,40 +102,66 @@ class ConfigEditorDialog:
                 )
             )
 
-        nav_rail = ft.NavigationRail(
-            selected_index=self.current_index,
-            label_type=ft.NavigationRailLabelType.ALL,
-            min_width=100,
-            min_extended_width=200,
-            destinations=nav_rail_destinations,
-            on_change=self._on_nav_change,
-            bgcolor=ft.Colors.GREY_300,
+        # Wrap NavigationRail in scrollable column for long lists
+        nav_rail = ft.Column(
+            [
+                ft.NavigationRail(
+                    selected_index=self.current_index,
+                    label_type=ft.NavigationRailLabelType.ALL,
+                    min_width=180,
+                    destinations=nav_rail_destinations,
+                    on_change=self._on_nav_change,
+                    bgcolor=ft.Colors.GREY_300,
+                ),
+            ],
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
         )
 
         # Main layout: Row with nav rail on left, content on right
         main_content = ft.Row(
             [
-                nav_rail,
+                ft.Container(
+                    content=nav_rail,
+                    width=200,
+                    bgcolor=ft.Colors.GREY_300,
+                ),
                 ft.VerticalDivider(width=1),
-                self.content_container,
+                ft.Column(
+                    [
+                        self.content_container,
+                    ],
+                    expand=True,
+                ),
             ],
             spacing=0,
             expand=True,
+        )
+
+        # Action buttons at bottom
+        action_buttons = ft.Row(
+            [
+                ft.TextButton("Cancel", on_click=lambda _: self._close_dialog()),
+                ft.ElevatedButton("Save", on_click=lambda _: self._save_and_close()),
+            ],
+            alignment=ft.MainAxisAlignment.END,
         )
 
         return ft.AlertDialog(
             modal=True,
             title=ft.Text("Configuration Editor", size=20, weight="bold"),
             content=ft.Container(
-                content=main_content,
-                width=1100,  # Larger width
-                height=700,  # Larger height
+                content=ft.Column(
+                    [
+                        main_content,
+                        ft.Divider(),
+                        action_buttons,
+                    ],
+                    spacing=10,
+                ),
+                width=1100,
+                height=700,
             ),
-            actions=[
-                ft.TextButton("Cancel", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton("Save", on_click=lambda _: self._save_and_close()),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
         )
 
     def _on_nav_change(self, e: ft.ControlEvent) -> None:

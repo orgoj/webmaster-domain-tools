@@ -159,7 +159,7 @@ class AnalyzerConfig(BaseModel):
             check_dnssec: bool = Field(default=True)
     """
 
-    model_config = ConfigDict(extra="allow")  # Allow analyzer-specific fields
+    model_config = ConfigDict(extra="ignore")  # Ignore unknown fields (prevents legacy field leaks)
 
     enabled: bool = True
     timeout: float = 10.0

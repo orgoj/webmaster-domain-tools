@@ -46,13 +46,20 @@ class GUIConfigAdapter:
         """
         Export all configs to a single dict for GUI editing/storage.
 
+        Only exports fields defined in config schemas (prevents legacy field leaks).
+
         Returns:
             Dictionary with global config and all analyzer configs
         """
         result = {"global": self.config_manager.global_config.model_dump()}
 
         for analyzer_id, config in self.config_manager.analyzer_configs.items():
-            result[analyzer_id] = config.model_dump()
+            # Get only fields defined in the config class (filter out legacy/extra fields)
+            config_dict = {}
+            for field_name in config.model_fields.keys():
+                if hasattr(config, field_name):
+                    config_dict[field_name] = getattr(config, field_name)
+            result[analyzer_id] = config_dict
 
         return result
 
