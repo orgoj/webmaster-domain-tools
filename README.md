@@ -535,35 +535,37 @@ wdt analyze --skip whois --skip ssl --skip email \
 #### DKIM Selectors
 
 By default, common selectors are checked (default, google, k1, k2, selector1, selector2, dkim, mail, s1, s2).
-You can specify custom selectors:
+You can specify custom selectors in your config file:
 
-```bash
-# Custom DKIM selectors
-wdt analyze --dkim-selectors "selector1,selector2,custom" example.com
+```toml
+[email]
+dkim_selectors = ["selector1", "selector2", "custom", "mailgun"]
 ```
 
 #### HTTP Settings
 
-```bash
-# Custom timeout (default: 10s)
-wdt analyze --timeout 5 example.com
-wdt analyze -t 5 example.com
+HTTP analyzer settings are configured via the config file:
 
-# Maximum number of redirects (default: 10)
-wdt analyze --max-redirects 5 example.com
+```toml
+[http]
+enabled = true
+timeout = 5.0           # Connection timeout in seconds (default: 10.0)
+max_redirects = 5       # Maximum redirects to follow (default: 10)
+user_agent = "webmaster-domain-tool/1.0"
 ```
 
 #### DNS Settings
 
-```bash
-# Custom DNS servers
-wdt analyze --nameservers "8.8.8.8,1.1.1.1" example.com
+DNS analyzer settings are configured via the config file:
 
+```toml
+[dns]
+enabled = true
+nameservers = ["8.8.8.8", "1.1.1.1"]  # Custom DNS servers
+timeout = 5.0
+check_dnssec = true
 # Warn when www subdomain is not a CNAME (best practice)
-wdt analyze --warn-www-not-cname example.com
-
-# Disable warning (if enabled in config)
-wdt analyze --no-warn-www-not-cname example.com
+warn_www_not_cname = true
 ```
 
 **Why is CNAME for www better?**
@@ -578,20 +580,9 @@ With CNAME:
 - ✅ Automatic IP address updates
 - ✅ Easier migration between providers
 
-#### Google Services
+#### Site Verification & Tracking Codes
 
-**Site Verification** - Verify your domain for multiple services (Google, Facebook, Pinterest, Bing, Yandex):
-
-```bash
-# Check single verification ID
-wdt analyze --verify Google:abc123def456 example.com
-
-# Check multiple services (comma-separated)
-wdt analyze --verify "Google:abc123,Facebook:fb-code" example.com
-
-# Or use --verify multiple times
-wdt analyze --verify Google:abc123 --verify Facebook:fb-code example.com
-```
+**Auto-Detection** - The tool automatically detects verification codes for multiple services:
 
 **Supported services (built-in):**
 - **Google**: DNS TXT, HTML file (`google{id}.html`), Meta tag
@@ -600,7 +591,7 @@ wdt analyze --verify Google:abc123 --verify Facebook:fb-code example.com
 - **Bing**: HTML file (`BingSiteAuth.xml`), Meta tag
 - **Yandex**: HTML file (`yandex_{id}.html`), Meta tag
 
-All services have **auto-detection enabled** by default - the tool will find verification IDs even if you don't specify them!
+All services have **auto-detection enabled** by default - the tool will find verification IDs automatically!
 
 **Tracking Codes Detection** - Automatically detects Google tracking codes (GTM, GA4, GAds, UA, etc.):
 - Runs automatically when site verification analysis is enabled
@@ -612,17 +603,26 @@ All services have **auto-detection enabled** by default - the tool will find ver
 wdt analyze example.com
 
 # Skip site verification entirely
-wdt analyze --skip-site-verification example.com
+wdt analyze --skip site-verification example.com
 ```
 
-You can also configure verification IDs in the config file:
+You can configure specific verification IDs to check in the config file:
 
 ```toml
-[[site_verification.services]]
+[site-verification]
+enabled = true
+check_google = true
+check_facebook = true
+check_pinterest = true
+check_bing = true
+check_yandex = true
+
+# Optional: specify verification IDs to verify (auto-detection still works)
+[[site-verification.services]]
 name = "Google"
 ids = ["abc123def456", "ghi789jkl012"]
 
-[[site_verification.services]]
+[[site-verification.services]]
 name = "Facebook"
 ids = ["your-facebook-id"]
 ```
@@ -631,21 +631,28 @@ ids = ["your-facebook-id"]
 
 **Disabled by default** - RBL checking is disabled by default as it may slow down analysis.
 
-```bash
-# Enable RBL check
-wdt analyze --check-rbl example.com
+Enable RBL checking in your config file:
 
-# Disable RBL check (if enabled in config)
-wdt analyze --no-check-rbl example.com
+```toml
+[rbl]
+enabled = true          # Enable RBL checking (default: false)
+timeout = 5.0
+check_a_records = true  # Check A record IPs
+check_mx_records = true # Check MX server IPs
+# Customize RBL servers to check
+rbl_servers = [
+    "zen.spamhaus.org",
+    "bl.spamcop.net",
+    "b.barracudacentral.org",
+    "dnsbl.sorbs.net"
+]
 ```
 
-When enabled, these RBL servers are checked:
+When enabled, these RBL servers are checked by default:
 - Spamhaus ZEN (`zen.spamhaus.org`)
 - SpamCop (`bl.spamcop.net`)
 - Barracuda Central (`b.barracudacentral.org`)
 - SORBS (`dnsbl.sorbs.net`)
-
-Custom RBL servers can be configured in the config file.
 
 #### Output Settings
 

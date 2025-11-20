@@ -95,14 +95,26 @@ class TestAnalyzerInstantiation:
 
     def test_security_headers_analyzer(self):
         """Test SecurityHeadersAnalyzer instantiation and interface."""
-        from webmaster_domain_tool.analyzers.security_headers import SecurityHeadersAnalyzer
+        from webmaster_domain_tool.analyzers.security_headers import (
+            SecurityHeadersAnalyzer,
+            SecurityHeadersConfig,
+        )
 
         analyzer = SecurityHeadersAnalyzer()
         assert hasattr(analyzer, "analyze"), "SecurityHeadersAnalyzer must have analyze() method"
         assert callable(analyzer.analyze), "analyze() must be callable"
 
-        # Test that analyze() works with URL parameter
-        result = analyzer.analyze("https://example.com", {"Server": "nginx"})
+        # Test protocol method analyze(domain, config) - returns placeholder
+        config = SecurityHeadersConfig()
+        result = analyzer.analyze("example.com", config)
+        assert result.domain == "example.com", "domain should be set"
+        assert len(result.warnings) > 0, "should have warning about requiring HTTP analysis"
+
+        # Test actual implementation method analyze_headers(url, headers, config)
+        assert hasattr(
+            analyzer, "analyze_headers"
+        ), "SecurityHeadersAnalyzer must have analyze_headers() method"
+        result = analyzer.analyze_headers("https://example.com", {"Server": "nginx"}, config)
         assert result.domain == "example.com", "domain should be extracted from URL"
         assert result.url == "https://example.com", "url should be preserved"
 

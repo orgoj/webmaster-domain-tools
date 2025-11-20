@@ -1,41 +1,92 @@
-# Webmaster Domain Tool - Default Configuration
+# Webmaster Domain Tool - Default Configuration (v1.0.0+)
+#
+# This configuration file uses per-analyzer sections for clean isolation.
+# Each analyzer has its own [analyzer-id] section with all settings.
 
+# =============================================================================
+# Global Settings
+# =============================================================================
+
+[global]
+# Enable colored output in CLI
+color = true
+# Verbosity level: quiet, normal, verbose, debug
+verbosity = "normal"
+
+# =============================================================================
+# Analyzer Configuration
+# Each analyzer can be enabled/disabled and configured independently
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# DNS Analysis
+# -----------------------------------------------------------------------------
 [dns]
-# DNS nameservers to use (default: Google DNS, Cloudflare DNS)
-nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1"]
+enabled = true
 # DNS query timeout in seconds
 timeout = 5.0
+# DNS nameservers to use (default: Google DNS, Cloudflare DNS)
+nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1"]
 # Check DNSSEC validation
 check_dnssec = true
+# Warn when www subdomain uses A/AAAA records instead of CNAME (best practice)
+warn_www_not_cname = false
 
+# -----------------------------------------------------------------------------
+# WHOIS Information
+# -----------------------------------------------------------------------------
+[whois]
+enabled = true
+# WHOIS query timeout in seconds
+timeout = 10.0
+# Days before expiration to show warning
+expiry_warning_days = 30
+
+# -----------------------------------------------------------------------------
+# HTTP/HTTPS Analysis
+# -----------------------------------------------------------------------------
 [http]
+enabled = true
 # HTTP request timeout in seconds
 timeout = 10.0
 # Maximum number of redirects to follow
 max_redirects = 10
-# Custom user agent (optional)
-# user_agent = "Mozilla/5.0 (compatible; WebmasterDomainTool/0.1)"
+# Custom user agent string (optional)
+user_agent = "webmaster-domain-tool/1.0.0"
 
+# -----------------------------------------------------------------------------
+# SSL/TLS Certificate Analysis
+# -----------------------------------------------------------------------------
 [ssl]
-# Number of days before certificate expiry to show warning
-# Default: 14 days (suitable for Let's Encrypt auto-renewal)
-cert_expiry_warning_days = 14
-# Number of days before certificate expiry to show critical error
-cert_expiry_critical_days = 7
+enabled = true
+# SSL connection timeout in seconds
+timeout = 10.0
+# Port to connect to (default: 443)
+port = 443
+# Check which TLS versions are supported
+check_tls_versions = true
+# Check www subdomain as well
+check_www = true
+# Days before certificate expiry to show warning (default: 30)
+expiry_warning_days = 30
+# Days before certificate expiry to show critical error (default: 7)
+expiry_critical_days = 7
 
-[security_headers]
-# Enable or disable individual security header checks
-check_strict_transport_security = true
-check_content_security_policy = true
-check_x_frame_options = true
-check_x_content_type_options = true
-check_referrer_policy = true
-check_permissions_policy = true
-check_x_xss_protection = true
-check_content_type = true
-
+# -----------------------------------------------------------------------------
+# Email Security (SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT)
+# -----------------------------------------------------------------------------
 [email]
-# DKIM selectors to check
+enabled = true
+# Email check timeout in seconds
+timeout = 10.0
+# Enable individual email security checks
+check_spf = true
+check_dkim = true
+check_dmarc = true
+check_bimi = true
+check_mta_sts = true
+check_tls_rpt = true
+# DKIM selectors to check (common selectors)
 dkim_selectors = [
     "default",
     "google",
@@ -48,26 +99,109 @@ dkim_selectors = [
     "s1",
     "s2",
 ]
-# Check realtime blacklists (RBL) for mail servers (default: false, enable with --check-rbl)
-check_rbl = false
+
+# -----------------------------------------------------------------------------
+# Security Headers Analysis
+# -----------------------------------------------------------------------------
+[headers]
+enabled = true
+# HTTP request timeout in seconds
+timeout = 10.0
+# Enable or disable individual security header checks
+check_hsts = true
+check_csp = true
+check_x_frame_options = true
+check_x_content_type_options = true
+check_referrer_policy = true
+check_permissions_policy = true
+check_x_xss_protection = true
+check_content_type = true
+
+# -----------------------------------------------------------------------------
+# Site Verification (Google, Facebook, Pinterest, Bing, Yandex)
+# -----------------------------------------------------------------------------
+[verification]
+enabled = true
+# HTTP/DNS check timeout in seconds
+timeout = 10.0
+# Enable individual platform checks
+check_google = true
+check_facebook = true
+check_pinterest = true
+check_bing = true
+check_yandex = true
+
+# -----------------------------------------------------------------------------
+# RBL (Realtime Blacklist) Check
+# -----------------------------------------------------------------------------
+[rbl]
+# Disabled by default (can be slow and may have rate limits)
+enabled = false
+# DNS query timeout in seconds
+timeout = 5.0
+# Check A records (direct IP)
+check_a_records = true
+# Check MX records (mail server IPs)
+check_mx_records = true
 # RBL servers to query
 rbl_servers = [
     "zen.spamhaus.org",        # Spamhaus ZEN (combined list)
     "bl.spamcop.net",          # SpamCop
-    "b.barracudacentral.org",  # Barracuda
+    "b.barracudacentral.org",  # Barracuda Central
     "dnsbl.sorbs.net",         # SORBS
 ]
 
-[output]
-# Enable colored output
-color = true
-# Verbosity level: quiet, normal, verbose, debug
-verbosity = "normal"
+# -----------------------------------------------------------------------------
+# CDN Detection
+# -----------------------------------------------------------------------------
+[cdn]
+enabled = true
+# Check HTTP headers for CDN indicators
+check_headers = true
+# Check CNAME records for CDN patterns
+check_cname = true
 
-[analysis]
-# Skip individual analysis modules
-skip_dns = false
-skip_http = false
-skip_ssl = false
-skip_email = false
-skip_headers = false
+# -----------------------------------------------------------------------------
+# SEO Files (robots.txt, sitemap.xml, llms.txt)
+# -----------------------------------------------------------------------------
+[seo]
+enabled = true
+# HTTP request timeout in seconds
+timeout = 10.0
+# Enable individual SEO file checks
+check_robots = true
+check_sitemap = true
+check_llms_txt = true
+
+# -----------------------------------------------------------------------------
+# Favicon Analysis
+# -----------------------------------------------------------------------------
+[favicon]
+enabled = true
+# HTTP request timeout in seconds
+timeout = 10.0
+# Check HTML for favicon link tags
+check_html = true
+# Check default paths (/favicon.ico, /favicon.svg, etc.)
+check_default_paths = true
+# Check manifest.json for PWA icons
+check_manifest = true
+
+# =============================================================================
+# Usage Notes
+# =============================================================================
+#
+# 1. To disable an analyzer, set "enabled = false" in its section
+# 2. CLI --skip parameter overrides config: wdt analyze --skip dns example.com
+# 3. Config file precedence (higher overrides lower):
+#    - Package default (this file)
+#    - System: /etc/webmaster-domain-tool/config.toml
+#    - User: ~/.config/webmaster-domain-tool/config.toml
+#    - Home: ~/.webmaster-domain-tool.toml
+#    - Local: ./.webmaster-domain-tool.toml
+#    - CLI parameters (always highest priority)
+#
+# 4. To create a user config file: wdt create-config
+# 5. To see all available analyzers: wdt list-analyzers
+#
+# =============================================================================
