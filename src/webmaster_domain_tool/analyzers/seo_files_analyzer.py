@@ -133,20 +133,25 @@ class SEOFilesAnalyzer:
     # Required Protocol Methods
     # ========================================================================
 
-    def analyze(self, domain: str, config: SEOConfig) -> SEOFilesAnalysisResult:
+    def analyze(
+        self,
+        domain: str,
+        config: SEOConfig,
+        context: dict[str, object] | None = None,
+    ) -> SEOFilesAnalysisResult:
         """
         Analyze SEO files for a given domain.
 
         Args:
             domain: Domain to analyze (e.g., "example.com")
             config: SEO analyzer configuration
+            context: Optional context from previous analyzers (e.g., HTTP result)
 
         Returns:
             SEOFilesAnalysisResult with all findings
         """
-        # Construct base URL from domain
-        # Assume HTTPS, fall back to HTTP if needed
-        base_url = f"https://{domain}" if not domain.startswith(("http://", "https://")) else domain
+        # Get base URL from HTTP analyzer if available (same domain as HTML validator uses)
+        base_url = self._get_url_to_analyze(domain, context)
 
         result = SEOFilesAnalysisResult(domain=domain)
 
@@ -197,6 +202,33 @@ class SEOFilesAnalyzer:
     # ========================================================================
     # Helper Methods
     # ========================================================================
+
+    def _get_url_to_analyze(self, domain: str, context: dict[str, object] | None) -> str:
+        """
+        Get the base URL to analyze SEO files from.
+
+        Tries to use preferred_final_url from HTTP analyzer if available.
+        This ensures we test the same URL as HTML validator (same protocol and www/non-www).
+
+        Args:
+            domain: Domain to analyze
+            context: Context dict with results from other analyzers
+
+        Returns:
+            Base URL to fetch SEO files from
+        """
+        if context and "http" in context:
+            http_result = context["http"]
+            if hasattr(http_result, "preferred_final_url") and http_result.preferred_final_url:
+                logger.info(
+                    f"Using preferred URL from HTTP analyzer: {http_result.preferred_final_url}"
+                )
+                return http_result.preferred_final_url
+
+        # Fall back to HTTPS
+        fallback_url = f"https://{domain}"
+        logger.info(f"No HTTP result available, using fallback URL: {fallback_url}")
+        return fallback_url
 
     def _check_robots_txt(self, base_url: str, config: SEOConfig) -> RobotsResult:
         """Check robots.txt file."""

@@ -26,6 +26,8 @@ MODULES_TO_TEST = [
     "webmaster_domain_tool.analyzers.http_analyzer",
     "webmaster_domain_tool.analyzers.ssl_analyzer",
     "webmaster_domain_tool.analyzers.email_security",
+    "webmaster_domain_tool.analyzers.seo_files_analyzer",
+    "webmaster_domain_tool.analyzers.html_validator_analyzer",
 ]
 
 
