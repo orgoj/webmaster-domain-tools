@@ -533,7 +533,7 @@ class DomainAnalyzerApp:
             sys.exit(0)
 
     def display_results(self, domain: str, results: dict[str, Any]) -> None:
-        """Display analysis results."""
+        """Display analysis results. Always displays results - errors don't prevent display."""
         self.results_column.controls.clear()
 
         # Summary
@@ -578,12 +578,14 @@ class DomainAnalyzerApp:
                                 size=self.theme.text_subheading,
                                 weight="bold",
                                 text_align=ft.TextAlign.LEFT,
+                                selectable=True,  # Enable text selection
                             ),
                             ft.Text(
                                 f"Errors: {total_errors} | Warnings: {total_warnings}",
                                 size=self.theme.text_body,
                                 color=self.theme.text_secondary,
                                 text_align=ft.TextAlign.LEFT,
+                                selectable=True,  # Enable text selection
                             ),
                         ],
                         spacing=self.theme.spacing_tiny,
@@ -615,24 +617,61 @@ class DomainAnalyzerApp:
         }
 
         for analyzer_id in results.keys():
-            metadata = registry.get(analyzer_id)
-            if not metadata:
-                continue
+            try:
+                metadata = registry.get(analyzer_id)
+                if not metadata:
+                    logger.warning(f"No metadata found for analyzer: {analyzer_id}")
+                    continue
 
-            # Skip if result is None (disabled)
-            result = results.get(analyzer_id)
-            if result is None:
-                continue
+                # Skip if result is None (disabled)
+                result = results.get(analyzer_id)
+                if result is None:
+                    continue
 
-            # Route to appropriate renderer
-            if analyzer_id in custom_renderers:
-                # Use custom GUI renderer
-                panel = custom_renderers[analyzer_id](result)
-                self.results_column.controls.append(panel)
-            else:
-                # Use default auto-display renderer
-                panel = self._create_default_auto_display_panel(metadata, result)
-                self.results_column.controls.append(panel)
+                # Route to appropriate renderer
+                if analyzer_id in custom_renderers:
+                    # Use custom GUI renderer
+                    panel = custom_renderers[analyzer_id](result)
+                    self.results_column.controls.append(panel)
+                else:
+                    # Use default auto-display renderer
+                    panel = self._create_default_auto_display_panel(metadata, result)
+                    self.results_column.controls.append(panel)
+
+            except Exception as e:
+                # CRITICAL: Never let an error prevent display of results
+                # Show error on stderr but continue displaying
+                logger.error(f"Error displaying results for {analyzer_id}: {e}", exc_info=True)
+                sys.stderr.write(f"ERROR: Failed to display {analyzer_id} results: {e}\n")
+
+                # Add error panel to show user something went wrong
+                try:
+                    error_panel = ft.ExpansionTile(
+                        title=ft.Text(
+                            f"❌ {analyzer_id} (Display Error)",
+                            weight="bold",
+                            selectable=True,
+                        ),
+                        subtitle=ft.Text(
+                            f"Error rendering results: {str(e)}",
+                            color=self.theme.error_color,
+                            selectable=True,
+                        ),
+                        collapsed_text_color=self.theme.error_color,
+                        text_color=self.theme.error_color,
+                        controls=[
+                            ft.Text(
+                                f"Full error: {repr(e)}",
+                                color=self.theme.text_secondary,
+                                size=self.theme.text_small,
+                                selectable=True,
+                            )
+                        ],
+                    )
+                    self.results_column.controls.append(error_panel)
+                except Exception as nested_e:
+                    # Even error panel failed - just log it
+                    logger.error(f"Failed to create error panel for {analyzer_id}: {nested_e}")
 
         self.results_card.visible = True
         self.page.update()
@@ -1618,12 +1657,12 @@ class DomainAnalyzerApp:
         if result is None:
             content.append(
                 self._text(
-                    f"{metadata.title} disabled",
+                    f"{metadata.name} disabled",
                     size=self.theme.text_body,
                     color=self.theme.text_secondary,
                 )
             )
-            return self._create_expandable_panel(metadata.title, metadata.icon, content, 0, 0)
+            return self._create_expandable_panel(metadata.name, metadata.icon, content, 0, 0)
 
         # Add errors and warnings
         self._add_errors_and_warnings(content, result)
@@ -1724,7 +1763,7 @@ class DomainAnalyzerApp:
         warning_count = len(result.warnings) if hasattr(result, "warnings") else 0
 
         return self._create_expandable_panel(
-            metadata.title, icon, content, error_count, warning_count
+            metadata.name, icon, content, error_count, warning_count
         )
 
     # ========== PROFILE MANAGEMENT METHODS ==========
