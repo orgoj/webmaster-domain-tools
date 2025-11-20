@@ -196,6 +196,7 @@ class DomainAnalyzerApp:
             icon=ft.Icons.SETTINGS,
             tooltip="Edit configuration",
             on_click=self._show_config_editor,
+            disabled=False,  # Updated by _update_profile_buttons()
         )
 
         self.export_config_button = ft.IconButton(
@@ -206,7 +207,7 @@ class DomainAnalyzerApp:
 
         self.save_profile_button = ft.IconButton(
             icon=ft.Icons.SAVE,
-            tooltip="Save current config as new profile",
+            tooltip="Save current config as new profile (Save As)",
             on_click=self._show_save_profile_dialog,
         )
 
@@ -214,6 +215,7 @@ class DomainAnalyzerApp:
             icon=ft.Icons.DELETE,
             tooltip="Delete selected profile",
             on_click=self._delete_current_profile,
+            disabled=False,  # Updated by _update_profile_buttons()
         )
 
         # Analysis options checkboxes - generated dynamically from registry (DRY!)
@@ -1772,14 +1774,37 @@ class DomainAnalyzerApp:
         """Load and populate profile dropdown."""
         profiles = self.profile_manager.list_profiles()
 
-        # Ensure default profile exists
+        # Always include "default" in dropdown (it's always available, never saved)
         if "default" not in profiles:
-            self.profile_manager.save_profile("default", self.config_adapter)
-            profiles = self.profile_manager.list_profiles()
+            profiles.insert(0, "default")
 
         # Populate dropdown
         self.profile_dropdown.options = [ft.dropdown.Option(p) for p in profiles]
         self.profile_dropdown.value = self.current_profile_name
+
+        # Update button states based on current profile
+        self._update_profile_buttons()
+
+        self.page.update()
+
+    def _update_profile_buttons(self) -> None:
+        """Update profile button states based on current profile."""
+        is_default = self.current_profile_name == "default"
+
+        # Default profile is READ-ONLY: can't edit or delete
+        self.config_editor_button.disabled = is_default
+        self.delete_profile_button.disabled = is_default
+
+        # Update tooltips
+        if is_default:
+            self.config_editor_button.tooltip = (
+                "Default profile is read-only (use Save As to create editable copy)"
+            )
+            self.delete_profile_button.tooltip = "Cannot delete default profile"
+        else:
+            self.config_editor_button.tooltip = "Edit configuration"
+            self.delete_profile_button.tooltip = "Delete selected profile"
+
         self.page.update()
 
     def _on_profile_changed(self, e: ft.ControlEvent) -> None:
@@ -1795,6 +1820,9 @@ class DomainAnalyzerApp:
 
             # Save as last selected profile for next session
             self.profile_manager.set_last_selected_profile(new_profile_name)
+
+            # Update button states for new profile
+            self._update_profile_buttons()
 
             # Update analyzer checkboxes from new config
             # (Currently checkboxes don't reflect config, they're independent)
@@ -1817,6 +1845,14 @@ class DomainAnalyzerApp:
 
     def _show_config_editor(self, e: ft.ControlEvent) -> None:
         """Show configuration editor dialog."""
+        # Block editing of default profile
+        if self.current_profile_name == "default":
+            self.show_error(
+                "Default profile is read-only.\n\n"
+                "Use 'Save As' button to create an editable copy,\n"
+                "or switch to a custom profile to edit."
+            )
+            return
 
         def on_save(new_config_adapter: GUIConfigAdapter) -> None:
             """Callback when config is saved in editor."""
@@ -2068,7 +2104,7 @@ class DomainAnalyzerApp:
 
                 # Switch to default profile
                 self.current_profile_name = "default"
-                self.config_adapter = self.profile_manager.load_profile("default")
+                self.config_adapter = self.profile_manager.get_or_create_default()
 
                 # Save default as last selected profile for next session
                 self.profile_manager.set_last_selected_profile("default")
