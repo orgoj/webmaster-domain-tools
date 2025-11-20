@@ -33,5 +33,14 @@ repos:
       - id: isort
         args: [--profile=black, --line-length=100]
 
+  - repo: local
+    hooks:
+      - id: import-check
+        name: Import smoke test
+        entry: uv run python scripts/check_imports.py
+        language: system
+        pass_filenames: false
+        files: \.py$
+
 # Note: mypy removed from pre-commit (too slow)
 # Run manually: uv run mypy src/
