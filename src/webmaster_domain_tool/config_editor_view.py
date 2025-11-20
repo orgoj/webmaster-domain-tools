@@ -105,15 +105,20 @@ class ConfigEditorView:
                 )
             )
 
-        # NavigationRail - expand to fill Row height (Row gets height from parent Column)
-        nav_rail = ft.NavigationRail(
-            selected_index=self.current_index,
-            label_type=ft.NavigationRailLabelType.ALL,
-            min_width=180,
-            destinations=nav_rail_destinations,
-            on_change=self._on_nav_change,
+        # Sidebar Container with NavigationRail (full height)
+        sidebar = ft.Container(
+            width=200,  # Fixed width
+            expand=True,  # Full height
             bgcolor=ft.Colors.GREY_300,
-            expand=True,  # Fill Row height (Row is bounded by parent Column)
+            content=ft.NavigationRail(
+                selected_index=self.current_index,
+                label_type=ft.NavigationRailLabelType.ALL,
+                min_width=180,
+                destinations=nav_rail_destinations,
+                on_change=self._on_nav_change,
+                bgcolor=ft.Colors.GREY_300,
+                expand=True,  # Fill sidebar height
+            ),
         )
 
         # Content area - full height
@@ -122,16 +127,15 @@ class ConfigEditorView:
             expand=True,
         )
 
-        # Main content row - NavigationRail + content (from official docs)
-        # Row with expand=True provides bounded dimensions for NavigationRail
+        # Main content row - sidebar + content (full height)
         content_row = ft.Row(
             [
-                nav_rail,
+                sidebar,
                 ft.VerticalDivider(width=1),
                 content_area,
             ],
             spacing=0,
-            expand=True,  # THIS provides bounded height for NavigationRail
+            expand=True,  # Full height available
         )
 
         # Header with Back and Save buttons
