@@ -510,12 +510,23 @@ class HTTPAnalyzer:
 
                 chain_display = " ".join(chain_parts)
 
+                # Display chain (without error in message)
                 if last_response.error:
+                    # Show chain as info (not error)
                     descriptor.add_row(
-                        value=f"{chain_display} - {last_response.error}",
+                        value=chain_display,
                         section_type="text",
                         style_class="error",
-                        severity="error",
+                        severity="info",  # Don't add to error summary
+                        icon="cross",
+                        verbosity=VerbosityLevel.NORMAL,
+                    )
+                    # Add separate error row for summary with URL
+                    descriptor.add_row(
+                        value=f"{chain.start_url}: {last_response.error}",
+                        section_type="text",
+                        style_class="error",
+                        severity="error",  # This goes to summary
                         icon="cross",
                         verbosity=VerbosityLevel.NORMAL,
                     )

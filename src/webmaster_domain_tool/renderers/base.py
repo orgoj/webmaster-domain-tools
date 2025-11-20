@@ -57,8 +57,20 @@ class BaseRenderer(ABC):
         for row in descriptor.rows:
             # Primary check: severity (canonical source of truth)
             if row.severity == "error":
-                msg = str(row.value) if row.value else str(row.label)
+                # Combine label and value for context (e.g., "URL: error message")
+                if row.label and row.value:
+                    msg = f"{row.label}: {row.value}"
+                elif row.value:
+                    msg = str(row.value)
+                else:
+                    msg = str(row.label)
                 self.all_errors.append((category, msg))
             elif row.severity == "warning":
-                msg = str(row.value) if row.value else str(row.label)
+                # Combine label and value for context
+                if row.label and row.value:
+                    msg = f"{row.label}: {row.value}"
+                elif row.value:
+                    msg = str(row.value)
+                else:
+                    msg = str(row.label)
                 self.all_warnings.append((category, msg))
