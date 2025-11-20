@@ -843,7 +843,231 @@ webmaster-domain-tool/
 - [ ] Web UI / REST API
 - [ ] Custom analyzer plugins from external packages
 
+## FAQ / Troubleshooting
+
+### Installation Issues
+
+**Q: I get "command not found: wdt" after installation**
+
+A: Make sure `uv` installed the package correctly and the binary is in your PATH:
+```bash
+# Verify installation
+uv pip list | grep webmaster-domain-tool
+
+# Try running with full path
+uv run wdt --help
+
+# Or reinstall
+uv pip install --force-reinstall webmaster-domain-tool
+```
+
+**Q: GUI won't start on Ubuntu 24.04**
+
+A: The GUI requires libmpv. Install it:
+```bash
+sudo apt-get update
+sudo apt-get install libmpv-dev libmpv2
+```
+
+### Analysis Issues
+
+**Q: DNS queries are timing out**
+
+A: Try these solutions:
+1. **Use different nameservers** - Create a config file and specify reliable DNS servers:
+   ```toml
+   [dns]
+   nameservers = ["1.1.1.1", "8.8.8.8"]
+   timeout = 10.0
+   ```
+
+2. **Skip DNSSEC validation** if it's causing issues:
+   ```toml
+   [dns]
+   check_dnssec = false
+   ```
+
+3. **Check firewall** - Ensure outbound DNS (port 53) is allowed
+
+**Q: "NXDOMAIN" error for valid domain**
+
+A: This means the domain doesn't exist in DNS. Check:
+- Domain spelling (typos?)
+- Domain actually exists (try `nslookup domain.com`)
+- DNS propagation (newly registered domains take time)
+
+**Q: SSL/TLS analysis fails**
+
+A: Common causes:
+- **Port 443 blocked** - Check firewall
+- **Invalid certificate** - Tool correctly reports the issue
+- **Network timeout** - Increase timeout in config:
+  ```toml
+  [ssl]
+  timeout = 15.0
+  ```
+
+**Q: WHOIS lookup is very slow**
+
+A: WHOIS queries can be slow. You can:
+- **Skip WHOIS** temporarily: `wdt analyze example.com --skip whois`
+- **Increase timeout** in config:
+  ```toml
+  [whois]
+  timeout = 30.0
+  ```
+
+### Performance Issues
+
+**Q: Analysis takes too long**
+
+A: Optimize performance:
+1. **Skip unnecessary analyzers**:
+   ```bash
+   wdt analyze example.com --skip whois --skip rbl --skip favicon
+   ```
+
+2. **Disable checks in config**:
+   ```toml
+   [rbl]
+   enabled = false
+
+   [favicon]
+   enabled = false
+   ```
+
+3. **Use quiet mode** for faster output:
+   ```bash
+   wdt analyze example.com --verbosity quiet
+   ```
+
+**Q: Can I run analyzers in parallel?**
+
+A: Parallel execution is planned but not yet implemented. Current execution is sequential due to dependency resolution (e.g., SSL depends on HTTP).
+
+### Configuration Issues
+
+**Q: Where is the config file located?**
+
+A: Config files are loaded in this order (last wins):
+1. `/etc/webmaster-domain-tool/config.toml` (system-wide)
+2. `~/.config/webmaster-domain-tool/config.toml` (user)
+3. `~/.webmaster-domain-tool.toml` (home)
+4. `./.webmaster-domain-tool.toml` (project)
+
+Create a default config:
+```bash
+wdt create-config
+```
+
+**Q: My config changes aren't being applied**
+
+A: Check:
+1. **File format** - Ensure valid TOML syntax
+2. **Section names** - Must match analyzer IDs (`[dns]`, `[ssl]`, etc.)
+3. **Location** - Use local config (`./.webmaster-domain-tool.toml`) for project-specific settings
+4. **Validation** - Run with `--verbosity debug` to see config loading
+
+Example valid config:
+```toml
+[global]
+verbosity = "verbose"
+color = true
+
+[dns]
+timeout = 10.0
+check_dnssec = true
+nameservers = ["1.1.1.1", "8.8.8.8"]
+
+[ssl]
+timeout = 15.0
+expiry_warning_days = 30
+```
+
+### Output Issues
+
+**Q: Output has weird characters/colors**
+
+A: Your terminal might not support colors. Disable them:
+```bash
+# Via command line
+wdt analyze example.com --no-color
+
+# Via config
+[global]
+color = false
+```
+
+**Q: How do I save output to a file?**
+
+A: Use shell redirection or JSON format:
+```bash
+# Save CLI output
+wdt analyze example.com > output.txt
+
+# Save as JSON
+wdt analyze example.com --format json > output.json
+```
+
+### Common Errors
+
+**Q: "Unknown analyzer: xyz"**
+
+A: You specified an invalid analyzer ID in `--skip`. Valid IDs are:
+```bash
+wdt list-analyzers
+```
+
+**Q: "Circular dependency detected"**
+
+A: This shouldn't happen in normal usage. If it does:
+1. Report it as a bug
+2. Try skipping some analyzers to isolate the issue
+
+**Q: "Protocol validation failed"**
+
+A: A custom analyzer isn't implementing the required protocol. If using built-in analyzers, this is a bug - please report it.
+
+### Network/Firewall Issues
+
+**Q: Tool works for some domains but not others**
+
+A: Possible causes:
+- **Geo-blocking** - Domain blocks your region
+- **Rate limiting** - Too many requests
+- **Firewall** - Corporate firewall blocking analysis
+- **Domain configuration** - Domain actually has issues
+
+**Q: Getting connection refused errors**
+
+A: Check:
+- **Firewall** - Outbound ports 53 (DNS), 80 (HTTP), 443 (HTTPS)
+- **Proxy** - Tool doesn't support proxies yet
+- **VPN** - Try without VPN if having issues
+
+### Reporting Bugs
+
+**Q: I found a bug, how do I report it?**
+
+A: Include this information:
+1. **Version**: `wdt version`
+2. **Command**: Exact command you ran
+3. **Error**: Complete error message
+4. **Config**: Your config file (remove sensitive data)
+5. **Environment**: OS, Python version (`python --version`)
+
+Example bug report:
+```
+Version: 1.0.0
+Command: wdt analyze example.com --skip whois
+Error: [paste error here]
+OS: Ubuntu 22.04
+Python: 3.11.5
+```
+
 ## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 Pull requests are welcome! For major changes, please open an issue first for discussion.
 
