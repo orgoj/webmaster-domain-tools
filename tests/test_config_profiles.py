@@ -107,18 +107,42 @@ def test_profile_exists(profile_manager, sample_config):
 
 
 def test_get_or_create_default(profile_manager):
-    """Test getting or creating default profile."""
-    # First call creates default
+    """Test getting default config (always from code, never saved)."""
+    # First call returns fresh config from code
     config1 = profile_manager.get_or_create_default()
     assert config1 is not None
-    assert "default" in profile_manager.list_profiles()
+    # Default profile should NOT be saved
+    assert "default" not in profile_manager.list_profiles()
 
-    # Second call loads existing
+    # Second call also returns fresh config from code
     config2 = profile_manager.get_or_create_default()
+    # Configs are different objects but have same values (from default_config.toml)
+    assert config1 is not config2
     assert (
         config2.get_analyzer_config("dns").nameservers
         == config1.get_analyzer_config("dns").nameservers
     )
+    # Still no "default" in saved profiles
+    assert "default" not in profile_manager.list_profiles()
+
+
+def test_default_profile_migration(profile_manager, sample_config):
+    """Test that old 'default' profiles are deleted (migration)."""
+    # Simulate old behavior: save a "default" profile
+    profile_manager.save_profile("default", sample_config)
+    assert "default" in profile_manager.list_profiles()
+
+    # Call get_or_create_default - should delete the old profile
+    config = profile_manager.get_or_create_default()
+    assert config is not None
+
+    # Old "default" profile should be deleted
+    assert "default" not in profile_manager.list_profiles()
+
+    # Subsequent calls should still work
+    config2 = profile_manager.get_or_create_default()
+    assert config2 is not None
+    assert "default" not in profile_manager.list_profiles()
 
 
 def test_multiple_profiles(profile_manager, sample_config):

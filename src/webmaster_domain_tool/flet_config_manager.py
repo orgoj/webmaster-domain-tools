@@ -154,18 +154,28 @@ class FletConfigProfileManager:
 
     def get_or_create_default(self) -> GUIConfigAdapter:
         """
-        Get default profile or create if doesn't exist.
+        Get default configuration (always from code, never saved).
+
+        The default config should always come from code (default_config.toml),
+        not from saved profiles. This ensures schema changes are properly picked up.
+
+        If an old "default" profile exists in client storage, it will be deleted (migration).
 
         Returns:
-            Default configuration adapter
+            Fresh default configuration adapter from code
         """
+        # Migration: Delete old "default" profile if it exists
         if self.profile_exists("default"):
-            return self.load_profile("default")
-        else:
-            # Create default configuration
-            adapter = GUIConfigAdapter()
-            self.save_profile("default", adapter)
-            return adapter
+            logger.info(
+                "Deleting old 'default' profile from client storage (migration to code-based defaults)"
+            )
+            try:
+                self.delete_profile("default")
+            except Exception as e:
+                logger.warning(f"Failed to delete old 'default' profile: {e}")
+
+        # Always return fresh config from code
+        return GUIConfigAdapter()
 
     def set_last_selected_profile(self, profile_name: str) -> None:
         """

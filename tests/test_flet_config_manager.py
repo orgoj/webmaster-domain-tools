@@ -113,15 +113,20 @@ def test_profile_exists(profile_manager):
 
 
 def test_get_or_create_default(profile_manager):
-    """Test getting or creating default profile."""
-    # Should create default if doesn't exist
+    """Test getting default config (always from code, never saved)."""
+    # Should return fresh config from code
     config = profile_manager.get_or_create_default()
     assert config is not None
-    assert profile_manager.profile_exists("default")
+    # Default should NOT be saved
+    assert not profile_manager.profile_exists("default")
 
-    # Should load existing default
+    # Should return fresh config again
     config2 = profile_manager.get_or_create_default()
     assert config2 is not None
+    # Different objects, same values
+    assert config is not config2
+    # Still not saved
+    assert not profile_manager.profile_exists("default")
 
 
 def test_invalid_profile_name(profile_manager):
@@ -244,10 +249,7 @@ def test_set_and_get_last_selected_profile(profile_manager):
 
 def test_get_last_selected_profile_default(profile_manager):
     """Test that default is returned when no last profile saved."""
-    # Ensure default profile exists
-    profile_manager.get_or_create_default()
-
-    # Should return "default" when nothing saved
+    # Should return "default" when nothing saved (no need to create it)
     last = profile_manager.get_last_selected_profile()
     assert last == "default"
 
@@ -262,9 +264,26 @@ def test_get_last_selected_profile_nonexistent(profile_manager):
     # Delete the profile
     profile_manager.delete_profile("temp")
 
-    # Ensure default exists
-    profile_manager.get_or_create_default()
-
     # Should return "default" since "temp" no longer exists
     last = profile_manager.get_last_selected_profile()
     assert last == "default"
+
+
+def test_default_profile_migration(profile_manager):
+    """Test that old 'default' profiles are deleted (migration)."""
+    # Simulate old behavior: manually save a "default" profile
+    config = GUIConfigAdapter()
+    profile_manager.save_profile("default", config)
+    assert profile_manager.profile_exists("default")
+
+    # Call get_or_create_default - should delete the old profile
+    fresh_config = profile_manager.get_or_create_default()
+    assert fresh_config is not None
+
+    # Old "default" profile should be deleted
+    assert not profile_manager.profile_exists("default")
+
+    # Subsequent calls should still work
+    config2 = profile_manager.get_or_create_default()
+    assert config2 is not None
+    assert not profile_manager.profile_exists("default")
