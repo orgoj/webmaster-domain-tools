@@ -117,6 +117,12 @@ def analyze(
         list[str] | None,
         typer.Option(help="Analyzers to skip (e.g., --skip dns --skip whois)"),
     ] = None,
+    only: Annotated[
+        str | None,
+        typer.Option(
+            help="Run only these analyzers (e.g., --only html or --only html,dns,ssl). Cannot be used with --skip."
+        ),
+    ] = None,
     verbosity: Annotated[
         str,
         typer.Option(
@@ -149,13 +155,21 @@ def analyze(
     Analyze a domain.
 
     Runs all enabled analyzers on the specified domain. Use --skip to disable
-    specific analyzers.
+    specific analyzers, or --only to run just specific analyzers.
 
     Example:
         wdt analyze example.com
         wdt analyze example.com --skip dns --skip whois
+        wdt analyze example.com --only html
+        wdt analyze example.com --only html,dns,ssl
         wdt analyze example.com --verbosity verbose --format json
     """
+    # Validate --only and --skip are mutually exclusive
+    if only and skip:
+        console.print("[red]Error: Cannot use --only and --skip together[/red]")
+        console.print("Use either --only to run one analyzer, or --skip to exclude specific ones")
+        raise typer.Exit(1)
+
     # Setup logging
     log_level = {
         "quiet": logging.ERROR,
@@ -169,14 +183,30 @@ def analyze(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    # Validate skip analyzers
-    skip_set = set(skip or [])
-    if skip_set:
-        valid, unknown = registry.validate_skip_list(list(skip_set))
-        if not valid:
+    # Handle --only option
+    if only:
+        # Parse comma-separated list
+        only_list = [a.strip() for a in only.split(",") if a.strip()]
+
+        # Validate all analyzers exist
+        all_analyzer_ids = registry.get_all_ids()
+        unknown = [a for a in only_list if a not in all_analyzer_ids]
+        if unknown:
             console.print(f"[red]Error: Unknown analyzer(s): {', '.join(unknown)}[/red]")
-            console.print(f"\nAvailable analyzers: {', '.join(registry.get_all_ids())}")
+            console.print(f"\nAvailable analyzers: {', '.join(sorted(all_analyzer_ids))}")
             raise typer.Exit(1)
+
+        # Set skip to all analyzers except the ones specified
+        skip_set = set(all_analyzer_ids) - set(only_list)
+    else:
+        # Validate skip analyzers
+        skip_set = set(skip or [])
+        if skip_set:
+            valid, unknown = registry.validate_skip_list(list(skip_set))
+            if not valid:
+                console.print(f"[red]Error: Unknown analyzer(s): {', '.join(unknown)}[/red]")
+                console.print(f"\nAvailable analyzers: {', '.join(registry.get_all_ids())}")
+                raise typer.Exit(1)
 
     # Load configuration
     config_manager = ConfigManager()
