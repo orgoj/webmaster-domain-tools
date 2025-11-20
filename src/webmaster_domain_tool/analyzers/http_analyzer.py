@@ -1,4 +1,9 @@
-"""HTTP/HTTPS analysis module for checking web responses and redirects."""
+"""HTTP/HTTPS analysis module for checking web responses and redirects.
+
+This analyzer performs comprehensive HTTP/HTTPS analysis including redirect chains,
+status codes, SSL verification, and response times. Completely self-contained with
+config, logic, and output formatting.
+"""
 
 import logging
 from dataclasses import dataclass, field
@@ -6,6 +11,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 import httpx
+from pydantic import Field
 
 from ..constants import (
     DEFAULT_HTTP_MAX_REDIRECTS,
@@ -13,9 +19,41 @@ from ..constants import (
     DEFAULT_USER_AGENT,
     MAX_REDIRECT_WARNING,
 )
-from .base import BaseAnalysisResult, BaseAnalyzer
+from .protocol import (
+    AnalyzerConfig,
+    OutputDescriptor,
+    VerbosityLevel,
+)
+
+# NOTE: Registry import temporarily disabled to avoid circular import
+# from ..core.registry import registry
+# This will be re-enabled once core/analyzer.py uses lazy imports
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+
+class HTTPConfig(AnalyzerConfig):
+    """HTTP analyzer configuration."""
+
+    timeout: float = Field(default=DEFAULT_HTTP_TIMEOUT, description="Request timeout in seconds")
+    max_redirects: int = Field(
+        default=DEFAULT_HTTP_MAX_REDIRECTS, description="Maximum number of redirects to follow"
+    )
+    user_agent: str = Field(default=DEFAULT_USER_AGENT, description="Custom user agent string")
+    skip_www: bool = Field(
+        default=False,
+        description="Skip testing www subdomain (useful for subdomains or domains without www)",
+    )
+
+
+# ============================================================================
+# Result Models
+# ============================================================================
 
 
 @dataclass
@@ -55,44 +93,62 @@ class RedirectChain:
 
 
 @dataclass
-class HTTPAnalysisResult(BaseAnalysisResult):
+class HTTPAnalysisResult:
     """Results from HTTP/HTTPS analysis."""
 
+    domain: str
     chains: list[RedirectChain] = field(default_factory=list)
     preferred_final_url: str | None = None  # URL used for further analysis (headers, verification)
     path_check_result: PathCheckResult | None = None  # Result of checking specific path
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
-class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
-    """Analyzes HTTP/HTTPS responses and redirect chains."""
+# ============================================================================
+# Analyzer Implementation
+# ============================================================================
 
-    def __init__(
-        self,
-        timeout: float = DEFAULT_HTTP_TIMEOUT,
-        max_redirects: int = DEFAULT_HTTP_MAX_REDIRECTS,
-        user_agent: str | None = None,
-        skip_www: bool = False,
-    ):
-        """
-        Initialize HTTP analyzer.
 
-        Args:
-            timeout: Request timeout in seconds
-            max_redirects: Maximum number of redirects to follow
-            user_agent: Custom user agent string
-            skip_www: Skip testing www subdomain (useful for subdomains or domains without www)
-        """
-        self.timeout = timeout
-        self.max_redirects = max_redirects
-        self.user_agent = user_agent or DEFAULT_USER_AGENT
-        self.skip_www = skip_www
+# NOTE: @registry.register temporarily disabled to avoid circular import
+# Will be re-enabled once core/analyzer.py uses lazy imports
+# @registry.register
+class HTTPAnalyzer:
+    """
+    Analyzes HTTP/HTTPS responses and redirect chains.
 
-    def analyze(self, domain: str) -> HTTPAnalysisResult:
+    This analyzer is completely self-contained - it declares its own:
+    - Configuration schema (HTTPConfig)
+    - Output formatting (via describe_output)
+    - JSON serialization (via to_dict)
+    - Metadata
+
+    Adding it to the registry makes it automatically available in
+    CLI, GUI, and any other frontend.
+    """
+
+    # ========================================================================
+    # Required Metadata
+    # ========================================================================
+
+    analyzer_id = "http"
+    name = "HTTP/HTTPS Analysis"
+    description = "Analyze HTTP/HTTPS responses and redirect chains"
+    category = "general"
+    icon = "globe"
+    config_class = HTTPConfig
+    depends_on = ["dns"]  # HTTP needs DNS resolution
+
+    # ========================================================================
+    # Core Analysis Logic
+    # ========================================================================
+
+    def analyze(self, domain: str, config: HTTPConfig) -> HTTPAnalysisResult:
         """
         Perform comprehensive HTTP/HTTPS analysis of a domain.
 
         Args:
             domain: The domain to analyze
+            config: HTTP analyzer configuration
 
         Returns:
             HTTPAnalysisResult with all HTTP information and redirect chains
@@ -110,7 +166,7 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
         ]
 
         # Add www variants unless skip_www is enabled
-        if not self.skip_www:
+        if not config.skip_www:
             urls_to_test.extend(
                 [
                     f"http://www.{domain}",
@@ -120,7 +176,7 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
 
         for url in urls_to_test:
             logger.debug(f"Testing URL: {url}")
-            chain = self._follow_redirects(url)
+            chain = self._follow_redirects(url, config)
             result.chains.append(chain)
 
             # Validate redirect chain
@@ -128,12 +184,13 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
 
         return result
 
-    def _follow_redirects(self, start_url: str) -> RedirectChain:
+    def _follow_redirects(self, start_url: str, config: HTTPConfig) -> RedirectChain:
         """
         Follow redirect chain for a given URL.
 
         Args:
             start_url: The starting URL
+            config: HTTP analyzer configuration
 
         Returns:
             RedirectChain with all responses
@@ -143,18 +200,18 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
         redirect_count = 0
         start_time = datetime.now()
 
-        while redirect_count <= self.max_redirects:
+        while redirect_count <= config.max_redirects:
             try:
                 # Make request without following redirects
                 with httpx.Client(
-                    timeout=self.timeout,
+                    timeout=config.timeout,
                     follow_redirects=False,
                     verify=True,
                 ) as client:
                     request_start = datetime.now()
                     response = client.get(
                         current_url,
-                        headers={"User-Agent": self.user_agent},
+                        headers={"User-Agent": config.user_agent},
                     )
                     response_time = (datetime.now() - request_start).total_seconds()
 
@@ -221,7 +278,7 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
                     url=current_url,
                     status_code=0,
                     headers={},
-                    error=f"Request timeout ({self.timeout}s)",
+                    error=f"Request timeout ({config.timeout}s)",
                 )
                 chain.responses.append(http_response)
                 break
@@ -238,8 +295,8 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
                 break
 
         # Check if max redirects exceeded
-        if redirect_count > self.max_redirects:
-            chain.responses[-1].error = f"Too many redirects (>{self.max_redirects})"
+        if redirect_count > config.max_redirects:
+            chain.responses[-1].error = f"Too many redirects (>{config.max_redirects})"
 
         chain.total_time = (datetime.now() - start_time).total_seconds()
         return chain
@@ -283,13 +340,14 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
                 f"{chain.start_url} uses 302 (temporary) redirects - consider 301 (permanent)"
             )
 
-    def check_path(self, base_url: str, path: str) -> PathCheckResult:
+    def check_path(self, base_url: str, path: str, config: HTTPConfig) -> PathCheckResult:
         """
         Check if a specific path exists on the base URL.
 
         Args:
             base_url: The base URL to check (e.g., "https://example.com")
             path: The path to check (e.g., "/.wdt.hosting.info.txt")
+            config: HTTP analyzer configuration
 
         Returns:
             PathCheckResult with status and content information
@@ -308,13 +366,13 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
         try:
             start_time = datetime.now()
             with httpx.Client(
-                timeout=self.timeout,
+                timeout=config.timeout,
                 follow_redirects=True,  # Follow redirects for path check
                 verify=True,
             ) as client:
                 response = client.get(
                     full_url,
-                    headers={"User-Agent": self.user_agent},
+                    headers={"User-Agent": config.user_agent},
                 )
 
             result.response_time = (datetime.now() - start_time).total_seconds()
@@ -343,7 +401,7 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
             logger.debug(f"Path check connection error for {full_url}: {e}")
 
         except httpx.TimeoutException:
-            result.error = f"Request timeout ({self.timeout}s)"
+            result.error = f"Request timeout ({config.timeout}s)"
             logger.debug(f"Path check timeout for {full_url}")
 
         except Exception as e:
@@ -351,3 +409,181 @@ class HTTPAnalyzer(BaseAnalyzer[HTTPAnalysisResult]):
             logger.debug(f"Path check unexpected error for {full_url}: {e}")
 
         return result
+
+    # ========================================================================
+    # Output Protocol Methods
+    # ========================================================================
+
+    def describe_output(self, result: HTTPAnalysisResult) -> OutputDescriptor:
+        """
+        Describe how to render this analyzer's output.
+
+        Uses semantic styling (theme-agnostic) - no hardcoded colors.
+
+        Args:
+            result: HTTP analysis result
+
+        Returns:
+            OutputDescriptor with semantic styling
+        """
+        descriptor = OutputDescriptor(title=self.name, category=self.category)
+
+        # Quiet mode summary
+        descriptor.quiet_summary = lambda r: (
+            f"HTTP: {len([c for c in r.chains if c.responses and c.responses[-1].status_code == 200])}/"
+            f"{len(r.chains)} endpoints successful"
+        )
+
+        # Show redirect chains
+        for chain in result.chains:
+            if not chain.responses:
+                continue
+
+            last_response = chain.responses[-1]
+
+            # Chain summary
+            if last_response.error:
+                descriptor.add_row(
+                    label=chain.start_url,
+                    value=last_response.error,
+                    style_class="error",
+                    severity="error",
+                    icon="cross",
+                    verbosity=VerbosityLevel.NORMAL,
+                )
+            elif last_response.status_code == 200:
+                # Successful response
+                redirect_info = (
+                    f"{len(chain.responses)} hop(s)" if len(chain.responses) > 1 else "Direct"
+                )
+                descriptor.add_row(
+                    label=chain.start_url,
+                    value=f"{last_response.status_code} OK - {redirect_info} ({chain.total_time:.2f}s)",
+                    style_class="success",
+                    severity="info",
+                    icon="check",
+                    verbosity=VerbosityLevel.NORMAL,
+                )
+            else:
+                # Non-200 response
+                descriptor.add_row(
+                    label=chain.start_url,
+                    value=f"HTTP {last_response.status_code}",
+                    style_class="warning",
+                    severity="warning",
+                    icon="warning",
+                    verbosity=VerbosityLevel.NORMAL,
+                )
+
+            # Verbose: Show full redirect chain
+            if len(chain.responses) > 1:
+                chain_steps = []
+                for i, resp in enumerate(chain.responses):
+                    step = f"{resp.url} → {resp.status_code}"
+                    if resp.redirect_to:
+                        step += f" → {resp.redirect_to}"
+                    chain_steps.append(step)
+
+                descriptor.add_row(
+                    label="  Redirect chain",
+                    value=chain_steps,
+                    section_type="list",
+                    style_class="info",
+                    verbosity=VerbosityLevel.VERBOSE,
+                )
+
+        # Path check result
+        if result.path_check_result:
+            path_result = result.path_check_result
+            if path_result.success:
+                descriptor.add_row(
+                    label="Path Check",
+                    value=f"{path_result.path} - {path_result.status_code} OK ({path_result.content_length} bytes)",
+                    style_class="success",
+                    severity="info",
+                    icon="check",
+                    verbosity=VerbosityLevel.NORMAL,
+                )
+            elif path_result.error:
+                descriptor.add_row(
+                    label="Path Check",
+                    value=f"{path_result.path} - {path_result.error}",
+                    style_class="warning",
+                    severity="warning",
+                    icon="warning",
+                    verbosity=VerbosityLevel.NORMAL,
+                )
+
+        # Errors
+        for error in result.errors:
+            descriptor.add_row(
+                value=error,
+                section_type="text",
+                style_class="error",
+                severity="error",
+                icon="cross",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Warnings
+        for warning in result.warnings:
+            descriptor.add_row(
+                value=warning,
+                section_type="text",
+                style_class="warning",
+                severity="warning",
+                icon="warning",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        return descriptor
+
+    def to_dict(self, result: HTTPAnalysisResult) -> dict:
+        """
+        Serialize result to JSON-compatible dictionary.
+
+        Args:
+            result: HTTP analysis result
+
+        Returns:
+            JSON-serializable dict
+        """
+        return {
+            "domain": result.domain,
+            "chains": [
+                {
+                    "start_url": chain.start_url,
+                    "final_url": chain.final_url,
+                    "total_time": chain.total_time,
+                    "responses": [
+                        {
+                            "url": resp.url,
+                            "status_code": resp.status_code,
+                            "headers": resp.headers,
+                            "redirect_to": resp.redirect_to,
+                            "response_time": resp.response_time,
+                            "ssl_verified": resp.ssl_verified,
+                            "error": resp.error,
+                        }
+                        for resp in chain.responses
+                    ],
+                }
+                for chain in result.chains
+            ],
+            "preferred_final_url": result.preferred_final_url,
+            "path_check_result": (
+                {
+                    "path": result.path_check_result.path,
+                    "full_url": result.path_check_result.full_url,
+                    "status_code": result.path_check_result.status_code,
+                    "content_length": result.path_check_result.content_length,
+                    "response_time": result.path_check_result.response_time,
+                    "error": result.path_check_result.error,
+                    "success": result.path_check_result.success,
+                }
+                if result.path_check_result
+                else None
+            ),
+            "errors": result.errors,
+            "warnings": result.warnings,
+        }

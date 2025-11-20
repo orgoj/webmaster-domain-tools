@@ -1,4 +1,8 @@
-"""Favicon analyzer - detect all favicon versions."""
+"""Favicon analyzer - detect all favicon versions.
+
+This analyzer detects favicons from HTML tags, Web App Manifest, and default paths.
+Completely self-contained with config, logic, and output formatting.
+"""
 
 import io
 import json
@@ -10,10 +14,21 @@ from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse
 
 import httpx
+from pydantic import Field
 
-from .base import BaseAnalysisResult, BaseAnalyzer
+from ..core.registry import registry
+from .protocol import (
+    AnalyzerConfig,
+    OutputDescriptor,
+    VerbosityLevel,
+)
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
 
 
 def _get_image_dimensions(image_data: bytes) -> tuple[int | None, int | None]:
@@ -191,6 +206,30 @@ def _get_ico_all_dimensions(image_data: bytes) -> list[tuple[int, int]]:
         return []
 
 
+# ============================================================================
+# Configuration
+# ============================================================================
+
+
+class FaviconConfig(AnalyzerConfig):
+    """Favicon analyzer configuration."""
+
+    user_agent: str = Field(
+        default=(
+            "Mozilla/5.0 (compatible; WebmasterDomainTool/0.1; "
+            "+https://github.com/orgoj/webmaster-domain-tool)"
+        ),
+        description="User agent for HTTP requests",
+    )
+    check_html: bool = Field(default=True, description="Parse HTML for favicon links")
+    check_defaults: bool = Field(default=True, description="Check default favicon locations")
+
+
+# ============================================================================
+# Result Models
+# ============================================================================
+
+
 @dataclass
 class FaviconInfo:
     """Information about a single favicon."""
@@ -213,16 +252,52 @@ class FaviconInfo:
 
 
 @dataclass
-class FaviconAnalysisResult(BaseAnalysisResult):
+class FaviconAnalysisResult:
     """Results from favicon analysis."""
 
+    domain: str
     base_url: str = ""
     favicons: list[FaviconInfo] = field(default_factory=list)
     has_default_favicon: bool = False  # /favicon.ico exists
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
-class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
-    """Analyzes favicon presence and variants."""
+# ============================================================================
+# Analyzer Implementation
+# ============================================================================
+
+
+@registry.register
+class FaviconAnalyzer:
+    """
+    Analyzes favicon presence and variants.
+
+    This analyzer is completely self-contained - it declares its own:
+    - Configuration schema (FaviconConfig)
+    - Output formatting (via describe_output)
+    - JSON serialization (via to_dict)
+    - Metadata
+
+    Adding it to the registry makes it automatically available in
+    CLI, GUI, and any other frontend.
+    """
+
+    # ========================================================================
+    # Required Metadata
+    # ========================================================================
+
+    analyzer_id = "favicon"
+    name = "Favicon Detection"
+    description = "Detect all favicon versions and formats"
+    category = "seo"
+    icon = "star"
+    config_class = FaviconConfig
+    depends_on = ["http"]  # Needs HTTP to fetch HTML
+
+    # ========================================================================
+    # Default Favicon Locations
+    # ========================================================================
 
     # Common default favicon locations (ordered by priority/frequency)
     DEFAULT_PATHS = [
@@ -245,57 +320,43 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
         "/apple-touch-icon-120x120-precomposed.png",
     ]
 
-    def __init__(
-        self,
-        timeout: float = 10.0,
-        user_agent: str | None = None,
-        check_html: bool = True,
-        check_defaults: bool = True,
-    ):
+    # ========================================================================
+    # Required Protocol Methods
+    # ========================================================================
+
+    def analyze(self, domain: str, config: FaviconConfig) -> FaviconAnalysisResult:
         """
-        Initialize favicon analyzer.
+        Analyze favicons for a given domain.
 
         Args:
-            timeout: Request timeout in seconds
-            user_agent: Custom user agent string
-            check_html: Parse HTML for favicon links
-            check_defaults: Check default favicon locations
-        """
-        self.timeout = timeout
-        self.user_agent = user_agent or (
-            "Mozilla/5.0 (compatible; WebmasterDomainTool/0.1; +https://github.com/orgoj/webmaster-domain-tool)"
-        )
-        self.check_html = check_html
-        self.check_defaults = check_defaults
-
-    def analyze(self, base_url: str) -> FaviconAnalysisResult:
-        """
-        Analyze favicons for a given base URL.
-
-        Args:
-            base_url: Base URL to check (e.g., "https://example.com")
+            domain: Domain to analyze (e.g., "example.com")
+            config: Favicon analyzer configuration
 
         Returns:
             FaviconAnalysisResult with all found favicons
         """
-        # Extract domain for result
-        parsed = urlparse(base_url)
-        domain = parsed.netloc or base_url
+        # Construct base URL from domain
+        # Assume HTTPS first, could fallback to HTTP if needed
+        base_url = f"https://{domain}" if not domain.startswith("http") else domain
 
-        result = FaviconAnalysisResult(domain=domain, base_url=base_url)
+        # Extract clean domain for result
+        parsed = urlparse(base_url)
+        clean_domain = parsed.netloc or domain
+
+        result = FaviconAnalysisResult(domain=clean_domain, base_url=base_url)
 
         # Parse HTML for favicon links
         html_favicons = []
-        if self.check_html:
-            html_favicons = self._parse_html_favicons(base_url)
+        if config.check_html:
+            html_favicons = self._parse_html_favicons(base_url, config)
             result.favicons.extend(html_favicons)
 
         # Collect URLs found in HTML
         html_urls = {f.url for f in html_favicons}
 
         # Check default locations
-        if self.check_defaults:
-            default_favicons = self._check_default_favicons(base_url)
+        if config.check_defaults:
+            default_favicons = self._check_default_favicons(base_url, config)
 
             # Check if HTML has any existing favicons
             has_html_favicons = any(f.exists for f in html_favicons)
@@ -332,13 +393,13 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
 
         return result
 
-    def _parse_html_favicons(self, base_url: str) -> list[FaviconInfo]:
+    def _parse_html_favicons(self, base_url: str, config: FaviconConfig) -> list[FaviconInfo]:
         """Parse HTML to find favicon links, meta tags, and manifest."""
         favicons = []
 
         try:
-            with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
-                response = client.get(base_url, headers={"User-Agent": self.user_agent})
+            with httpx.Client(timeout=config.timeout, follow_redirects=True) as client:
+                response = client.get(base_url, headers={"User-Agent": config.user_agent})
 
             if response.status_code != 200:
                 logger.debug(f"Failed to fetch HTML: {base_url} - status {response.status_code}")
@@ -381,7 +442,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                 )
 
                 # Check if favicon actually exists and get dimensions
-                self._check_favicon_exists(favicon)
+                self._check_favicon_exists(favicon, config)
 
                 favicons.append(favicon)
                 logger.debug(f"Found favicon in HTML: {full_url} (rel={rel})")
@@ -400,7 +461,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                     rel="msapplication-TileImage",
                     type="image/png",  # Usually PNG
                 )
-                self._check_favicon_exists(favicon)
+                self._check_favicon_exists(favicon, config)
                 favicons.append(favicon)
                 logger.debug(f"Found Microsoft Tile icon: {tile_url}")
 
@@ -412,7 +473,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
             manifest_match = manifest_pattern.search(html)
             if manifest_match:
                 manifest_url = urljoin(base_url, manifest_match.group(1))
-                manifest_favicons = self._parse_manifest(manifest_url, base_url)
+                manifest_favicons = self._parse_manifest(manifest_url, base_url, config)
                 favicons.extend(manifest_favicons)
 
         except httpx.TimeoutException:
@@ -422,13 +483,15 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
 
         return favicons
 
-    def _parse_manifest(self, manifest_url: str, base_url: str) -> list[FaviconInfo]:
+    def _parse_manifest(
+        self, manifest_url: str, base_url: str, config: FaviconConfig
+    ) -> list[FaviconInfo]:
         """Parse Web App Manifest (manifest.json) for icon definitions."""
         favicons = []
 
         try:
-            with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
-                response = client.get(manifest_url, headers={"User-Agent": self.user_agent})
+            with httpx.Client(timeout=config.timeout, follow_redirects=True) as client:
+                response = client.get(manifest_url, headers={"User-Agent": config.user_agent})
 
             if response.status_code != 200:
                 logger.debug(
@@ -468,7 +531,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                     purpose=icon.get("purpose"),
                 )
 
-                self._check_favicon_exists(favicon)
+                self._check_favicon_exists(favicon, config)
                 favicons.append(favicon)
                 logger.debug(f"Found manifest icon: {icon_url} (sizes={favicon.sizes})")
 
@@ -479,7 +542,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
 
         return favicons
 
-    def _check_default_favicons(self, base_url: str) -> list[FaviconInfo]:
+    def _check_default_favicons(self, base_url: str, config: FaviconConfig) -> list[FaviconInfo]:
         """Check default favicon locations."""
         favicons = []
 
@@ -487,7 +550,7 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
             url = urljoin(base_url, path)
 
             favicon = FaviconInfo(url=url, source="default")
-            self._check_favicon_exists(favicon)
+            self._check_favicon_exists(favicon, config)
 
             if favicon.exists:
                 favicons.append(favicon)
@@ -495,12 +558,12 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
 
         return favicons
 
-    def _check_favicon_exists(self, favicon: FaviconInfo) -> None:
+    def _check_favicon_exists(self, favicon: FaviconInfo, config: FaviconConfig) -> None:
         """Check if a favicon URL is accessible and get its dimensions."""
         try:
-            with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+            with httpx.Client(timeout=config.timeout, follow_redirects=True) as client:
                 # First try HEAD to check existence
-                head_response = client.head(favicon.url, headers={"User-Agent": self.user_agent})
+                head_response = client.head(favicon.url, headers={"User-Agent": config.user_agent})
 
             favicon.status_code = head_response.status_code
 
@@ -523,9 +586,9 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
                     )
                 else:
                     try:
-                        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+                        with httpx.Client(timeout=config.timeout, follow_redirects=True) as client:
                             get_response = client.get(
-                                favicon.url, headers={"User-Agent": self.user_agent}
+                                favicon.url, headers={"User-Agent": config.user_agent}
                             )
 
                         if get_response.status_code == 200:
@@ -588,3 +651,202 @@ class FaviconAnalyzer(BaseAnalyzer[FaviconAnalysisResult]):
             logger.debug(f"Timeout checking favicon: {favicon.url}")
         except Exception as e:
             logger.debug(f"Error checking favicon: {favicon.url} - {e}")
+
+    def describe_output(self, result: FaviconAnalysisResult) -> OutputDescriptor:
+        """
+        Describe how to render this analyzer's output.
+
+        Uses semantic styling (theme-agnostic) - no hardcoded colors.
+
+        Args:
+            result: Favicon analysis result
+
+        Returns:
+            OutputDescriptor with semantic styling
+        """
+        descriptor = OutputDescriptor(title=self.name, category=self.category)
+
+        # Quiet mode summary
+        descriptor.quiet_summary = lambda r: (
+            f"Favicons: {len([f for f in r.favicons if f.exists])} found"
+        )
+
+        # Summary row
+        existing_favicons = [f for f in result.favicons if f.exists]
+        if existing_favicons:
+            descriptor.add_row(
+                label="Favicons Found",
+                value=f"{len(existing_favicons)} favicon(s) detected",
+                style_class="success",
+                icon="check",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+        else:
+            descriptor.add_row(
+                label="Favicons Found",
+                value="No favicons detected",
+                style_class="muted",
+                icon="warning",
+                severity="warning",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Default favicon.ico status
+        if result.has_default_favicon:
+            descriptor.add_row(
+                label="Default Favicon",
+                value="/favicon.ico exists",
+                style_class="success",
+                icon="check",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+        else:
+            descriptor.add_row(
+                label="Default Favicon",
+                value="/favicon.ico not found",
+                style_class="muted",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Verbose - show all favicons
+        if existing_favicons and VerbosityLevel.VERBOSE:
+            # Group by source
+            html_favicons = [f for f in existing_favicons if f.source == "html"]
+            manifest_favicons = [f for f in existing_favicons if f.source == "manifest"]
+            default_favicons = [f for f in existing_favicons if f.source == "default"]
+            meta_favicons = [f for f in existing_favicons if f.source == "meta"]
+
+            # HTML favicons
+            if html_favicons:
+                for fav in html_favicons:
+                    # Build value string with all info
+                    value_parts = [fav.url]
+                    if fav.rel:
+                        value_parts.append(f"rel={fav.rel}")
+                    if fav.sizes:
+                        value_parts.append(f"sizes={fav.sizes}")
+                    if fav.actual_width and fav.actual_height:
+                        value_parts.append(f"actual={fav.actual_width}×{fav.actual_height}")
+                    if fav.all_dimensions:
+                        value_parts.append(f"layers=[{', '.join(fav.all_dimensions)}]")
+                    if fav.size_bytes:
+                        size_kb = fav.size_bytes / 1024
+                        value_parts.append(f"size={size_kb:.1f}KB")
+
+                    descriptor.add_row(
+                        label="HTML Favicon",
+                        value=" | ".join(value_parts),
+                        style_class="info",
+                        severity="info",
+                        verbosity=VerbosityLevel.VERBOSE,
+                    )
+
+            # Manifest favicons
+            if manifest_favicons:
+                for fav in manifest_favicons:
+                    value_parts = [fav.url]
+                    if fav.sizes:
+                        value_parts.append(f"sizes={fav.sizes}")
+                    if fav.type:
+                        value_parts.append(f"type={fav.type}")
+                    if fav.purpose:
+                        value_parts.append(f"purpose={fav.purpose}")
+
+                    descriptor.add_row(
+                        label="Manifest Favicon",
+                        value=" | ".join(value_parts),
+                        style_class="info",
+                        severity="info",
+                        verbosity=VerbosityLevel.VERBOSE,
+                    )
+
+            # Default path favicons
+            if default_favicons:
+                for fav in default_favicons:
+                    value_parts = [fav.url]
+                    if fav.actual_width and fav.actual_height:
+                        value_parts.append(f"actual={fav.actual_width}×{fav.actual_height}")
+                    if fav.all_dimensions:
+                        value_parts.append(f"layers=[{', '.join(fav.all_dimensions)}]")
+
+                    descriptor.add_row(
+                        label="Default Path Favicon",
+                        value=" | ".join(value_parts),
+                        style_class="info",
+                        severity="info",
+                        verbosity=VerbosityLevel.VERBOSE,
+                    )
+
+            # Meta tag favicons
+            if meta_favicons:
+                for fav in meta_favicons:
+                    descriptor.add_row(
+                        label="Meta Tag Favicon",
+                        value=f"{fav.url} ({fav.rel})",
+                        style_class="info",
+                        severity="info",
+                        verbosity=VerbosityLevel.VERBOSE,
+                    )
+
+        # Errors
+        for error in result.errors:
+            descriptor.add_row(
+                value=error,
+                section_type="text",
+                style_class="error",
+                severity="error",
+                icon="cross",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Warnings
+        for warning in result.warnings:
+            descriptor.add_row(
+                value=warning,
+                section_type="text",
+                style_class="warning",
+                severity="warning",
+                icon="warning",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        return descriptor
+
+    def to_dict(self, result: FaviconAnalysisResult) -> dict:
+        """
+        Serialize result to JSON-compatible dictionary.
+
+        Args:
+            result: Favicon analysis result
+
+        Returns:
+            JSON-serializable dict
+        """
+        return {
+            "domain": result.domain,
+            "base_url": result.base_url,
+            "has_default_favicon": result.has_default_favicon,
+            "favicons": [
+                {
+                    "url": fav.url,
+                    "source": fav.source,
+                    "rel": fav.rel,
+                    "sizes": fav.sizes,
+                    "type": fav.type,
+                    "color": fav.color,
+                    "purpose": fav.purpose,
+                    "exists": fav.exists,
+                    "status_code": fav.status_code,
+                    "size_bytes": fav.size_bytes,
+                    "actual_width": fav.actual_width,
+                    "actual_height": fav.actual_height,
+                    "all_dimensions": fav.all_dimensions,
+                }
+                for fav in result.favicons
+            ],
+            "errors": result.errors,
+            "warnings": result.warnings,
+        }

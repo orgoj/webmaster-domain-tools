@@ -30,11 +30,26 @@ class TestAnalyzerInstantiation:
 
     def test_email_security_analyzer(self):
         """Test EmailSecurityAnalyzer instantiation and interface (includes BIMI, MTA-STS, TLS-RPT)."""
-        from webmaster_domain_tool.analyzers.email_security import EmailSecurityAnalyzer
+        from webmaster_domain_tool.analyzers.email_security import (
+            EmailConfig,
+            EmailSecurityAnalyzer,
+        )
 
+        # New modular protocol - class has metadata and methods, no __init__
         analyzer = EmailSecurityAnalyzer()
         assert hasattr(analyzer, "analyze"), "EmailSecurityAnalyzer must have analyze() method"
         assert callable(analyzer.analyze), "analyze() must be callable"
+        assert hasattr(
+            analyzer, "describe_output"
+        ), "EmailSecurityAnalyzer must have describe_output() method"
+        assert hasattr(analyzer, "to_dict"), "EmailSecurityAnalyzer must have to_dict() method"
+
+        # Check metadata
+        assert hasattr(EmailSecurityAnalyzer, "analyzer_id")
+        assert EmailSecurityAnalyzer.analyzer_id == "email"
+        assert hasattr(EmailSecurityAnalyzer, "name")
+        assert hasattr(EmailSecurityAnalyzer, "config_class")
+        assert EmailSecurityAnalyzer.config_class == EmailConfig
 
     def test_rbl_checker(self):
         """Test RBLChecker instantiation and interface."""
