@@ -16,7 +16,7 @@ sys.path.insert(0, str(src_path))
 MODULES_TO_TEST = [
     "webmaster_domain_tool.cli",
     "webmaster_domain_tool.flet_app",
-    "webmaster_domain_tool.config_editor_dialog",
+    "webmaster_domain_tool.config_editor_view",
     "webmaster_domain_tool.gui_config_adapter",
     "webmaster_domain_tool.flet_config_manager",
     "webmaster_domain_tool.config_profiles",

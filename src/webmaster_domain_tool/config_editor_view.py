@@ -58,10 +58,10 @@ class ConfigEditorView:
         self.current_index = 0
 
         # Content container (will be updated when selecting different section)
+        # No expand here - it's inside a scrollable Column
         self.content_container = ft.Container(
             content=self.sections[0]["content"] if self.sections else ft.Text("No config"),
             padding=20,
-            expand=True,
         )
 
     def _build_sections(self) -> None:
@@ -105,26 +105,35 @@ class ConfigEditorView:
                 )
             )
 
-        # Sidebar Container with NavigationRail (full height)
+        # Sidebar - scrollable navigation with icons and labels below
         sidebar = ft.Container(
-            width=200,  # Fixed width
-            expand=True,  # Full height
             bgcolor=ft.Colors.GREY_300,
-            content=ft.NavigationRail(
-                selected_index=self.current_index,
-                label_type=ft.NavigationRailLabelType.ALL,
-                min_width=180,
-                destinations=nav_rail_destinations,
-                on_change=self._on_nav_change,
-                bgcolor=ft.Colors.GREY_300,
-                expand=True,  # Fill sidebar height
+            content=ft.Column(
+                [
+                    ft.NavigationRail(
+                        selected_index=self.current_index,
+                        label_type=ft.NavigationRailLabelType.SELECTED,  # Show label only for selected item
+                        min_width=72,  # Minimum width for rail
+                        destinations=nav_rail_destinations,
+                        on_change=self._on_nav_change,
+                        bgcolor=ft.Colors.GREY_300,
+                    ),
+                ],
+                scroll=ft.ScrollMode.AUTO,  # Enable scroll when many items
+                alignment=ft.MainAxisAlignment.START,
             ),
         )
 
-        # Content area - full height
+        # Content area - full height with scroll
+        # Content container has scroll so it always starts from top
         content_area = ft.Container(
-            content=self.content_container,
-            expand=True,
+            content=ft.Column(
+                [
+                    self.content_container,
+                ],
+                scroll=ft.ScrollMode.AUTO,  # Enable scroll for long configs
+                alignment=ft.MainAxisAlignment.START,  # Always start from top
+            ),
         )
 
         # Main content row - sidebar + content (full height)
@@ -135,7 +144,7 @@ class ConfigEditorView:
                 content_area,
             ],
             spacing=0,
-            expand=True,  # Full height available
+            expand=True,  # Full height available - CRITICAL!
         )
 
         # Header with Back and Save buttons
@@ -173,6 +182,7 @@ class ConfigEditorView:
         )
 
         # Full-page layout - header + content row
+        # This Column MUST have expand=True to fill page and give bounded height to children
         return ft.Column(
             [
                 header,
@@ -180,7 +190,7 @@ class ConfigEditorView:
                 content_row,
             ],
             spacing=10,
-            expand=True,  # Fill page height
+            expand=True,  # Fill page height - CRITICAL!
         )
 
     def _on_nav_change(self, e: ft.ControlEvent) -> None:
@@ -225,8 +235,7 @@ class ConfigEditorView:
                 self.analyzer_fields["global"]["parallel"],
             ],
             spacing=10,
-            scroll=ft.ScrollMode.AUTO,
-            expand=True,
+            # No scroll/expand - parent content_area handles scrolling
         )
 
     def _create_analyzer_content(self, analyzer_id: str, metadata: Any) -> ft.Column | None:
@@ -317,8 +326,7 @@ class ConfigEditorView:
             return ft.Column(
                 controls,
                 spacing=10,
-                scroll=ft.ScrollMode.AUTO,
-                expand=True,
+                # No scroll/expand - parent content_area handles scrolling
             )
 
         except Exception as e:

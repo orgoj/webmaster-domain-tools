@@ -3,7 +3,7 @@ name = "webmaster-domain-tool"
 version = "1.0.0"
 description = "Comprehensive domain analysis tool for webmasters"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 authors = [
     { name = "Webmaster Tools", email = "tools@example.com" }
 ]

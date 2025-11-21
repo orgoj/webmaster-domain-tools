@@ -62,11 +62,11 @@ class UITheme:
     text_secondary: str = ft.Colors.GREY_700
 
     # Status colors
-    success_color: str = ft.Colors.GREEN
+    success_color: str = ft.Colors.GREEN_700
     success_bg: str = ft.Colors.GREEN_50
-    error_color: str = ft.Colors.RED
+    error_color: str = ft.Colors.RED_700
     error_bg: str = ft.Colors.RED_50
-    warning_color: str = ft.Colors.ORANGE
+    warning_color: str = ft.Colors.ORANGE_700
     warning_bg: str = ft.Colors.ORANGE_50
     # Specific warning orange shades (previously hardcoded as hex)
     warning_orange: str = "#FFA500"  # Orange for warnings
@@ -405,6 +405,9 @@ class DomainAnalyzerApp:
 
     def _switch_to_main_view(self) -> None:
         """Switch to main analysis view."""
+        # Re-enable scroll for main view (needed for long analysis results)
+        self.page.scroll = ft.ScrollMode.AUTO
+
         self.current_view_content.content = self._build_main_view()
         self.page.update()
 
@@ -420,6 +423,10 @@ class DomainAnalyzerApp:
             on_cancel=self._switch_to_main_view,
             theme=self.theme,
         )
+
+        # CRITICAL: Disable page scroll for config view to provide bounded height
+        # Without this, NavigationRail has unbounded height error
+        self.page.scroll = None
 
         self.current_view_content.content = config_view.build()
         self.page.update()

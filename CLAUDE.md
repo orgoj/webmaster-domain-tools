@@ -1,5 +1,22 @@
 # Webmaster Domain Tool - AI Assistant Guide
 
+## ⚠️ META: Rules for CLAUDE.md Itself
+
+**CLAUDE.md musí být:**
+- **Stručný** - žádné dlouhé vysvětlování, jen fakta
+- **Jasný** - přímé instrukce, ne vágní rady
+- **Důrazný** - pravidla, ne návrhy
+- **Bez duplicit** - před přidáním ZKONTROLUJ, že to tam už není
+- **Bez číslování nadpisů** - NIKDY `### 1. Foo`, vždy jen `### Foo` (při úpravách by ses musel přečíslovávat)
+
+**Když přidáváš do CLAUDE.md:**
+1. Vyhledej zda to tam už není (`grep`, `Ctrl+F`)
+2. Zkontroluj všechny CRITICAL sekce
+3. NESKLEJ duplicity - radši vylepši stávající text
+4. CLAUDE.md není bordel - je to tvůj startup config!
+
+---
+
 This document provides comprehensive information about the project for AI assistants working on this codebase.
 
 ## Project Overview
@@ -14,6 +31,22 @@ This document provides comprehensive information about the project for AI assist
 - `httpx` for HTTP requests
 - `cryptography` for SSL analysis
 - `pydantic` for configuration and data validation
+
+## ⚠️ CRITICAL: NEVER Use Base Flet Colors
+
+**ABSOLUTE RULE: Base color names (GREEN, RED, ORANGE) are FORBIDDEN. ALWAYS use shades (_700, _500, etc.)**
+
+**Why:** Python 3.13.8 + GCC has 381 colors (includes GREEN). Python 3.13.8 + Clang has 380 colors (NO GREEN!). Same Flet version, different enum!
+
+```python
+# ❌ FORBIDDEN - Will crash on some systems
+ft.Colors.GREEN, RED, ORANGE, BLUE, YELLOW
+
+# ✅ REQUIRED - Works everywhere
+ft.Colors.GREEN_700, RED_700, ORANGE_700, BLUE_700, YELLOW_700
+```
+
+**Evidence:** See `env_test/` - different file hashes, different Colors enum despite identical Flet 0.28.3 and uv.lock.
 
 ## ⚠️ CRITICAL: Test-Driven Development Workflow
 
@@ -117,6 +150,18 @@ def foo(callback: Callable[[str], None]) -> None:  # ✅ Proper type hint
 
 **Remember: If there's no test, the feature doesn't exist.**
 
+## ⚠️ CRITICAL: Delete Dead Code Immediately
+
+**When redesigning: DELETE OLD CODE RIGHT AWAY! Git is for history.**
+
+Checklist when replacing code:
+1. `git rm old_file.py`
+2. `grep -r "old_module" .` - find all references
+3. Update imports, tests, scripts
+4. Commit together: new + deletion + updates
+
+Never keep dead code "for reference" - use `git log` instead.
+
 ## Architecture
 
 **The project uses a modular plugin-based architecture with complete decoupling between analyzers, configuration, and output rendering.**
@@ -181,7 +226,7 @@ src/webmaster_domain_tool/
 
 ## Key Design Decisions
 
-### 1. Protocol-Based Plugin System
+### Protocol-Based Plugin System
 
 **Design Philosophy:** Analyzers use Python's `@runtime_checkable Protocol` instead of class inheritance.
 
@@ -216,7 +261,7 @@ class MyNewAnalyzer:
         ...
 ```
 
-### 2. Semantic Output Styling (Theme-Agnostic)
+### Semantic Output Styling (Theme-Agnostic)
 
 **Critical Concept:** Analyzers define WHAT to show, not HOW to show it.
 
@@ -247,7 +292,7 @@ The renderer (`CLIRenderer`, `JSONRenderer`) interprets semantic styles:
 - Future HTML: Maps to CSS classes
 - Future GUI: Can switch themes without code changes
 
-### 3. Error/Warning Tracking in Renderers
+### Error/Warning Tracking in Renderers
 
 Renderers track errors/warnings from `OutputDescriptor` rows:
 
@@ -264,7 +309,7 @@ def collect_errors_warnings(self, descriptor: OutputDescriptor, category: str):
 
 This ensures 100% accurate counting - the summary count always matches displayed messages.
 
-### 2. DNS CNAME/A Record Rule
+### DNS CNAME/A Record Rule
 
 **DNS Fundamental Rule:** A domain with a CNAME record CANNOT have A/AAAA records at the same level.
 
@@ -282,7 +327,7 @@ if cname_key in result.records and result.records[cname_key]:
         del result.records[f"{domain}:A"]
 ```
 
-### 3. WWW CNAME Best Practice Warning
+### WWW CNAME Best Practice Warning
 
 Optional feature (`warn_www_not_cname`) that warns when www subdomain uses direct A/AAAA records instead of CNAME.
 
@@ -297,7 +342,7 @@ Implementation:
 - CLI: `--warn-www-not-cname` / `--no-warn-www-not-cname`
 - Check in `DNSAnalyzer._check_www_cname()`
 
-### 4. Per-Analyzer Configuration (Isolated)
+### Per-Analyzer Configuration (Isolated)
 
 **Each analyzer has its own configuration section** in TOML:
 
@@ -334,7 +379,7 @@ class DNSConfig(AnalyzerConfig):
     check_dnssec: bool = Field(default=True)
 ```
 
-### 5. Dependency Resolution
+### Dependency Resolution
 
 The registry automatically resolves analyzer execution order:
 
@@ -351,7 +396,7 @@ The CLI uses topological sort to ensure correct order:
 
 Circular dependencies are detected and reported as errors.
 
-### 6. Output Verbosity Levels
+### Output Verbosity Levels
 
 Controlled via `VerbosityLevel` enum:
 - **QUIET**: Minimal output (custom summary functions)
