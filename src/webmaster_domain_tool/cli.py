@@ -268,7 +268,7 @@ def analyze(
             dir_okay=False,
         ),
     ] = None,
-):
+) -> None:
     """
     Analyze a domain or multiple domains from a file.
 
@@ -468,7 +468,7 @@ def create_config(
             help="Overwrite existing file",
         ),
     ] = False,
-):
+) -> None:
     """
     Create a default configuration file.
 
@@ -756,7 +756,14 @@ def test_validator_profile(
 
             cdn_analyzer = CDNDetector()
             cdn_config = config_manager.get_analyzer_config("cdn")
-            cdn_result = cdn_analyzer.analyze(domain, cdn_config, context=context)
+
+            # Check if CDN analyzer supports context parameter
+            analyze_signature = inspect.signature(cdn_analyzer.analyze)
+            if "context" in analyze_signature.parameters:
+                cdn_result = cdn_analyzer.analyze(domain, cdn_config, context=context)
+            else:
+                cdn_result = cdn_analyzer.analyze(domain, cdn_config)
+
             context["cdn"] = cdn_result
             console.print("  [green]✓[/green] CDN analysis complete")
         except Exception as e:

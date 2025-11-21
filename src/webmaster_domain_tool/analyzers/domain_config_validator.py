@@ -7,10 +7,10 @@ Disabled by default - requires explicit profile activation.
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Self
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ..core.registry import registry
 from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
@@ -93,6 +93,17 @@ class DomainValidationProfile(BaseModel):
     dmarc_percentage: int = Field(
         default=0, description="Minimum DMARC percentage (0 = don't check)"
     )
+
+    @model_validator(mode="after")
+    def validate_infrastructure(self) -> Self:
+        """Ensure mutual exclusivity of IP and CDN validation."""
+        if self.expected_ips and self.expected_cdn:
+            raise ValueError(
+                "Cannot specify both 'expected_ips' and 'expected_cdn'. "
+                "For direct hosting, use 'expected_ips'. "
+                "For CDN-based hosting, use 'expected_cdn'."
+            )
+        return self
 
 
 class DomainValidatorConfig(AnalyzerConfig):
@@ -596,7 +607,7 @@ class DomainConfigValidator:
             return
 
         actual_cdn = getattr(cdn_result, "cdn_provider", None)
-        passed = actual_cdn and actual_cdn.lower() == profile.expected_cdn.lower()
+        passed = bool(actual_cdn and actual_cdn.lower() == profile.expected_cdn.lower())
 
         result.checks.append(
             ValidationCheck(
