@@ -58,10 +58,10 @@ class ConfigEditorView:
         self.current_index = 0
 
         # Content container (will be updated when selecting different section)
+        # No expand here - it's inside a scrollable Column
         self.content_container = ft.Container(
             content=self.sections[0]["content"] if self.sections else ft.Text("No config"),
             padding=20,
-            expand=True,
         )
 
     def _build_sections(self) -> None:
@@ -105,30 +105,36 @@ class ConfigEditorView:
                 )
             )
 
-        # DEBUG: Sidebar Container with NavigationRail (full height)
+        # Sidebar - narrow with icons only
         sidebar = ft.Container(
-            width=200,  # Fixed width
+            width=72,  # Narrow - icons only (standard min_width)
             expand=True,  # Full height - CRITICAL for bounded height!
-            bgcolor=ft.Colors.LIGHT_BLUE_100,  # DEBUG: Blue for nav sidebar
+            bgcolor=ft.Colors.GREY_300,
             content=ft.NavigationRail(
                 selected_index=self.current_index,
-                label_type=ft.NavigationRailLabelType.ALL,
-                min_width=180,
+                label_type=ft.NavigationRailLabelType.NONE,  # Icons only, no labels
                 destinations=nav_rail_destinations,
                 on_change=self._on_nav_change,
-                bgcolor=ft.Colors.LIGHT_BLUE_200,  # DEBUG: Darker blue for rail
+                bgcolor=ft.Colors.GREY_300,
                 expand=True,  # Fill sidebar height - CRITICAL!
             ),
         )
 
-        # DEBUG: Content area - full height
+        # Content area - full height with scroll
+        # Content container has scroll so it always starts from top
         content_area = ft.Container(
-            content=self.content_container,
+            content=ft.Column(
+                [
+                    self.content_container,
+                ],
+                scroll=ft.ScrollMode.AUTO,  # Enable scroll for long configs
+                expand=True,
+                alignment=ft.MainAxisAlignment.START,  # Always start from top
+            ),
             expand=True,
-            bgcolor=ft.Colors.LIGHT_GREEN_100,  # DEBUG: Green for content area
         )
 
-        # DEBUG: Main content row - sidebar + content (full height)
+        # Main content row - sidebar + content (full height)
         content_row = ft.Row(
             [
                 sidebar,
@@ -137,7 +143,6 @@ class ConfigEditorView:
             ],
             spacing=0,
             expand=True,  # Full height available - CRITICAL!
-            # DEBUG: Pink background to see if Row expands properly
         )
 
         # Header with Back and Save buttons
@@ -174,7 +179,7 @@ class ConfigEditorView:
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
-        # DEBUG: Full-page layout - header + content row
+        # Full-page layout - header + content row
         # This Column MUST have expand=True to fill page and give bounded height to children
         return ft.Column(
             [
@@ -184,7 +189,6 @@ class ConfigEditorView:
             ],
             spacing=10,
             expand=True,  # Fill page height - CRITICAL!
-            # Wrapped in Container for debug visualization
         )
 
     def _on_nav_change(self, e: ft.ControlEvent) -> None:
@@ -229,8 +233,7 @@ class ConfigEditorView:
                 self.analyzer_fields["global"]["parallel"],
             ],
             spacing=10,
-            scroll=ft.ScrollMode.AUTO,
-            expand=True,
+            # No scroll/expand - parent content_area handles scrolling
         )
 
     def _create_analyzer_content(self, analyzer_id: str, metadata: Any) -> ft.Column | None:
@@ -321,8 +324,7 @@ class ConfigEditorView:
             return ft.Column(
                 controls,
                 spacing=10,
-                scroll=ft.ScrollMode.AUTO,
-                expand=True,
+                # No scroll/expand - parent content_area handles scrolling
             )
 
         except Exception as e:
