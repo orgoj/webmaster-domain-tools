@@ -15,6 +15,58 @@ This document provides comprehensive information about the project for AI assist
 - `cryptography` for SSL analysis
 - `pydantic` for configuration and data validation
 
+## ⚠️ CRITICAL: NEVER Use Base Flet Colors (GREEN, RED, ORANGE)
+
+**ABSOLUTE RULE: Base color names are FORBIDDEN. ALWAYS use shades (_700, _500, etc.)**
+
+### The Problem
+
+`ft.Colors.GREEN`, `ft.Colors.RED`, `ft.Colors.ORANGE` **DO NOT EXIST** in all Python builds!
+
+**Root cause discovered:**
+- Python 3.13.8 compiled with GCC → 381 colors (has GREEN)
+- Python 3.13.8 compiled with Clang → 380 colors (NO GREEN!)
+- Same Flet 0.28.3, same uv.lock → **different Colors enum!**
+
+### The Rule
+
+```python
+# ❌ FORBIDDEN - Will fail on Clang-compiled Python
+ft.Colors.GREEN
+ft.Colors.RED
+ft.Colors.ORANGE
+ft.Colors.BLUE
+ft.Colors.YELLOW
+
+# ✅ REQUIRED - Works everywhere
+ft.Colors.GREEN_700
+ft.Colors.RED_700
+ft.Colors.ORANGE_700
+ft.Colors.BLUE_700
+ft.Colors.YELLOW_700
+```
+
+### Why This Matters
+
+Different Python compilers (GCC vs Clang) produce different Flet builds. Base colors without shades are **UNRELIABLE** and will cause `AttributeError` on some systems.
+
+**Evidence:**
+- See `env_test/` for environment comparison tools
+- Claude (GCC): `ft.Colors.GREEN` exists
+- Michael (Clang): `ft.Colors.GREEN` does NOT exist
+- Both have identical Flet version and file hashes!
+
+### How to Check
+
+If you're unsure about a color, check it exists:
+
+```python
+# Check in your environment
+uv run python3 -c "import flet as ft; print(hasattr(ft.Colors, 'GREEN'))"
+```
+
+**Always use shades (_50, _100, _200, ..., _900) for guaranteed compatibility.**
+
 ## ⚠️ CRITICAL: Test-Driven Development Workflow
 
 **ALWAYS follow this workflow when making ANY code changes:**
