@@ -105,18 +105,22 @@ class ConfigEditorView:
                 )
             )
 
-        # Sidebar - narrow with icons only
+        # Sidebar - scrollable navigation with icons and labels below
         sidebar = ft.Container(
-            width=72,  # Narrow - icons only (standard min_width)
-            expand=True,  # Full height - CRITICAL for bounded height!
+            width=72,  # Fixed width for icons + labels below
             bgcolor=ft.Colors.GREY_300,
-            content=ft.NavigationRail(
-                selected_index=self.current_index,
-                label_type=ft.NavigationRailLabelType.NONE,  # Icons only, no labels
-                destinations=nav_rail_destinations,
-                on_change=self._on_nav_change,
-                bgcolor=ft.Colors.GREY_300,
-                expand=True,  # Fill sidebar height - CRITICAL!
+            content=ft.Column(
+                [
+                    ft.NavigationRail(
+                        selected_index=self.current_index,
+                        label_type=ft.NavigationRailLabelType.SELECTED,  # Show label only for selected item
+                        destinations=nav_rail_destinations,
+                        on_change=self._on_nav_change,
+                        bgcolor=ft.Colors.GREY_300,
+                    ),
+                ],
+                scroll=ft.ScrollMode.AUTO,  # Enable scroll when many items
+                alignment=ft.MainAxisAlignment.START,
             ),
         )
 
@@ -128,10 +132,8 @@ class ConfigEditorView:
                     self.content_container,
                 ],
                 scroll=ft.ScrollMode.AUTO,  # Enable scroll for long configs
-                expand=True,
                 alignment=ft.MainAxisAlignment.START,  # Always start from top
             ),
-            expand=True,
         )
 
         # Main content row - sidebar + content (full height)
