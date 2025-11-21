@@ -115,14 +115,23 @@ class ConfigEditorDialog:
 
         # Main layout: Row with nav rail on left, content on right
         # Pattern from official docs: Row([NavigationRail, Divider, Content], expand=True)
+        # DEBUG: Added different background colors to see layout hierarchy
         main_content = ft.Row(
             [
-                nav_rail,
+                ft.Container(
+                    content=nav_rail,
+                    bgcolor=ft.Colors.LIGHT_BLUE_100,  # DEBUG: Blue for nav area
+                    expand=False,  # Nav rail fixed width
+                ),
                 ft.VerticalDivider(width=1),
-                ft.Column(
-                    [
-                        self.content_container,
-                    ],
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            self.content_container,
+                        ],
+                        expand=True,
+                    ),
+                    bgcolor=ft.Colors.LIGHT_GREEN_100,  # DEBUG: Green for content area
                     expand=True,
                 ),
             ],
@@ -145,14 +154,16 @@ class ConfigEditorDialog:
             content=ft.Container(
                 content=ft.Column(
                     [
-                        main_content,
+                        main_content,  # This Row has expand=True
                         ft.Divider(),
-                        action_buttons,
+                        action_buttons,  # Fixed height
                     ],
                     spacing=10,
+                    expand=True,  # CRITICAL: Column must expand to distribute space properly
                 ),
                 width=1100,
                 height=700,
+                bgcolor=ft.Colors.YELLOW_100,  # DEBUG: Yellow for outer container
             ),
         )
 
