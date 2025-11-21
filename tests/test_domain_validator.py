@@ -416,18 +416,25 @@ def test_hide_expected_values_disabled():
 
 
 def test_path_traversal_protection():
-    """Test that path traversal attempts are sanitized and invalid chars rejected."""
+    """Test that path traversal attempts are REJECTED (not sanitized)."""
     analyzer = DomainConfigValidator()
 
-    # Paths with .. and // are sanitized (removed)
-    # The method removes these patterns rather than rejecting them
-    result1 = analyzer._sanitize_verification_path("/../../../etc/passwd")
-    assert ".." not in result1  # .. should be removed
+    # SECURITY FIX #2: Dangerous patterns are now REJECTED outright (more secure)
+    # Paths with .. should raise ValueError
+    with pytest.raises(ValueError, match="Path traversal detected"):
+        analyzer._sanitize_verification_path("/../../../etc/passwd")
 
-    result2 = analyzer._sanitize_verification_path("/path//with//double//slashes")
-    assert "//" not in result2  # // should be removed
+    with pytest.raises(ValueError, match="Path traversal detected"):
+        analyzer._sanitize_verification_path("/path/../etc/passwd")
 
-    # But invalid characters should raise ValueError
+    # Paths with // should raise ValueError
+    with pytest.raises(ValueError, match="Multiple consecutive slashes"):
+        analyzer._sanitize_verification_path("/path//with//double//slashes")
+
+    # Note: "..." contains ".." so it's caught by the earlier traversal check
+    # This is correct behavior - any pattern with ".." should be rejected
+
+    # Invalid characters should raise ValueError
     with pytest.raises(ValueError, match="Invalid verification path characters"):
         analyzer._sanitize_verification_path("/path/with spaces/file.txt")
 

@@ -213,28 +213,44 @@ class DomainConfigValidator:
         - Localhost/loopback
         - Private IP ranges (10.x, 172.16.x, 192.168.x)
         - Link-local addresses (169.254.x.x - AWS metadata!)
+        - IPv6 private/link-local/reserved addresses
         - Invalid formats
 
         Raises:
             ValueError: If domain is unsafe
         """
+        import ipaddress
         import re
 
-        # Reject IP addresses (IPv4)
-        if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", domain):
-            raise ValueError("IP addresses not allowed for security reasons")
+        # SECURITY FIX #3: Use ipaddress module for comprehensive IPv4/IPv6 validation
+        # Try to parse as IP address (IPv4 or IPv6)
+        try:
+            ip = ipaddress.ip_address(domain)
 
-        # Reject localhost/internal
-        if domain.lower() in ["localhost", "127.0.0.1", "::1"]:
+            # Reject all non-global IPs
+            if ip.is_loopback:
+                raise ValueError("Loopback addresses not allowed")
+            if ip.is_private:
+                raise ValueError("Private IP addresses not allowed")
+            if ip.is_link_local:
+                raise ValueError("Link-local addresses not allowed (AWS metadata protection)")
+            if ip.is_reserved:
+                raise ValueError("Reserved IP addresses not allowed")
+            if ip.is_multicast:
+                raise ValueError("Multicast addresses not allowed")
+
+            # If we got here, it's a global unicast IP - still reject for safety
+            raise ValueError("IP addresses not allowed for security reasons (use domain names)")
+
+        except ValueError as e:
+            # If it's our security error, re-raise
+            if "not allowed" in str(e):
+                raise
+            # Otherwise, it's not an IP address - continue with domain validation
+
+        # Reject localhost by name
+        if domain.lower() in ["localhost", "localhost.localdomain"]:
             raise ValueError("Localhost not allowed")
-
-        # Reject private IP ranges
-        if any(domain.startswith(prefix) for prefix in ["10.", "172.16.", "192.168."]):
-            raise ValueError("Private IP ranges not allowed")
-
-        # Reject link-local (AWS metadata, etc.)
-        if domain.startswith("169.254."):
-            raise ValueError("Link-local addresses not allowed")
 
         # Validate domain format
         domain_pattern = re.compile(
@@ -352,15 +368,59 @@ class DomainConfigValidator:
         result.failed_checks = result.total_checks - result.passed_checks
         result.overall_passed = result.failed_checks == 0
 
-        # 6. Populate errors/warnings lists
+        # 6. Populate errors/warnings lists with helpful hints
         for check in result.checks:
             if not check.passed:
                 # Sanitize message based on config
                 if config.hide_expected_values:
                     # Secure mode - don't leak expected infrastructure details
                     message = f"{check.check_name}: Validation failed"
+
+                    # Add helpful hints based on check type
+                    if check.check_type == "ip":
+                        message += (
+                            "\n  Hint: Check your DNS A/AAAA records point to the correct server"
+                        )
+                        message += "\n  Current: Your domain resolves to different IP(s)"
+                        message += (
+                            "\n  Debug: Run with HIDE_EXPECTED_VALUES=false to see expected values"
+                        )
+                    elif check.check_type == "ipv6":
+                        message += (
+                            "\n  Hint: Check your DNS AAAA records point to the correct server"
+                        )
+                        message += "\n  Current: Your domain resolves to different IPv6 address(es)"
+                        message += (
+                            "\n  Debug: Run with HIDE_EXPECTED_VALUES=false to see expected values"
+                        )
+                    elif check.check_type == "cdn":
+                        actual_cdn = (
+                            check.actual[0]
+                            if isinstance(check.actual, list) and check.actual
+                            else check.actual
+                        )
+                        message += "\n  Hint: Verify your domain uses the expected CDN provider"
+                        message += f"\n  Current: CDN detected: {actual_cdn}"
+                    elif check.check_type == "verification_file":
+                        message += f"\n  Hint: Upload verification file to your server at: {profile.verification_path}"
+                        actual_status = (
+                            check.actual[0]
+                            if isinstance(check.actual, list) and check.actual
+                            else check.actual
+                        )
+                        message += f"\n  Status: {actual_status}"
+                    elif check.check_type == "spf":
+                        message += "\n  Hint: Update SPF record in DNS TXT records"
+                        message += "\n  Current: Your SPF record is missing required includes"
+                    elif check.check_type == "dkim":
+                        message += "\n  Hint: Configure DKIM records for specified selectors"
+                        message += "\n  Current: DKIM selectors not found or invalid"
+                    elif check.check_type == "dmarc":
+                        message += "\n  Hint: Set DMARC policy in _dmarc.{domain} TXT record"
+                        message += "\n  Current: DMARC policy doesn't match requirements"
+
                     if check.details:
-                        message += f" - {check.details}"
+                        message += f"\n  Details: {check.details}"
                 else:
                     # Debug mode - show full details
                     expected_str = (
@@ -390,6 +450,10 @@ class DomainConfigValidator:
         """
         Sanitize verification path to prevent traversal attacks.
 
+        SECURITY: Don't try to sanitize - reject dangerous patterns outright!
+        The safest approach is to reject any path that contains dangerous patterns
+        rather than trying to clean them.
+
         Args:
             path: Verification file path
 
@@ -401,16 +465,49 @@ class DomainConfigValidator:
         """
         import re
 
-        # Remove dangerous patterns
-        path = path.replace("..", "").replace("//", "/")
+        # SECURITY FIX #2: Reject dangerous patterns outright (don't sanitize)
+        # Check for path traversal attempts BEFORE any modifications
+        if ".." in path:
+            raise ValueError("Path traversal detected: '..' not allowed")
+
+        # Check for multiple slashes (can bypass filters)
+        if "//" in path:
+            raise ValueError("Multiple consecutive slashes not allowed")
+
+        # Check for suspicious patterns
+        if "..." in path:
+            raise ValueError("Suspicious pattern detected: '...' not allowed")
+
+        # Check for null bytes
+        if "\0" in path or "%00" in path:
+            raise ValueError("Null byte detected in path")
 
         # Ensure starts with /
         if not path.startswith("/"):
             path = "/" + path
 
-        # Validate only contains safe characters
+        # Validate only contains safe characters (alphanumeric, /, _, -, .)
+        # Note: This must come AFTER adding leading / to avoid false rejection
         if not re.match(r"^/[a-zA-Z0-9/_.-]+$", path):
             raise ValueError(f"Invalid verification path characters: {path}")
+
+        # Additional validation: no suspicious single dot patterns
+        if "/./" in path or path.endswith("/."):
+            raise ValueError("Suspicious path pattern detected")
+
+        # Normalize path (remove redundant elements) but check it didn't change
+        import os.path
+
+        normalized = os.path.normpath(path)
+        # normpath removes leading /, so add it back
+        if not normalized.startswith("/"):
+            normalized = "/" + normalized
+
+        # If normalization changed the path, it contained dangerous elements
+        if normalized != path:
+            raise ValueError(
+                f"Path normalization changed path (dangerous patterns): {path} -> {normalized}"
+            )
 
         return path
 
@@ -544,15 +641,36 @@ class DomainConfigValidator:
 
         try:
             # Make HTTP request to check file with size limits
+            # SECURITY FIX #1: Disable redirects to prevent SSRF bypass
             with httpx.Client(
                 timeout=config.timeout,
-                follow_redirects=True,
+                follow_redirects=False,  # SECURITY: Disable redirects to prevent SSRF
                 verify=True,
                 limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
             ) as client:
                 response = client.get(full_url)
 
             status_code = response.status_code
+
+            # Handle redirects manually (security: don't follow them)
+            if status_code in (301, 302, 303, 307, 308):
+                redirect_location = response.headers.get("Location", "unknown")
+                result.checks.append(
+                    ValidationCheck(
+                        check_type="verification_file",
+                        check_name="Verification File",
+                        passed=False,
+                        expected=[f"{path} (status 200)"],
+                        actual=[f"Redirect to {redirect_location} (status {status_code})"],
+                        details=f"Verification file at {path} redirects (security: redirects not followed)",
+                        severity=severity,
+                    )
+                )
+                logger.warning(
+                    f"Verification file redirects to {redirect_location} - not following for security"
+                )
+                return
+
             passed = status_code == 200
 
             # Check content length before reading (prevent memory exhaustion)

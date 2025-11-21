@@ -506,6 +506,304 @@ def version() -> None:
         console.print("webmaster-domain-tool (version unknown)")
 
 
+@app.command()
+def create_validator_profile(
+    output: Annotated[
+        str,
+        typer.Option("--output", "-o", help="Output config file path"),
+    ] = "~/.webmaster-domain-tool.toml",
+) -> None:
+    """
+    Interactive wizard to create a domain validation profile.
+
+    Creates a profile with step-by-step guidance.
+
+    Example:
+        wdt create-validator-profile
+        wdt create-validator-profile --output ./my-config.toml
+    """
+    import tomli
+    import tomli_w
+
+    console.print("[bold blue]Domain Validator Profile Wizard[/bold blue]\n")
+
+    # Step 1: Profile ID
+    console.print("[cyan]Step 1: Profile Identity[/cyan]")
+    profile_id = typer.prompt("Profile ID (e.g., my-server, cloudflare-prod)", default="my-server")
+    profile_name = typer.prompt("Profile name (human-readable)", default="My Server")
+    description = typer.prompt("Description (optional)", default="", show_default=False)
+
+    # Step 2: Infrastructure type
+    console.print("\n[cyan]Step 2: Infrastructure Type[/cyan]")
+    console.print("1. Direct hosting (static IP addresses)")
+    console.print("2. CDN-based (Cloudflare, Fastly, etc.)")
+    console.print("3. Email-only validation (no web validation)")
+    infra_type = typer.prompt("Choose type", type=int, default=1)
+
+    profile: dict = {
+        "name": profile_name,
+    }
+    if description:
+        profile["description"] = description
+
+    # Step 3: Based on type, ask relevant questions
+    if infra_type == 1:
+        # Direct hosting
+        console.print("\n[cyan]Step 3: Server Configuration[/cyan]")
+        ipv4 = typer.prompt("IPv4 address(es) (comma-separated)", default="")
+        if ipv4:
+            profile["expected_ips"] = [ip.strip() for ip in ipv4.split(",")]
+
+        ipv6 = typer.prompt(
+            "IPv6 address(es) (optional, comma-separated)", default="", show_default=False
+        )
+        if ipv6:
+            profile["expected_ipv6"] = [ip.strip() for ip in ipv6.split(",")]
+
+        match_mode = typer.prompt(
+            "IP match mode (any=at least one matches, all=all must match)", default="any"
+        )
+        profile["ip_match_mode"] = match_mode
+
+    elif infra_type == 2:
+        # CDN
+        console.print("\n[cyan]Step 3: CDN Configuration[/cyan]")
+        console.print("Common CDN providers: cloudflare, fastly, akamai, cloudfront")
+        cdn = typer.prompt("Expected CDN provider", default="cloudflare")
+        profile["expected_cdn"] = cdn
+
+    # Step 4: Verification file (optional)
+    console.print("\n[cyan]Step 4: Verification File (Optional)[/cyan]")
+    add_verification = typer.confirm("Add verification file check?", default=False)
+    if add_verification:
+        verify_path = typer.prompt(
+            "Verification file path", default="/.well-known/verification.txt"
+        )
+        profile["verification_path"] = verify_path
+
+        verify_content = typer.prompt("Expected content (optional)", default="", show_default=False)
+        if verify_content:
+            profile["verification_content"] = verify_content
+
+    # Step 5: Email security (optional)
+    if infra_type != 3:
+        console.print("\n[cyan]Step 5: Email Security (Optional)[/cyan]")
+        add_email = typer.confirm("Add email security validation?", default=False)
+    else:
+        add_email = True
+
+    if add_email:
+        spf = typer.prompt(
+            "SPF includes (comma-separated, e.g., include:_spf.google.com)",
+            default="",
+            show_default=False,
+        )
+        if spf:
+            profile["spf_includes"] = [s.strip() for s in spf.split(",")]
+
+        dkim = typer.prompt(
+            "DKIM selectors (comma-separated, e.g., default,google)", default="", show_default=False
+        )
+        if dkim:
+            profile["dkim_selectors"] = [s.strip() for s in dkim.split(",")]
+
+        dmarc = typer.prompt(
+            "DMARC policy (none/quarantine/reject)", default="", show_default=False
+        )
+        if dmarc:
+            profile["dmarc_policy"] = dmarc
+
+    # Step 6: Save
+    console.print("\n[cyan]Step 6: Saving Profile[/cyan]")
+
+    # Build config structure
+    config_data: dict = {
+        "domain-validator": {
+            "enabled": True,
+            "active_profile": profile_id,
+            "strict_mode": True,
+            "hide_expected_values": True,
+            "profiles": {profile_id: profile},
+        }
+    }
+
+    # Expand ~ in output path
+    output_path = Path(output).expanduser()
+
+    # If file exists, merge; otherwise create new
+    if output_path.exists():
+        with open(output_path, "rb") as f:
+            existing = tomli.load(f)
+
+        # Merge profiles
+        if "domain-validator" in existing:
+            if "profiles" not in existing["domain-validator"]:
+                existing["domain-validator"]["profiles"] = {}
+            existing["domain-validator"]["profiles"][profile_id] = profile
+            existing["domain-validator"]["active_profile"] = profile_id
+        else:
+            existing["domain-validator"] = config_data["domain-validator"]
+
+        config_data = existing
+
+    # Write config
+    with open(output_path, "wb") as f:
+        tomli_w.dump(config_data, f)
+
+    console.print(f"\n[green]✓[/green] Profile '{profile_id}' created in {output_path}")
+    console.print("\n[bold]Next steps:[/bold]")
+    console.print(f"1. Review the profile: cat {output_path}")
+    console.print("2. Test it: wdt analyze example.com")
+    console.print(f"3. Edit if needed: wdt config  (or manually edit {output_path})")
+
+
+@app.command()
+def test_validator_profile(
+    domain: Annotated[str, typer.Argument(help="Domain to test against")],
+    profile: Annotated[str, typer.Option("--profile", "-p", help="Profile ID to test")],
+    config_file: Annotated[
+        Path | None,
+        typer.Option("--config", "-c", help="Config file path"),
+    ] = None,
+) -> None:
+    """
+    Test a validation profile without activating it.
+
+    This runs validation checks without setting the profile as active,
+    allowing you to test configurations before deployment.
+
+    Example:
+        wdt test-validator-profile example.com --profile my-server
+        wdt test-validator-profile example.com -p prod-config -c ./test.toml
+    """
+    console.print(f"[bold blue]Testing profile '{profile}' against {domain}[/bold blue]\n")
+
+    # Validate domain
+    domain = validate_domain(domain)
+
+    # Load config
+    config_manager = ConfigManager()
+    try:
+        if config_file:
+            config_manager.load_from_files(extra_paths=[config_file])
+        else:
+            config_manager.load_from_files()
+    except Exception as e:
+        console.print(f"[red]Error loading config: {e}[/red]")
+        raise typer.Exit(1)
+
+    # Get validator config
+    validator_config = config_manager.get_analyzer_config("domain-validator")
+
+    # Check profile exists
+    if profile not in validator_config.profiles:
+        console.print(f"[red]Error: Profile '{profile}' not found[/red]")
+        console.print(f"\nAvailable profiles: {', '.join(validator_config.profiles.keys())}")
+        raise typer.Exit(1)
+
+    # Temporarily set active profile
+    original_active = validator_config.active_profile
+    validator_config.active_profile = profile
+
+    # Run dependencies first
+    console.print("[dim]Running dependency analyzers...[/dim]")
+
+    context: dict[str, object] = {}
+
+    # Run DNS
+    try:
+        from .analyzers.dns_analyzer import DNSAnalyzer
+
+        dns_analyzer = DNSAnalyzer()
+        dns_config = config_manager.get_analyzer_config("dns")
+        dns_result = dns_analyzer.analyze(domain, dns_config)
+        context["dns"] = dns_result
+        console.print("  [green]✓[/green] DNS analysis complete")
+    except Exception as e:
+        console.print(f"  [red]✗[/red] DNS analysis failed: {e}")
+
+    # Run HTTP (if needed)
+    profile_obj = validator_config.profiles[profile]
+    if profile_obj.verification_path:
+        try:
+            from .analyzers.http_analyzer import HTTPAnalyzer
+
+            http_analyzer = HTTPAnalyzer()
+            http_config = config_manager.get_analyzer_config("http")
+            http_result = http_analyzer.analyze(domain, http_config)
+            context["http"] = http_result
+            console.print("  [green]✓[/green] HTTP analysis complete")
+        except Exception as e:
+            console.print(f"  [red]✗[/red] HTTP analysis failed: {e}")
+
+    # Run Email (if needed)
+    if profile_obj.spf_includes or profile_obj.dkim_selectors or profile_obj.dmarc_policy:
+        try:
+            from .analyzers.email_security import EmailSecurityAnalyzer
+
+            email_analyzer = EmailSecurityAnalyzer()
+            email_config = config_manager.get_analyzer_config("email")
+            email_result = email_analyzer.analyze(domain, email_config)
+            context["email"] = email_result
+            console.print("  [green]✓[/green] Email analysis complete")
+        except Exception as e:
+            console.print(f"  [red]✗[/red] Email analysis failed: {e}")
+
+    # Run CDN (if needed)
+    if profile_obj.expected_cdn:
+        try:
+            from .analyzers.cdn_detector import CDNDetector
+
+            cdn_analyzer = CDNDetector()
+            cdn_config = config_manager.get_analyzer_config("cdn")
+            cdn_result = cdn_analyzer.analyze(domain, cdn_config, context=context)
+            context["cdn"] = cdn_result
+            console.print("  [green]✓[/green] CDN analysis complete")
+        except Exception as e:
+            console.print(f"  [red]✗[/red] CDN analysis failed: {e}")
+
+    # Run validation
+    console.print(f"\n[bold]Testing profile: {profile_obj.name}[/bold]")
+
+    from .analyzers.domain_config_validator import DomainConfigValidator
+
+    validator = DomainConfigValidator()
+    result = validator.analyze(domain, validator_config, context)
+
+    # Display results
+    console.print("\n[bold]Results:[/bold]")
+
+    if result.profile_active:
+        passed = sum(1 for c in result.checks if c.passed)
+        failed = sum(1 for c in result.checks if not c.passed)
+        total = len(result.checks)
+
+        console.print(f"Checks: {passed} passed, {failed} failed (total: {total})")
+
+        # Show each check
+        for check in result.checks:
+            if check.passed:
+                console.print(f"  [green]✓[/green] {check.check_name}")
+            else:
+                console.print(f"  [red]✗[/red] {check.check_name}")
+                if check.details:
+                    console.print(f"      {check.details}")
+
+        # Overall
+        if result.overall_passed:
+            console.print("\n[green]✓ All checks passed![/green]")
+        else:
+            console.print(f"\n[red]✗ {failed} check(s) failed[/red]")
+            console.print(
+                f"\n[yellow]Tip:[/yellow] Run 'wdt analyze {domain} --verbosity verbose' for more details"
+            )
+    else:
+        console.print("[yellow]Profile not active or validation skipped[/yellow]")
+
+    # Restore original active profile
+    validator_config.active_profile = original_active
+
+
 # ============================================================================
 # Entry Point
 # ============================================================================
