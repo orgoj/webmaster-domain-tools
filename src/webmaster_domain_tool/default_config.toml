@@ -187,6 +187,46 @@ check_default_paths = true
 # Check manifest.json for PWA icons
 check_manifest = true
 
+# -----------------------------------------------------------------------------
+# Domain Configuration Validator
+# -----------------------------------------------------------------------------
+# Validates domain configuration against infrastructure profiles.
+# Disabled by default - requires explicit profile activation.
+# Uncomment and configure to enable validation for your infrastructure.
+[domain-validator]
+enabled = true
+# Name of active profile to use (empty = skip validation)
+active_profile = ""
+# Strict mode: all checks must pass (vs. warnings for failures)
+strict_mode = true
+# Hide expected values in error messages (security: prevents infrastructure disclosure)
+hide_expected_values = true
+
+# Example profile: Web server infrastructure
+# [domain-validator.profiles.web-server-1]
+# name = "Production Web Server"
+# description = "Main web infrastructure on dedicated server"
+# expected_ips = ["203.0.113.10", "203.0.113.11"]
+# expected_ipv6 = ["2001:db8::1"]
+# ip_match_mode = "any"  # "any" or "all"
+# verification_path = "/.well-known/server-verification.txt"
+# verification_content = "web-server-1-token-abc123"
+# spf_includes = ["include:_spf.example.com"]
+# spf_ip4 = ["ip4:203.0.113.10"]
+# spf_match_mode = "all"
+# dkim_selectors = ["default", "backup"]
+# dkim_match_mode = "all"
+# dmarc_policy = "quarantine"
+# dmarc_percentage = 100
+
+# Example profile: Cloudflare CDN setup
+# [domain-validator.profiles.cloudflare-cdn]
+# name = "Cloudflare CDN Setup"
+# description = "Domain proxied through Cloudflare"
+# expected_cdn = "cloudflare"
+# spf_includes = ["include:_spf.google.com"]
+# dkim_selectors = ["google"]
+
 # =============================================================================
 # Usage Notes
 # =============================================================================

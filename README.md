@@ -119,6 +119,26 @@ Comprehensive tool for webmasters that analyzes and clearly displays all importa
   - Missing favicon.ico
   - Favicon conflicts (default path vs HTML)
 
+### Domain Configuration Validator
+- ✅ **Multi-profile infrastructure validation**
+  - IP address validation (IPv4/IPv6) with flexible matching modes
+  - CDN provider detection and validation
+  - Verification file checking (for ownership proof)
+  - Email security validation (SPF, DKIM, DMARC requirements)
+  - Multi-profile support for different server configurations
+- ✅ **Security-hardened implementation**
+  - SSRF protection (rejects IP addresses, localhost, private networks)
+  - Path traversal prevention for verification paths
+  - Response size limits (1MB max) to prevent resource exhaustion
+  - Infrastructure detail hiding to prevent information disclosure
+- ✅ **Flexible match modes**
+  - `any` mode - at least one expected value must match
+  - `all` mode - all expected values must match
+  - Per-check configuration (IPs, CDN, email security)
+- ✅ **Configurable strict/warning mode**
+  - Strict mode - failures are errors
+  - Warning mode - failures are warnings only
+
 ### RBL (Realtime Blacklist) Check
 - ✅ IP address blacklist checking
 - ✅ Support for major RBL services
@@ -462,6 +482,20 @@ timeout = 10.0
 check_html = true
 check_default_paths = true
 check_manifest = true
+
+[domain-validator]
+enabled = true
+active_profile = ""  # Profile to use (empty = skip)
+strict_mode = true  # Errors vs warnings for failures
+hide_expected_values = true  # Security: hide infrastructure details
+
+# Example: Web server profile
+[domain-validator.profiles.web-server]
+name = "Production Web Server"
+expected_ips = ["203.0.113.10"]
+verification_path = "/.well-known/verify.txt"
+spf_includes = ["include:_spf.example.com"]
+dkim_selectors = ["default"]
 ```
 
 ### Options
@@ -566,6 +600,7 @@ wdt analyze -v debug example.com
 - `cdn` - CDN detection
 - `seo-files` - robots.txt, sitemap.xml, llms.txt
 - `favicon` - Favicon analysis
+- `domain-validator` - Domain configuration validation against infrastructure profiles
 
 ```bash
 # Skip single analyzer
@@ -711,6 +746,79 @@ When enabled, these RBL servers are checked by default:
 ```bash
 # Disable colored output
 wdt analyze --no-color example.com
+```
+
+### Domain Configuration Validation
+
+Validate that a domain is correctly configured for your infrastructure:
+
+```bash
+# Configure validation profile in config file
+cat > ~/.webmaster-domain-tool.toml <<EOF
+[domain-validator]
+enabled = true
+active_profile = "my-server"
+
+[domain-validator.profiles.my-server]
+name = "Production Server"
+expected_ips = ["203.0.113.10"]
+spf_includes = ["include:_spf.google.com"]
+dkim_selectors = ["google"]
+EOF
+
+# Run validation
+wdt analyze example.com
+```
+
+**Profile Options:**
+- `expected_ips` / `expected_ipv6` - Expected IP addresses
+- `expected_cdn` - Expected CDN provider (Cloudflare, Fastly, etc.)
+- `verification_path` - File to check for ownership proof (e.g., `/.well-known/verify.txt`)
+- `verification_content` - Expected file content (optional)
+- `spf_includes` - Required SPF includes (e.g., `["include:_spf.google.com"]`)
+- `spf_ips` - Required SPF IP addresses
+- `dkim_selectors` - Required DKIM selectors (e.g., `["google", "default"]`)
+- `dmarc_policy` - Required DMARC policy (e.g., `"quarantine"`)
+- Match modes: `any` (at least one) or `all` (all must match)
+
+**Security Features:**
+- SSRF protection (rejects IP addresses, localhost, private networks in domain field)
+- Path traversal protection (validates verification paths)
+- Response size limits (1MB max to prevent resource exhaustion)
+- Infrastructure detail hiding (prevents information disclosure when `hide_expected_values = true`)
+
+**Example: Multiple Profiles**
+
+```toml
+[domain-validator]
+enabled = true
+active_profile = "cloudflare-prod"
+strict_mode = true  # Errors vs warnings for failures
+hide_expected_values = true  # Security: hide infrastructure details
+
+# Cloudflare production server
+[domain-validator.profiles.cloudflare-prod]
+name = "Cloudflare Production"
+expected_cdn = "Cloudflare"
+spf_includes = ["include:_spf.google.com"]
+dkim_selectors = ["google"]
+dmarc_policy = "quarantine"
+
+# Direct hosting on VPS
+[domain-validator.profiles.vps-server]
+name = "VPS Server"
+expected_ips = ["203.0.113.10"]
+expected_ipv6 = ["2001:db8::1"]
+verification_path = "/.well-known/ownership.txt"
+verification_content = "my-secret-token-123"
+spf_ips = ["203.0.113.10"]
+dkim_selectors = ["default"]
+
+# Testing environment
+[domain-validator.profiles.testing]
+name = "Test Environment"
+expected_ips = ["198.51.100.5"]
+strict_mode = false  # Use warnings instead of errors
 ```
 
 ### Complex Usage Examples

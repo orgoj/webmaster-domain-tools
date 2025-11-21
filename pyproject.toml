@@ -1,6 +1,6 @@
 [project]
 name = "webmaster-domain-tool"
-version = "1.1.0"
+version = "1.2.0"
 description = "Comprehensive domain analysis tool for webmasters"
 readme = "README.md"
 requires-python = ">=3.13"
