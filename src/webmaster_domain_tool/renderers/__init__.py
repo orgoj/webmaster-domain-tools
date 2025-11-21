@@ -6,7 +6,8 @@ from analyzer implementations.
 """
 
 from .base import BaseRenderer
+from .bulk_jsonlines_renderer import BulkJSONLinesRenderer
 from .cli_renderer import CLIRenderer
 from .json_renderer import JSONRenderer
 
-__all__ = ["BaseRenderer", "CLIRenderer", "JSONRenderer"]
+__all__ = ["BaseRenderer", "BulkJSONLinesRenderer", "CLIRenderer", "JSONRenderer"]

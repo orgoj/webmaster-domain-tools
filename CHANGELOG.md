@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2025-01-21
+
+### Added
+
+- **Bulk Domain Analysis**
+  - New `--domain-file` parameter for analyzing multiple domains from file or stdin
+  - Support for stdin input via `--domain-file -`
+  - JSON Lines output format (`--format jsonlines`) for streaming bulk results
+  - Each domain outputs one JSON object per line (JSON Lines standard)
+  - Domains analyzed independently - one failure doesn't stop processing
+  - Easy to process with tools like `jq`, `grep`, or custom scripts
+  - Compatible with all existing analyzers and configuration options
+  - Examples:
+    - `wdt analyze --domain-file domains.txt --format jsonlines`
+    - `cat domains.txt | wdt analyze --domain-file - --format jsonlines`
+    - `wdt analyze --domain-file domains.txt --only html --format jsonlines`
+
+### Changed
+
+- CLI `analyze` command now accepts optional `domain` argument when `--domain-file` is used
+- Added `BulkJSONLinesRenderer` for efficient streaming output
+- Refactored analyzer execution into reusable helper functions
+
 ## [1.0.0] - 2025-01-20
 
 **BREAKING CHANGES - MAJOR ARCHITECTURE REFACTORING**
