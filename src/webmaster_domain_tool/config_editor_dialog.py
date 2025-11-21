@@ -102,32 +102,22 @@ class ConfigEditorDialog:
                 )
             )
 
-        # Wrap NavigationRail in scrollable column for long lists
-        nav_rail = ft.Column(
-            [
-                ft.NavigationRail(
-                    selected_index=self.current_index,
-                    label_type=ft.NavigationRailLabelType.ALL,
-                    min_width=180,
-                    destinations=nav_rail_destinations,
-                    on_change=self._on_nav_change,
-                    bgcolor=ft.Colors.GREY_300,
-                    expand=True,  # Fix: NavigationRail needs expand for bounded height
-                ),
-            ],
-            scroll=ft.ScrollMode.AUTO,
-            expand=True,
+        # NavigationRail - directly in Row per official pattern
+        nav_rail = ft.NavigationRail(
+            selected_index=self.current_index,
+            label_type=ft.NavigationRailLabelType.ALL,
+            min_width=180,
+            min_extended_width=200,
+            destinations=nav_rail_destinations,
+            on_change=self._on_nav_change,
+            bgcolor=ft.Colors.GREY_300,
         )
 
         # Main layout: Row with nav rail on left, content on right
+        # Pattern from official docs: Row([NavigationRail, Divider, Content], expand=True)
         main_content = ft.Row(
             [
-                ft.Container(
-                    content=nav_rail,
-                    width=200,
-                    bgcolor=ft.Colors.GREY_300,
-                    expand=True,  # CRITICAL: Container must expand for NavigationRail height
-                ),
+                nav_rail,
                 ft.VerticalDivider(width=1),
                 ft.Column(
                     [
