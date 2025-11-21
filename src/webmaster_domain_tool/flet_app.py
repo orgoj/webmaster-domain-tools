@@ -405,6 +405,9 @@ class DomainAnalyzerApp:
 
     def _switch_to_main_view(self) -> None:
         """Switch to main analysis view."""
+        # Re-enable scroll for main view (needed for long analysis results)
+        self.page.scroll = ft.ScrollMode.AUTO
+
         self.current_view_content.content = self._build_main_view()
         self.page.update()
 
@@ -420,6 +423,10 @@ class DomainAnalyzerApp:
             on_cancel=self._switch_to_main_view,
             theme=self.theme,
         )
+
+        # CRITICAL: Disable page scroll for config view to provide bounded height
+        # Without this, NavigationRail has unbounded height error
+        self.page.scroll = None
 
         self.current_view_content.content = config_view.build()
         self.page.update()
