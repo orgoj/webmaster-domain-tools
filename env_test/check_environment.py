@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Environment diagnostic script for debugging ft.Colors.GREEN issue."""
 
+import argparse
 import hashlib
 import json
 import platform
@@ -19,8 +20,12 @@ def get_file_hash(filepath: Path) -> str:
         return f"ERROR: {e}"
 
 
-def main():
-    """Collect environment information."""
+def main(user="claude"):
+    """Collect environment information.
+
+    Args:
+        user: Either 'claude' or 'michael' to determine output directory
+    """
     env_info = {}
 
     # Python info
@@ -118,11 +123,16 @@ def main():
         env_info["packages_error"] = str(e)
 
     # Save to file
-    output_file = Path(__file__).parent / "environment.json"
+    output_dir = Path(__file__).parent / user
+    output_dir.mkdir(exist_ok=True)
+    output_file = output_dir / "environment.json"
     with open(output_file, "w") as f:
         json.dump(env_info, f, indent=2, default=str)
 
-    print(f"Environment info saved to: {output_file}")
+    print(f"\n{'='*60}")
+    print(f"Environment snapshot for: {user.upper()}")
+    print(f"Saved to: {output_file}")
+    print(f"{'='*60}")
     print("\n=== Key Information ===")
     print(f"Python: {env_info['python']['version']}")
     print(f"Platform: {env_info['platform']['system']} {env_info['platform']['release']}")
@@ -137,4 +147,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Generate environment snapshot for debugging")
+    parser.add_argument(
+        "--user",
+        choices=["claude", "michael"],
+        default="claude",
+        help="User name (determines output directory)",
+    )
+    args = parser.parse_args()
+    main(user=args.user)
