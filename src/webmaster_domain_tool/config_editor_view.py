@@ -105,29 +105,30 @@ class ConfigEditorView:
                 )
             )
 
-        # Sidebar Container with NavigationRail (full height)
+        # DEBUG: Sidebar Container with NavigationRail (full height)
         sidebar = ft.Container(
             width=200,  # Fixed width
-            expand=True,  # Full height
-            bgcolor=ft.Colors.GREY_300,
+            expand=True,  # Full height - CRITICAL for bounded height!
+            bgcolor=ft.Colors.LIGHT_BLUE_100,  # DEBUG: Blue for nav sidebar
             content=ft.NavigationRail(
                 selected_index=self.current_index,
                 label_type=ft.NavigationRailLabelType.ALL,
                 min_width=180,
                 destinations=nav_rail_destinations,
                 on_change=self._on_nav_change,
-                bgcolor=ft.Colors.GREY_300,
-                expand=True,  # Fill sidebar height
+                bgcolor=ft.Colors.LIGHT_BLUE_200,  # DEBUG: Darker blue for rail
+                expand=True,  # Fill sidebar height - CRITICAL!
             ),
         )
 
-        # Content area - full height
+        # DEBUG: Content area - full height
         content_area = ft.Container(
             content=self.content_container,
             expand=True,
+            bgcolor=ft.Colors.LIGHT_GREEN_100,  # DEBUG: Green for content area
         )
 
-        # Main content row - sidebar + content (full height)
+        # DEBUG: Main content row - sidebar + content (full height)
         content_row = ft.Row(
             [
                 sidebar,
@@ -135,7 +136,8 @@ class ConfigEditorView:
                 content_area,
             ],
             spacing=0,
-            expand=True,  # Full height available
+            expand=True,  # Full height available - CRITICAL!
+            # DEBUG: Pink background to see if Row expands properly
         )
 
         # Header with Back and Save buttons
@@ -172,7 +174,8 @@ class ConfigEditorView:
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
-        # Full-page layout - header + content row
+        # DEBUG: Full-page layout - header + content row
+        # This Column MUST have expand=True to fill page and give bounded height to children
         return ft.Column(
             [
                 header,
@@ -180,7 +183,8 @@ class ConfigEditorView:
                 content_row,
             ],
             spacing=10,
-            expand=True,  # Fill page height
+            expand=True,  # Fill page height - CRITICAL!
+            # Wrapped in Container for debug visualization
         )
 
     def _on_nav_change(self, e: ft.ControlEvent) -> None:
