@@ -117,71 +117,17 @@ def foo(callback: Callable[[str], None]) -> None:  # ✅ Proper type hint
 
 **Remember: If there's no test, the feature doesn't exist.**
 
-## ⚠️ CRITICAL: Always Delete Dead Code During Redesign
+## ⚠️ CRITICAL: Delete Dead Code Immediately
 
-**NEVER leave old unused code around "just in case" - that's what Git history is for!**
+**When redesigning: DELETE OLD CODE RIGHT AWAY! Git is for history.**
 
-### The Rule
+Checklist when replacing code:
+1. `git rm old_file.py`
+2. `grep -r "old_module" .` - find all references
+3. Update imports, tests, scripts
+4. Commit together: new + deletion + updates
 
-**When redesigning or refactoring, IMMEDIATELY delete all old code that's no longer used.**
-
-### Why This Matters
-
-- **Confusion**: Other developers (or AI assistants) waste time editing the wrong file
-- **Debugging hell**: Bugs appear to be fixed in dead code, but still occur in production
-- **Technical debt**: Unused code accumulates and makes codebase hard to navigate
-- **False security**: "Keeping it as backup" is pointless - Git has the history
-
-### Example: Config Editor Redesign
-
-**BAD (what happened):**
-```python
-# Created new file: config_editor_view.py (full-page view)
-# Left old file: config_editor_dialog.py (popup dialog) ❌ NOT DELETED!
-# Result: Half day wasted editing wrong file during debugging
-```
-
-**GOOD (correct approach):**
-```python
-# 1. Create new file: config_editor_view.py
-# 2. Update imports: flet_app.py uses new view
-# 3. IMMEDIATELY delete: config_editor_dialog.py
-# 4. IMMEDIATELY update: tests, scripts, any references
-# 5. Commit together: new code + deleted old code + updated references
-```
-
-### Checklist When Replacing Code
-
-When you replace/redesign a module:
-
-1. ✅ **Delete the old file** - `git rm old_file.py`
-2. ✅ **Find all references** - `grep -r "old_module" .`
-3. ✅ **Update imports** - everywhere that imported old code
-4. ✅ **Update tests** - test files that imported old code
-5. ✅ **Update scripts** - CI scripts, pre-commit hooks, etc.
-6. ✅ **Commit everything together** - deletion + updates in one commit
-
-### Commands to Find References
-
-```bash
-# Find all Python imports of a module
-grep -r "from.*old_module import\|import.*old_module" --include="*.py"
-
-# Find all mentions in any file
-grep -r "old_module" .
-
-# Check git for who's using it
-git grep "old_module"
-```
-
-### If You Need to Reference Old Code
-
-If you really need to see old implementation:
-- Use `git log` and `git show` to view history
-- Create a `docs/archive/` folder with markdown notes (NOT CODE!)
-- Link to specific Git commits in comments
-
-**Never keep executable dead code "for reference".**
+Never keep dead code "for reference" - use `git log` instead.
 
 ## Architecture
 
