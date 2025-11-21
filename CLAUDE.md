@@ -7,6 +7,7 @@
 - **Jasný** - přímé instrukce, ne vágní rady
 - **Důrazný** - pravidla, ne návrhy
 - **Bez duplicit** - před přidáním ZKONTROLUJ, že to tam už není
+- **Bez číslování nadpisů** - NIKDY `### 1. Foo`, vždy jen `### Foo` (při úpravách by ses musel přečíslovávat)
 
 **Když přidáváš do CLAUDE.md:**
 1. Vyhledej zda to tam už není (`grep`, `Ctrl+F`)
@@ -225,7 +226,7 @@ src/webmaster_domain_tool/
 
 ## Key Design Decisions
 
-### 1. Protocol-Based Plugin System
+### Protocol-Based Plugin System
 
 **Design Philosophy:** Analyzers use Python's `@runtime_checkable Protocol` instead of class inheritance.
 
@@ -260,7 +261,7 @@ class MyNewAnalyzer:
         ...
 ```
 
-### 2. Semantic Output Styling (Theme-Agnostic)
+### Semantic Output Styling (Theme-Agnostic)
 
 **Critical Concept:** Analyzers define WHAT to show, not HOW to show it.
 
@@ -291,7 +292,7 @@ The renderer (`CLIRenderer`, `JSONRenderer`) interprets semantic styles:
 - Future HTML: Maps to CSS classes
 - Future GUI: Can switch themes without code changes
 
-### 3. Error/Warning Tracking in Renderers
+### Error/Warning Tracking in Renderers
 
 Renderers track errors/warnings from `OutputDescriptor` rows:
 
@@ -308,7 +309,7 @@ def collect_errors_warnings(self, descriptor: OutputDescriptor, category: str):
 
 This ensures 100% accurate counting - the summary count always matches displayed messages.
 
-### 2. DNS CNAME/A Record Rule
+### DNS CNAME/A Record Rule
 
 **DNS Fundamental Rule:** A domain with a CNAME record CANNOT have A/AAAA records at the same level.
 
@@ -326,7 +327,7 @@ if cname_key in result.records and result.records[cname_key]:
         del result.records[f"{domain}:A"]
 ```
 
-### 3. WWW CNAME Best Practice Warning
+### WWW CNAME Best Practice Warning
 
 Optional feature (`warn_www_not_cname`) that warns when www subdomain uses direct A/AAAA records instead of CNAME.
 
@@ -341,7 +342,7 @@ Implementation:
 - CLI: `--warn-www-not-cname` / `--no-warn-www-not-cname`
 - Check in `DNSAnalyzer._check_www_cname()`
 
-### 4. Per-Analyzer Configuration (Isolated)
+### Per-Analyzer Configuration (Isolated)
 
 **Each analyzer has its own configuration section** in TOML:
 
@@ -378,7 +379,7 @@ class DNSConfig(AnalyzerConfig):
     check_dnssec: bool = Field(default=True)
 ```
 
-### 5. Dependency Resolution
+### Dependency Resolution
 
 The registry automatically resolves analyzer execution order:
 
@@ -395,7 +396,7 @@ The CLI uses topological sort to ensure correct order:
 
 Circular dependencies are detected and reported as errors.
 
-### 6. Output Verbosity Levels
+### Output Verbosity Levels
 
 Controlled via `VerbosityLevel` enum:
 - **QUIET**: Minimal output (custom summary functions)
