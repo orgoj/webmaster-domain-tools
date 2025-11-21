@@ -1,22 +1,52 @@
-"""Universal site verification analyzer - supports Google, Facebook, Pinterest, etc."""
+"""Universal site verification analyzer - supports Google, Facebook, Pinterest, etc.
+
+This analyzer detects site verification codes from meta tags, DNS TXT records,
+and HTML files. It supports multiple verification services (Google, Bing, Facebook, etc.)
+and can auto-detect verification IDs. Also includes legacy Google tracking code detection.
+"""
 
 import logging
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 import dns.exception
 import dns.resolver
 import httpx
+from pydantic import Field
 
-from ..constants import (
-    DEFAULT_SITE_VERIFICATION_TIMEOUT,
-    DEFAULT_USER_AGENT,
-    TRACKING_PATTERNS,
-)
+from ..constants import DEFAULT_USER_AGENT, TRACKING_PATTERNS
+from ..core.registry import registry
 from .base import BaseAnalysisResult, BaseAnalyzer
 from .dns_utils import create_resolver
+from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+
+class VerificationConfig(AnalyzerConfig):
+    """Site verification analyzer configuration."""
+
+    services: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of verification service configurations (ServiceConfig as dicts)",
+    )
+    user_agent: str = Field(
+        default=DEFAULT_USER_AGENT, description="User agent string for HTTP requests"
+    )
+    nameservers: list[str] | None = Field(
+        default=None, description="DNS nameservers to use for verification checks"
+    )
+
+
+# ============================================================================
+# Service Configuration & Result Models
+# ============================================================================
 
 
 @dataclass
@@ -74,28 +104,65 @@ class SiteVerificationAnalysisResult(BaseAnalysisResult):
     tracking_codes: list[TrackingCode] = field(default_factory=list)
 
 
-class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
-    """Universal site verification analyzer supporting multiple services (Google, Facebook, Pinterest, etc)."""
+# ============================================================================
+# Analyzer Implementation
+# ============================================================================
 
-    def __init__(
-        self,
-        services: list[ServiceConfig] | None = None,
-        timeout: float = DEFAULT_SITE_VERIFICATION_TIMEOUT,
-        user_agent: str | None = None,
-        nameservers: list[str] | None = None,
-    ):
+
+@registry.register
+class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
+    """
+    Universal site verification analyzer supporting multiple services.
+
+    Detects verification codes from Google, Bing, Facebook, Pinterest, and other
+    services via meta tags, DNS TXT records, and HTML files. Also detects Google
+    tracking codes (GTM, GA4, etc.).
+
+    This analyzer is completely self-contained - it declares its own:
+    - Configuration schema (VerificationConfig)
+    - Output formatting (via describe_output)
+    - JSON serialization (via to_dict)
+    - Metadata
+    """
+
+    # ========================================================================
+    # Required Metadata
+    # ========================================================================
+
+    analyzer_id = "verification"
+    name = "Site Verification"
+    description = "Detect site verification codes and tracking codes"
+    category = "seo"
+    icon = "check"
+    config_class = VerificationConfig
+    depends_on = ["http"]  # Needs HTTP result for final URL
+
+    def __init__(self):
         """
         Initialize site verification analyzer.
 
-        Args:
-            services: List of service configurations to check
-            timeout: HTTP request timeout in seconds
-            user_agent: Custom user agent string
-            nameservers: DNS nameservers to use
+        Configuration is passed to analyze() method per new protocol.
+        Internal state is initialized on each analyze() call.
         """
-        self.services = services or []
-        self.timeout = timeout
-        self.user_agent = user_agent or DEFAULT_USER_AGENT
+        pass
+
+    def analyze(self, domain: str, config: VerificationConfig) -> SiteVerificationAnalysisResult:
+        """
+        Perform comprehensive site verification analysis for all configured services.
+
+        Args:
+            domain: The domain to analyze
+            config: Verification analyzer configuration
+
+        Returns:
+            SiteVerificationAnalysisResult with verification and tracking information
+        """
+        logger.info(f"Starting site verification analysis for {domain}")
+        result = SiteVerificationAnalysisResult(domain=domain)
+
+        # Initialize instance variables from config
+        self.timeout = config.timeout
+        self.user_agent = config.user_agent
 
         # Precompile regex patterns for tracking codes (Google specific - legacy)
         self.compiled_tracking_patterns = {
@@ -104,31 +171,22 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
         }
 
         # Create DNS resolver using centralized utility
-        self.resolver = create_resolver(nameservers=nameservers, timeout=timeout)
+        self.resolver = create_resolver(nameservers=config.nameservers, timeout=config.timeout)
 
-    def analyze(self, domain: str, url: str | None = None) -> SiteVerificationAnalysisResult:
-        """
-        Perform comprehensive site verification analysis for all configured services.
-
-        Args:
-            domain: The domain to analyze
-            url: Optional specific URL to fetch (e.g., final URL from redirects).
-                 If not provided, will construct URL from domain.
-
-        Returns:
-            SiteVerificationAnalysisResult with verification and tracking information
-        """
-        logger.info(f"Starting site verification analysis for {domain}")
-        result = SiteVerificationAnalysisResult(domain=domain)
+        # Convert service dicts to ServiceConfig objects
+        services = []
+        for service_dict in config.services:
+            services.append(ServiceConfig(**service_dict))
 
         # Normalize domain
         domain = domain.rstrip(".")
 
         # Fetch HTML content once (will be used for multiple checks)
-        self._fetch_html_content(domain, result, preferred_url=url)
+        # TODO: Get final URL from HTTP analyzer via context
+        self._fetch_html_content(domain, result, preferred_url=None)
 
         # Process each service
-        for service_config in self.services:
+        for service_config in services:
             service_result = self._analyze_service(domain, service_config, result)
             result.service_results.append(service_result)
 
@@ -607,3 +665,190 @@ class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
                 return "HTML body"
 
         return "HTML"
+
+    # ========================================================================
+    # Required Protocol Methods
+    # ========================================================================
+
+    def describe_output(self, result: SiteVerificationAnalysisResult) -> OutputDescriptor:
+        """
+        Describe how to render this analyzer's output.
+
+        Uses semantic styling (theme-agnostic) - no hardcoded colors.
+
+        Args:
+            result: Site verification analysis result
+
+        Returns:
+            OutputDescriptor with semantic styling
+        """
+        descriptor = OutputDescriptor(title=self.name, category=self.category)
+
+        # Quiet mode summary
+        def quiet_summary(r: SiteVerificationAnalysisResult) -> str:
+            total_verified = sum(
+                len([v for v in sr.verification_results if v.found]) for sr in r.service_results
+            )
+            total_detected = sum(len(sr.detected_verification_ids) for sr in r.service_results)
+            if total_verified > 0 or total_detected > 0:
+                return f"Verification: {total_verified} verified, {total_detected} detected"
+            return "Verification: None"
+
+        descriptor.quiet_summary = quiet_summary
+
+        # HTML fetch error
+        if result.html_fetch_error:
+            descriptor.add_row(
+                label="HTML Fetch",
+                value=f"Failed: {result.html_fetch_error}",
+                style_class="warning",
+                severity="warning",
+                icon="warning",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Service results
+        for service_result in result.service_results:
+            section_name = f"{service_result.service} Verification"
+
+            # Configured verification IDs
+            if service_result.verification_results:
+                for verification in service_result.verification_results:
+                    if verification.found:
+                        methods_str = ", ".join(verification.methods)
+                        descriptor.add_row(
+                            label=verification.verification_id,
+                            value=f"Verified via {methods_str}",
+                            style_class="success",
+                            severity="info",
+                            icon="check",
+                            section_name=section_name,
+                            verbosity=VerbosityLevel.NORMAL,
+                        )
+                    else:
+                        descriptor.add_row(
+                            label=verification.verification_id,
+                            value="Not found",
+                            style_class="error",
+                            severity="error",
+                            icon="cross",
+                            section_name=section_name,
+                            verbosity=VerbosityLevel.VERBOSE,
+                        )
+
+            # Auto-detected verification IDs
+            if service_result.detected_verification_ids:
+                for verification in service_result.detected_verification_ids:
+                    methods_str = ", ".join(verification.methods)
+                    descriptor.add_row(
+                        label=f"Detected: {verification.verification_id}",
+                        value=f"Found via {methods_str}",
+                        style_class="info",
+                        severity="info",
+                        icon="info",
+                        section_name=section_name,
+                        subsection="Auto-detected",
+                        verbosity=VerbosityLevel.NORMAL,
+                    )
+
+        # Tracking codes (legacy Google-specific)
+        if result.tracking_codes:
+            for tracking_code in result.tracking_codes:
+                descriptor.add_row(
+                    label=tracking_code.name,
+                    value=f"{tracking_code.code} ({tracking_code.location})",
+                    style_class="info",
+                    severity="info",
+                    icon="info",
+                    section_name="Tracking Codes",
+                    verbosity=VerbosityLevel.NORMAL,
+                )
+
+        # Errors
+        for error in result.errors:
+            descriptor.add_row(
+                value=error,
+                section_type="text",
+                style_class="error",
+                severity="error",
+                icon="cross",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Warnings
+        for warning in result.warnings:
+            descriptor.add_row(
+                value=warning,
+                section_type="text",
+                style_class="warning",
+                severity="warning",
+                icon="warning",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        return descriptor
+
+    def to_dict(self, result: SiteVerificationAnalysisResult) -> dict[str, Any]:
+        """
+        Serialize result to JSON-compatible dictionary.
+
+        Args:
+            result: Site verification analysis result
+
+        Returns:
+            JSON-serializable dict
+        """
+        # Convert service results
+        service_results_dict = []
+        for service_result in result.service_results:
+            verification_results_dict = []
+            for verification in service_result.verification_results:
+                verification_results_dict.append(
+                    {
+                        "service": verification.service,
+                        "verification_id": verification.verification_id,
+                        "found": verification.found,
+                        "methods": verification.methods,
+                        "errors": verification.errors,
+                    }
+                )
+
+            detected_ids_dict = []
+            for verification in service_result.detected_verification_ids:
+                detected_ids_dict.append(
+                    {
+                        "service": verification.service,
+                        "verification_id": verification.verification_id,
+                        "found": verification.found,
+                        "methods": verification.methods,
+                        "errors": verification.errors,
+                    }
+                )
+
+            service_results_dict.append(
+                {
+                    "service": service_result.service,
+                    "verification_results": verification_results_dict,
+                    "detected_verification_ids": detected_ids_dict,
+                }
+            )
+
+        # Convert tracking codes
+        tracking_codes_dict = []
+        for tracking_code in result.tracking_codes:
+            tracking_codes_dict.append(
+                {
+                    "name": tracking_code.name,
+                    "code": tracking_code.code,
+                    "location": tracking_code.location,
+                }
+            )
+
+        return {
+            "domain": result.domain,
+            "html_fetch_error": result.html_fetch_error,
+            "service_results": service_results_dict,
+            "tracking_codes": tracking_codes_dict,
+            "errors": result.errors,
+            "warnings": result.warnings,
+        }

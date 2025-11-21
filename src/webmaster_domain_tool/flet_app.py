@@ -1,6 +1,7 @@
 """Flet multiplatform GUI application for webmaster-domain-tool."""
 
 import argparse
+import inspect
 import ipaddress
 import logging
 import re
@@ -11,13 +12,11 @@ from typing import Any
 
 import flet as ft
 
-from .config import Config
-from .config_editor_dialog import ConfigEditorDialog
-from .core.analyzer import (
-    ANALYZER_REGISTRY,
-    run_domain_analysis,
-)
+# Import analyzers package which auto-imports all analyzer modules
+from . import analyzers  # noqa: F401  # Triggers analyzer registration
+from .core.registry import registry
 from .flet_config_manager import FletConfigProfileManager
+from .gui_config_adapter import GUIConfigAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +126,10 @@ class DomainAnalyzerApp:
         self.page.theme_mode = ft.ThemeMode.LIGHT
         self.page.scroll = ft.ScrollMode.AUTO
 
+        # CRITICAL: Enable stretch alignment for proper expand behavior
+        self.page.horizontal_alignment = ft.CrossAxisAlignment.STRETCH
+        self.page.vertical_alignment = ft.MainAxisAlignment.START
+
         # Handle window close event to prevent Flutter embedder error
         self.page.on_window_event = self._on_window_event
 
@@ -146,11 +149,11 @@ class DomainAnalyzerApp:
 
         # Load the profile (create default if needed)
         if self.profile_manager.profile_exists(self.current_profile_name):
-            self.config = self.profile_manager.load_profile(self.current_profile_name)
+            self.config_adapter = self.profile_manager.load_profile(self.current_profile_name)
         else:
             # Fallback to default if selected profile doesn't exist
             self.current_profile_name = "default"
-            self.config = self.profile_manager.get_or_create_default()
+            self.config_adapter = self.profile_manager.get_or_create_default()
 
         # Store initial domain for pre-filling input
         self._initial_domain = initial_domain
@@ -196,11 +199,18 @@ class DomainAnalyzerApp:
             icon=ft.Icons.SETTINGS,
             tooltip="Edit configuration",
             on_click=self._show_config_editor,
+            disabled=False,  # Updated by _update_profile_buttons()
+        )
+
+        self.export_config_button = ft.IconButton(
+            icon=ft.Icons.DOWNLOAD,
+            tooltip="Export config to TOML",
+            on_click=self._show_export_dialog,
         )
 
         self.save_profile_button = ft.IconButton(
             icon=ft.Icons.SAVE,
-            tooltip="Save current config as new profile",
+            tooltip="Save current config as new profile (Save As)",
             on_click=self._show_save_profile_dialog,
         )
 
@@ -208,18 +218,19 @@ class DomainAnalyzerApp:
             icon=ft.Icons.DELETE,
             tooltip="Delete selected profile",
             on_click=self._delete_current_profile,
+            disabled=False,  # Updated by _update_profile_buttons()
         )
 
         # Analysis options checkboxes - generated dynamically from registry (DRY!)
-        # No more hardcoded checkboxes - uses ANALYZER_REGISTRY as single source of truth
+        # Uses registry as single source of truth
         self.analyzer_checkboxes: dict[str, ft.Checkbox] = {}
-        for analyzer_key, metadata in ANALYZER_REGISTRY.items():
-            if metadata.has_checkbox:
-                label = metadata.checkbox_label or metadata.title
-                self.analyzer_checkboxes[analyzer_key] = ft.Checkbox(
-                    label=label,
-                    value=metadata.checkbox_default,
-                )
+        for analyzer_id, metadata in registry.get_all().items():
+            # Create checkbox for each analyzer
+            config = self.config_adapter.get_analyzer_config(analyzer_id)
+            self.analyzer_checkboxes[analyzer_id] = ft.Checkbox(
+                label=metadata.name,
+                value=config.enabled,  # Use enabled flag from config
+            )
 
         # Results container (aligned left, not centered)
         self.results_column = ft.Column(
@@ -276,7 +287,24 @@ class DomainAnalyzerApp:
         )
 
     def _build_ui(self) -> None:
-        """Build the user interface."""
+        """Build the user interface with view switching."""
+        # Create container for current view (will hold either main view or config view)
+        self.current_view_content = ft.Container(
+            content=None,  # Will be set by _switch_to_main_view()
+            expand=True,
+        )
+
+        # Add view container to page
+        self.page.add(self.current_view_content)
+
+        # Start with main view
+        self._switch_to_main_view()
+
+        # Load profile list after UI is built
+        self._load_profile_list()
+
+    def _build_main_view(self) -> ft.Column:
+        """Build main analysis view."""
         # Header with profile management controls
         header = ft.Container(
             content=ft.Column(
@@ -286,6 +314,7 @@ class DomainAnalyzerApp:
                         [
                             self.profile_dropdown,
                             self.config_editor_button,
+                            self.export_config_button,
                             self.save_profile_button,
                             self.delete_profile_button,
                         ],
@@ -372,10 +401,46 @@ class DomainAnalyzerApp:
             expand=True,
         )
 
-        self.page.add(main_column)
+        return main_column
 
-        # Load profile list after UI is built
-        self._load_profile_list()
+    def _switch_to_main_view(self) -> None:
+        """Switch to main analysis view."""
+        self.current_view_content.content = self._build_main_view()
+        self.page.update()
+
+    def _switch_to_config_view(self) -> None:
+        """Switch to config editor view."""
+        # Import here to avoid circular dependency
+        from .config_editor_view import ConfigEditorView
+
+        config_view = ConfigEditorView(
+            page=self.page,
+            config_adapter=self.config_adapter,
+            on_save=self._on_config_saved,
+            on_cancel=self._switch_to_main_view,
+            theme=self.theme,
+        )
+
+        self.current_view_content.content = config_view.build()
+        self.page.update()
+
+    def _on_config_saved(self, new_config_adapter: GUIConfigAdapter) -> None:
+        """Handle config save from config editor view."""
+        # Update config adapter
+        self.config_adapter = new_config_adapter
+
+        # Save profile if not default
+        if self.current_profile_name != "default":
+            self.profile_manager.save_profile(self.current_profile_name, self.config_adapter)
+            logger.info(f"Saved configuration to profile: {self.current_profile_name}")
+
+        # Rebuild analyzer checkboxes with new config
+        for analyzer_id, checkbox in self.analyzer_checkboxes.items():
+            config = self.config_adapter.get_analyzer_config(analyzer_id)
+            checkbox.value = config.enabled
+
+        # Switch back to main view
+        self._switch_to_main_view()
 
     def validate_domain(self, domain: str) -> bool:
         """Validate domain name format."""
@@ -394,32 +459,18 @@ class DomainAnalyzerApp:
         domain = domain.replace("http://", "").replace("https://", "").rstrip("/")
         return domain
 
-    def _build_skip_params(self) -> dict[str, bool]:
+    def _get_enabled_analyzers(self) -> set[str]:
         """
-        Build skip parameters dynamically from checkbox states using registry.
+        Get set of analyzer IDs that are enabled based on checkbox states.
 
-        Returns dict of skip parameter names to values, ready to pass to run_domain_analysis().
-        No more hardcoded mapping - uses ANALYZER_REGISTRY as single source of truth!
+        Returns:
+            Set of enabled analyzer IDs
         """
-        skip_params = {}
-
-        for analyzer_key, metadata in ANALYZER_REGISTRY.items():
-            if not metadata.has_checkbox or not metadata.skip_param_name:
-                continue
-
-            checkbox = self.analyzer_checkboxes.get(analyzer_key)
-            if not checkbox:
-                continue
-
-            # Build parameter value based on checkbox state
-            if metadata.skip_param_inverted:
-                # Inverted params like "do_rbl_check": checked=True means enable
-                skip_params[metadata.skip_param_name] = checkbox.value
-            else:
-                # Normal skip params: checked=True means enable, so skip=False
-                skip_params[metadata.skip_param_name] = not checkbox.value
-
-        return skip_params
+        enabled = set()
+        for analyzer_id, checkbox in self.analyzer_checkboxes.items():
+            if checkbox.value:
+                enabled.add(analyzer_id)
+        return enabled
 
     def run_analysis(self) -> None:
         """Run domain analysis."""
@@ -448,33 +499,71 @@ class DomainAnalyzerApp:
         thread.start()
 
     def _run_analysis_sync(self, domain: str) -> None:
-        """Run analysis synchronously in background thread."""
+        """Run analysis synchronously in background thread using new modular architecture."""
         try:
             # Update status for user
             self.update_status(f"Analyzing {domain}...")
 
-            # Copy config to avoid side effects
-            config = self.config.model_copy(deep=True)
+            # Get enabled analyzers from checkboxes
+            enabled_analyzers_set = self._get_enabled_analyzers()
 
-            # Build skip parameters dynamically from checkboxes (DRY!)
-            # No more hardcoded mapping - uses ANALYZER_REGISTRY
-            skip_params = self._build_skip_params()
+            # Get all analyzer IDs
+            all_analyzer_ids = list(registry.get_all_ids())
 
-            # Call CORE analysis (same as CLI!) with dynamic skip parameters
-            results = run_domain_analysis(
-                domain,
-                config,
-                progress_callback=self.update_status,
-                **skip_params,  # Dynamic parameters from registry!
-            )
+            # Filter to only enabled ones
+            enabled_analyzers = [aid for aid in all_analyzer_ids if aid in enabled_analyzers_set]
 
-            # Convert to dict for display_results - build dynamically from registry (DRY!)
-            results_dict = {}
-            for metadata in ANALYZER_REGISTRY.values():
-                field_name = metadata.result_field
-                results_dict[field_name] = getattr(results, field_name, None)
+            # Calculate skip set (inverse of enabled)
+            skip_set = set(all_analyzer_ids) - enabled_analyzers_set
 
-            # Display results (existing method handles this)
+            # Resolve dependencies
+            try:
+                execution_order = registry.resolve_dependencies(enabled_analyzers, skip_set)
+            except ValueError as e:
+                self.show_error(f"Dependency error: {e}")
+                return
+
+            if not execution_order:
+                self.show_error("No analyzers selected!")
+                return
+
+            # Execute analyzers in order
+            results_dict: dict[str, Any] = {}
+            analysis_context: dict[str, Any] = {}  # Shared data between analyzers
+
+            for analyzer_id in execution_order:
+                self.update_status(f"Running {analyzer_id}...")
+
+                metadata = registry.get(analyzer_id)
+                if not metadata:
+                    logger.error(f"Analyzer not found: {analyzer_id}")
+                    continue
+
+                config = self.config_adapter.get_analyzer_config(analyzer_id)
+
+                try:
+                    # Instantiate analyzer
+                    analyzer = metadata.plugin_class()
+
+                    # Run analysis - pass context if analyzer supports it
+                    analyze_signature = inspect.signature(analyzer.analyze)
+                    if "context" in analyze_signature.parameters:
+                        result = analyzer.analyze(domain, config, context=analysis_context)
+                    else:
+                        result = analyzer.analyze(domain, config)
+
+                    # Store result in context for dependent analyzers
+                    analysis_context[analyzer_id] = result
+
+                    # Store result for display
+                    results_dict[analyzer_id] = result
+
+                except Exception as e:
+                    logger.error(f"Analyzer '{analyzer_id}' failed: {e}", exc_info=True)
+                    # Store None to indicate failure
+                    results_dict[analyzer_id] = None
+
+            # Display results
             self.display_results(domain, results_dict)
 
         except Exception as e:
@@ -502,7 +591,7 @@ class DomainAnalyzerApp:
             sys.exit(0)
 
     def display_results(self, domain: str, results: dict[str, Any]) -> None:
-        """Display analysis results."""
+        """Display analysis results. Always displays results - errors don't prevent display."""
         self.results_column.controls.clear()
 
         # Summary
@@ -547,12 +636,14 @@ class DomainAnalyzerApp:
                                 size=self.theme.text_subheading,
                                 weight="bold",
                                 text_align=ft.TextAlign.LEFT,
+                                selectable=True,  # Enable text selection
                             ),
                             ft.Text(
                                 f"Errors: {total_errors} | Warnings: {total_warnings}",
                                 size=self.theme.text_body,
                                 color=self.theme.text_secondary,
                                 text_align=ft.TextAlign.LEFT,
+                                selectable=True,  # Enable text selection
                             ),
                         ],
                         spacing=self.theme.spacing_tiny,
@@ -567,42 +658,78 @@ class DomainAnalyzerApp:
         )
         self.results_column.controls.append(summary_card)
 
-        # Individual results - iterate through analyzer registry (DRY)
-        # No hardcoded if statements! Uses ANALYZER_REGISTRY as single source of truth
-        for analyzer_key, metadata in ANALYZER_REGISTRY.items():
-            result_field = metadata.result_field
+        # Individual results - iterate through analyzer registry
+        # Map analyzer_id to custom panel methods (GUI-specific rendering)
+        custom_renderers = {
+            "whois": self._create_whois_panel,
+            "dns": self._create_dns_panel,
+            "http": self._create_http_panel,
+            "ssl": self._create_ssl_panel,
+            "email": self._create_email_panel,
+            "security-headers": self._create_headers_panel,
+            "rbl": self._create_rbl_panel,
+            "seo-files": self._create_seo_panel,
+            "favicon": self._create_favicon_panel,
+            "site-verification": self._create_site_verification_panel,
+            "cdn": self._create_cdn_panel,
+        }
 
-            # Skip if analyzer not in results or result is None (disabled)
-            if result_field not in results or results[result_field] is None:
-                continue
+        for analyzer_id in results.keys():
+            try:
+                metadata = registry.get(analyzer_id)
+                if not metadata:
+                    logger.warning(f"No metadata found for analyzer: {analyzer_id}")
+                    continue
 
-            result = results[result_field]
+                # Skip if result is None (disabled)
+                result = results.get(analyzer_id)
+                if result is None:
+                    continue
 
-            # Route to appropriate renderer based on custom_renderer metadata
-            if metadata.custom_renderer:
-                # Use custom renderer method
-                renderer_method_name = f"_create_{metadata.custom_renderer}_panel"
-                renderer_method = getattr(self, renderer_method_name, None)
-
-                if renderer_method:
-                    # Build arguments dynamically from additional_result_fields (DRY!)
-                    # No more hardcoded "if analyzer_key == 'email'" checks
-                    renderer_args = [result]
-                    if metadata.additional_result_fields:
-                        for additional_field in metadata.additional_result_fields:
-                            additional_result = results.get(additional_field)
-                            renderer_args.append(additional_result)
-
-                    panel = renderer_method(*renderer_args)
+                # Route to appropriate renderer
+                if analyzer_id in custom_renderers:
+                    # Use custom GUI renderer
+                    panel = custom_renderers[analyzer_id](result)
                     self.results_column.controls.append(panel)
                 else:
-                    logger.warning(
-                        f"Custom renderer {renderer_method_name} not found for {analyzer_key}"
+                    # Use default auto-display renderer
+                    panel = self._create_default_auto_display_panel(metadata, result)
+                    self.results_column.controls.append(panel)
+
+            except Exception as e:
+                # CRITICAL: Never let an error prevent display of results
+                # Show error on stderr but continue displaying
+                logger.error(f"Error displaying results for {analyzer_id}: {e}", exc_info=True)
+                sys.stderr.write(f"ERROR: Failed to display {analyzer_id} results: {e}\n")
+
+                # Add error panel to show user something went wrong
+                try:
+                    error_panel = ft.ExpansionTile(
+                        title=ft.Text(
+                            f"❌ {analyzer_id} (Display Error)",
+                            weight="bold",
+                            selectable=True,
+                        ),
+                        subtitle=ft.Text(
+                            f"Error rendering results: {str(e)}",
+                            color=self.theme.error_color,
+                            selectable=True,
+                        ),
+                        collapsed_text_color=self.theme.error_color,
+                        text_color=self.theme.error_color,
+                        controls=[
+                            ft.Text(
+                                f"Full error: {repr(e)}",
+                                color=self.theme.text_secondary,
+                                size=self.theme.text_small,
+                                selectable=True,
+                            )
+                        ],
                     )
-            else:
-                # Use default auto-display renderer
-                panel = self._create_default_auto_display_panel(metadata, result)
-                self.results_column.controls.append(panel)
+                    self.results_column.controls.append(error_panel)
+                except Exception as nested_e:
+                    # Even error panel failed - just log it
+                    logger.error(f"Failed to create error panel for {analyzer_id}: {nested_e}")
 
         self.results_card.visible = True
         self.page.update()
@@ -1588,12 +1715,12 @@ class DomainAnalyzerApp:
         if result is None:
             content.append(
                 self._text(
-                    f"{metadata.title} disabled",
+                    f"{metadata.name} disabled",
                     size=self.theme.text_body,
                     color=self.theme.text_secondary,
                 )
             )
-            return self._create_expandable_panel(metadata.title, metadata.icon, content, 0, 0)
+            return self._create_expandable_panel(metadata.name, metadata.icon, content, 0, 0)
 
         # Add errors and warnings
         self._add_errors_and_warnings(content, result)
@@ -1694,7 +1821,7 @@ class DomainAnalyzerApp:
         warning_count = len(result.warnings) if hasattr(result, "warnings") else 0
 
         return self._create_expandable_panel(
-            metadata.title, icon, content, error_count, warning_count
+            metadata.name, icon, content, error_count, warning_count
         )
 
     # ========== PROFILE MANAGEMENT METHODS ==========
@@ -1703,14 +1830,37 @@ class DomainAnalyzerApp:
         """Load and populate profile dropdown."""
         profiles = self.profile_manager.list_profiles()
 
-        # Ensure default profile exists
+        # Always include "default" in dropdown (it's always available, never saved)
         if "default" not in profiles:
-            self.profile_manager.save_profile("default", self.config)
-            profiles = self.profile_manager.list_profiles()
+            profiles.insert(0, "default")
 
         # Populate dropdown
         self.profile_dropdown.options = [ft.dropdown.Option(p) for p in profiles]
         self.profile_dropdown.value = self.current_profile_name
+
+        # Update button states based on current profile
+        self._update_profile_buttons()
+
+        self.page.update()
+
+    def _update_profile_buttons(self) -> None:
+        """Update profile button states based on current profile."""
+        is_default = self.current_profile_name == "default"
+
+        # Default profile is READ-ONLY: can't edit or delete
+        self.config_editor_button.disabled = is_default
+        self.delete_profile_button.disabled = is_default
+
+        # Update tooltips
+        if is_default:
+            self.config_editor_button.tooltip = (
+                "Default profile is read-only (use Save As to create editable copy)"
+            )
+            self.delete_profile_button.tooltip = "Cannot delete default profile"
+        else:
+            self.config_editor_button.tooltip = "Edit configuration"
+            self.delete_profile_button.tooltip = "Delete selected profile"
+
         self.page.update()
 
     def _on_profile_changed(self, e: ft.ControlEvent) -> None:
@@ -1721,11 +1871,14 @@ class DomainAnalyzerApp:
 
         try:
             # Load the selected profile
-            self.config = self.profile_manager.load_profile(new_profile_name)
+            self.config_adapter = self.profile_manager.load_profile(new_profile_name)
             self.current_profile_name = new_profile_name
 
             # Save as last selected profile for next session
             self.profile_manager.set_last_selected_profile(new_profile_name)
+
+            # Update button states for new profile
+            self._update_profile_buttons()
 
             # Update analyzer checkboxes from new config
             # (Currently checkboxes don't reflect config, they're independent)
@@ -1747,34 +1900,165 @@ class DomainAnalyzerApp:
             self.show_error(f"Failed to load profile: {e}")
 
     def _show_config_editor(self, e: ft.ControlEvent) -> None:
-        """Show configuration editor dialog."""
-
-        def on_save(new_config: Config) -> None:
-            """Callback when config is saved in editor."""
-            self.config = new_config
-            # Also save to current profile
-            self.profile_manager.save_profile(self.current_profile_name, new_config)
-            logger.info(f"Updated configuration for profile: {self.current_profile_name}")
-
-            # Show confirmation
-            snackbar = ft.SnackBar(
-                content=ft.Text(f"Configuration saved to profile: {self.current_profile_name}"),
-                bgcolor=ft.Colors.GREEN,
+        """Show configuration editor view (full-page, not dialog)."""
+        # Block editing of default profile
+        if self.current_profile_name == "default":
+            self.show_error(
+                "Default profile is read-only.\n\n"
+                "Use 'Save As' button to create an editable copy,\n"
+                "or switch to a custom profile to edit."
             )
-            self.page.overlay.append(snackbar)
-            snackbar.open = True
+            return
+
+        # Switch to config editor view (full-page)
+        self._switch_to_config_view()
+
+    def _show_export_dialog(self, e: ft.ControlEvent) -> None:
+        """Show TOML export dialog with preview and copy/save buttons."""
+        try:
+            # Generate TOML string from current config
+            toml_content = self.config_adapter.export_to_toml_string()
+        except Exception as ex:
+            logger.error(f"Failed to generate TOML: {ex}")
+            self.show_error(f"Failed to generate TOML: {ex}")
+            return
+
+        # Create text area with TOML content
+        toml_text_field = ft.TextField(
+            value=toml_content,
+            multiline=True,
+            read_only=True,
+            min_lines=20,
+            max_lines=30,
+            text_size=12,
+            width=600,
+        )
+
+        def copy_to_clipboard(dialog_e: ft.ControlEvent) -> None:
+            """Copy TOML to clipboard."""
+            try:
+                self.page.set_clipboard(toml_content)
+                # Show success snackbar
+                snackbar = ft.SnackBar(
+                    content=ft.Text("TOML copied to clipboard!"),
+                    bgcolor=ft.Colors.GREEN,
+                )
+                self.page.overlay.append(snackbar)
+                snackbar.open = True
+                self.page.update()
+            except Exception as ex:
+                logger.error(f"Failed to copy to clipboard: {ex}")
+                self.show_error(f"Failed to copy: {ex}")
+
+        def save_to_file(dialog_e: ft.ControlEvent) -> None:
+            """Save TOML to file using FilePicker."""
+
+            def on_file_picker_result(e: ft.FilePickerResultEvent) -> None:
+                """Handle file picker result."""
+                if e.path:
+                    try:
+                        # Write TOML to selected file
+                        from pathlib import Path
+
+                        file_path = Path(e.path)
+                        file_path.write_text(toml_content, encoding="utf-8")
+                        logger.info(f"Exported config to {file_path}")
+
+                        # Close export dialog
+                        export_dialog.open = False
+
+                        # Show success snackbar
+                        snackbar = ft.SnackBar(
+                            content=ft.Text(f"Configuration saved to {file_path.name}"),
+                            bgcolor=ft.Colors.GREEN,
+                        )
+                        self.page.overlay.append(snackbar)
+                        snackbar.open = True
+                        self.page.update()
+
+                    except Exception as ex:
+                        logger.error(f"Failed to save TOML file: {ex}")
+                        self.show_error(f"Failed to save file: {ex}")
+
+            # Create file picker
+            file_picker = ft.FilePicker(on_result=on_file_picker_result)
+            self.page.overlay.append(file_picker)
             self.page.update()
 
-        editor = ConfigEditorDialog(self.page, self.config, on_save)
-        editor.show()
+            # Show save dialog with default name
+            file_picker.save_file(
+                file_name=f"{self.current_profile_name}.toml",
+                allowed_extensions=["toml"],
+            )
+
+        export_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Export Configuration to TOML"),
+            content=ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "Copy or save this TOML configuration for use with CLI --config option:",
+                            size=12,
+                        ),
+                        toml_text_field,
+                    ],
+                    spacing=10,
+                    tight=True,
+                ),
+                width=650,
+            ),
+            actions=[
+                ft.TextButton(
+                    "Close",
+                    on_click=lambda _: setattr(export_dialog, "open", False) or self.page.update(),
+                ),
+                ft.ElevatedButton(
+                    "Copy to Clipboard",
+                    icon=ft.Icons.COPY,
+                    on_click=copy_to_clipboard,
+                ),
+                ft.ElevatedButton(
+                    "Save to File",
+                    icon=ft.Icons.SAVE,
+                    on_click=save_to_file,
+                    style=ft.ButtonStyle(
+                        bgcolor=ft.Colors.BLUE,
+                        color=ft.Colors.WHITE,
+                    ),
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        self.page.overlay.append(export_dialog)
+        export_dialog.open = True
+        self.page.update()
+
+    @staticmethod
+    def _validate_profile_name(name: str) -> tuple[bool, str | None]:
+        """
+        Validate profile name for filesystem safety.
+
+        Args:
+            name: Profile name to validate
+
+        Returns:
+            Tuple of (is_valid, error_message). error_message is None if valid.
+        """
+        if not name:
+            return False, "Profile name cannot be empty"
+        if len(name) > 50:
+            return False, "Profile name must be 50 characters or less"
+        if not re.match(r"^[a-zA-Z0-9_-]+$", name):
+            return (
+                False,
+                "Profile name can only contain letters, numbers, dashes, and underscores",
+            )
+        return True, None
 
     def _show_save_profile_dialog(self, e: ft.ControlEvent) -> None:
         """Show dialog to save current config as new profile."""
-        profile_name_field = ft.TextField(
-            label="Profile Name",
-            hint_text="e.g., fast, full, security",
-            autofocus=True,
-        )
 
         def save_new_profile(dialog_e: ft.ControlEvent) -> None:
             """Save config as new profile."""
@@ -1782,8 +2066,17 @@ class DomainAnalyzerApp:
             if not name:
                 return
 
+            # Validate profile name
+            is_valid, error_msg = self._validate_profile_name(name)
+            if not is_valid:
+                error_text = ft.Text(error_msg, color=ft.Colors.RED, size=12)
+                # Clear previous errors
+                dialog.content.controls = [profile_name_field, error_text]
+                self.page.update()
+                return
+
             try:
-                self.profile_manager.save_profile(name, self.config)
+                self.profile_manager.save_profile(name, self.config_adapter)
                 logger.info(f"Saved new profile: {name}")
 
                 # Reload profile list and select new profile
@@ -1793,6 +2086,9 @@ class DomainAnalyzerApp:
 
                 # Save as last selected profile for next session
                 self.profile_manager.set_last_selected_profile(name)
+
+                # Update button states for new profile (no longer default)
+                self._update_profile_buttons()
 
                 # Close dialog
                 dialog.open = False
@@ -1813,6 +2109,14 @@ class DomainAnalyzerApp:
                 if error_text not in dialog.content.controls:
                     dialog.content.controls.append(error_text)
                     self.page.update()
+
+        # Create TextField with Enter key handler
+        profile_name_field = ft.TextField(
+            label="Profile Name",
+            hint_text="e.g., fast, full, security",
+            autofocus=True,
+            on_submit=save_new_profile,  # Enter key triggers Save
+        )
 
         dialog = ft.AlertDialog(
             modal=True,
@@ -1846,7 +2150,7 @@ class DomainAnalyzerApp:
 
                 # Switch to default profile
                 self.current_profile_name = "default"
-                self.config = self.profile_manager.load_profile("default")
+                self.config_adapter = self.profile_manager.get_or_create_default()
 
                 # Save default as last selected profile for next session
                 self.profile_manager.set_last_selected_profile("default")

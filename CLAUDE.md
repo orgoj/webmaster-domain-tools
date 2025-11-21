@@ -119,70 +119,150 @@ def foo(callback: Callable[[str], None]) -> None:  # ✅ Proper type hint
 
 ## Architecture
 
+**The project uses a modular plugin-based architecture with complete decoupling between analyzers, configuration, and output rendering.**
+
 ### Core Components
 
 ```
 src/webmaster_domain_tool/
-├── cli.py                    # CLI entry point (Typer app)
-├── config.py                 # Configuration management (Pydantic)
-├── analyzers/                # Domain analysis modules
-│   ├── dns_analyzer.py       # DNS + DNSSEC validation
-│   ├── http_analyzer.py      # HTTP/HTTPS redirect analysis
-│   ├── ssl_analyzer.py       # SSL/TLS certificate analysis
-│   ├── email_security.py     # SPF, DKIM, DMARC validation
-│   ├── security_headers.py   # Security headers checking
-│   └── rbl_checker.py        # RBL blacklist checking
+├── cli.py                      # CLI entry point (Typer app)
+├── core/
+│   ├── registry.py             # Analyzer auto-discovery and dependency resolution
+│   └── config_manager.py       # Multi-layer configuration management
+├── analyzers/
+│   ├── protocol.py             # Protocol definitions (AnalyzerPlugin, OutputDescriptor)
+│   ├── dns_analyzer.py         # DNS + DNSSEC validation
+│   ├── whois_analyzer.py       # WHOIS information
+│   ├── http_analyzer.py        # HTTP/HTTPS redirect analysis
+│   ├── ssl_analyzer.py         # SSL/TLS certificate analysis
+│   ├── email_security.py       # SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT
+│   ├── security_headers.py     # Security headers checking
+│   ├── site_verification_analyzer.py  # Site verification + tracking codes
+│   ├── rbl_checker.py          # RBL blacklist checking
+│   ├── cdn_detector.py         # CDN provider detection
+│   ├── seo_files_analyzer.py   # robots.txt, sitemap.xml, llms.txt
+│   └── favicon_analyzer.py     # Favicon detection and analysis
+├── renderers/
+│   ├── base.py                 # Base renderer protocol
+│   ├── cli_renderer.py         # CLI output with Rich
+│   └── json_renderer.py        # JSON export renderer
 └── utils/
-    ├── logger.py             # Logging configuration
-    └── output.py             # Rich terminal output formatting
+    └── logger.py               # Logging configuration
 ```
 
 ### Data Flow
 
 1. **CLI** (`cli.py`) - Entry point that:
-   - Loads configuration from files and merges with CLI args
-   - Creates analyzer instances
-   - Coordinates analysis execution
-   - Formats and displays output
+   - Loads configuration via `ConfigManager`
+   - Gets enabled analyzers from `registry`
+   - Resolves analyzer dependencies automatically
+   - Executes analyzers in dependency order
+   - Delegates rendering to `Renderer` (CLI or JSON)
 
-2. **Analyzers** - Independent modules that:
-   - Each analyzer has a single `analyze()` method
-   - Return dataclass results with `errors` and `warnings` lists
-   - No inter-dependencies between analyzers
+2. **Registry** (`core/registry.py`) - Central coordination:
+   - Auto-discovers analyzers via `@registry.register` decorator
+   - Validates analyzer protocol compliance
+   - Resolves execution order via topological sort
+   - Detects circular dependencies
 
-3. **Output Formatter** (`output.py`) - Centralized output that:
-   - Collects all errors/warnings in central arrays
-   - Displays results with Rich formatting
-   - Ensures accurate error/warning counting
-   - Supports multiple verbosity levels (quiet, normal, verbose, debug)
+3. **Analyzers** (`analyzers/*.py`) - Self-contained modules that:
+   - Implement `AnalyzerPlugin` protocol
+   - Define their own configuration schema (Pydantic)
+   - Declare dependencies on other analyzers
+   - Return structured results (dataclasses)
+   - Provide semantic output description via `describe_output()`
+   - **Zero coupling** - never import CLI, config, or renderers
+
+4. **Renderers** (`renderers/*.py`) - Output adapters:
+   - Interpret semantic `OutputDescriptor` from analyzers
+   - Map semantic styles to theme-specific colors/formatting
+   - Support multiple output formats (CLI, JSON, future: HTML)
+   - **Zero coupling** - never import specific analyzer code
 
 ## Key Design Decisions
 
-### 1. Error/Warning Tracking System
+### 1. Protocol-Based Plugin System
 
-**Critical Implementation Detail:**
+**Design Philosophy:** Analyzers use Python's `@runtime_checkable Protocol` instead of class inheritance.
 
-All errors and warnings are tracked in **central arrays** in `OutputFormatter`:
-
-```python
-class OutputFormatter:
-    def __init__(self, ...):
-        self.all_errors: list[tuple[str, str]] = []   # (category, message)
-        self.all_warnings: list[tuple[str, str]] = []  # (category, message)
-```
-
-**When displaying any error/warning, you MUST add it to the central array:**
+Benefits:
+- **No inheritance coupling**: Analyzers don't subclass anything
+- **Protocol validation**: Registry validates all required methods/attributes exist
+- **Duck typing**: Any class that looks like AnalyzerPlugin *is* one
+- **Adding analyzers**: Just create a class, add `@registry.register`, done
 
 ```python
-# CORRECT - adds to both display and central tracking
-self.all_warnings.append(("DNS", warning_message))
-self.console.print(f"[yellow]⚠ {warning_message}[/yellow]")
+from .core.registry import registry
+from .analyzers.protocol import AnalyzerPlugin
 
-# WRONG - displays but doesn't track
-self.console.print(f"[yellow]⚠ {warning_message}[/yellow]")
+@registry.register  # That's it - analyzer is now available!
+class MyNewAnalyzer:
+    # Required metadata
+    analyzer_id = "my-analyzer"
+    name = "My Analyzer"
+    description = "What it does"
+    category = "general"  # general, security, seo, advanced
+    icon = "globe"
+    config_class = MyConfig  # Pydantic model
+    depends_on = []  # Or ["dns", "http"] for dependencies
+
+    def analyze(self, domain: str, config: MyConfig) -> MyResult:
+        ...
+
+    def describe_output(self, result: MyResult) -> OutputDescriptor:
+        ...
+
+    def to_dict(self, result: MyResult) -> dict:
+        ...
 ```
 
-This ensures 100% accurate counting in the summary. The count displayed in summary MUST always match exactly what was shown to the user.
+### 2. Semantic Output Styling (Theme-Agnostic)
+
+**Critical Concept:** Analyzers define WHAT to show, not HOW to show it.
+
+Analyzers use semantic style classes like `success`, `error`, `warning`, `info`, `highlight`, `muted`:
+
+```python
+# CORRECT - semantic styling (renderer decides color)
+descriptor.add_row(
+    label="SSL Certificate",
+    value="Valid",
+    style_class="success",  # NOT color="green"
+    icon="check",  # NOT icon="✓"
+    severity="info",
+)
+
+# WRONG - hardcoded colors/icons
+descriptor.add_row(
+    label="SSL Certificate",
+    value="Valid",
+    color="green",  # ❌ Couples to specific theme
+    icon="✓",  # ❌ Renderer should choose icon
+)
+```
+
+The renderer (`CLIRenderer`, `JSONRenderer`) interprets semantic styles:
+- CLI: Maps `success` → green, `check` → ✓
+- JSON: Preserves semantic styles as-is
+- Future HTML: Maps to CSS classes
+- Future GUI: Can switch themes without code changes
+
+### 3. Error/Warning Tracking in Renderers
+
+Renderers track errors/warnings from `OutputDescriptor` rows:
+
+```python
+# In BaseRenderer
+def collect_errors_warnings(self, descriptor: OutputDescriptor, category: str):
+    """Collect errors and warnings from output rows."""
+    for row in descriptor.rows:
+        if row.severity == "error":
+            self.all_errors.append((category, str(row.value)))
+        elif row.severity == "warning":
+            self.all_warnings.append((category, str(row.value)))
+```
+
+This ensures 100% accurate counting - the summary count always matches displayed messages.
 
 ### 2. DNS CNAME/A Record Rule
 
@@ -217,9 +297,25 @@ Implementation:
 - CLI: `--warn-www-not-cname` / `--no-warn-www-not-cname`
 - Check in `DNSAnalyzer._check_www_cname()`
 
-### 4. Configuration System
+### 4. Per-Analyzer Configuration (Isolated)
 
-Multi-layer configuration with precedence:
+**Each analyzer has its own configuration section** in TOML:
+
+```toml
+[dns]
+enabled = true
+timeout = 5.0
+nameservers = ["1.1.1.1", "8.8.8.8"]
+check_dnssec = true
+
+[ssl]
+enabled = true
+timeout = 10.0
+check_tls_versions = true
+expiry_warning_days = 30
+```
+
+Implemented in `core/config_manager.py` with multi-layer merging:
 
 1. Package default config (lowest)
 2. System-wide: `/etc/webmaster-domain-tool/config.toml`
@@ -228,53 +324,233 @@ Multi-layer configuration with precedence:
 5. Local config: `./.webmaster-domain-tool.toml`
 6. CLI parameters (highest - always override)
 
-Implemented in `config.py` using Pydantic Settings with recursive dict merging.
+Each analyzer defines its config schema via Pydantic:
 
-### 5. Output Verbosity Levels
+```python
+class DNSConfig(AnalyzerConfig):
+    """DNS analyzer configuration."""
+    nameservers: list[str] = Field(default=["8.8.8.8"])
+    timeout: float = Field(default=5.0)
+    check_dnssec: bool = Field(default=True)
+```
 
-- **quiet**: Only errors, minimal output
-- **normal**: Standard output with summaries
-- **verbose**: Detailed tables and full information
-- **debug**: Maximum detail including debug logs
+### 5. Dependency Resolution
 
-Each print method in `output.py` has separate implementations for different verbosity levels.
+The registry automatically resolves analyzer execution order:
+
+```python
+# CDN analyzer declares dependencies
+class CDNDetector:
+    depends_on = ["http", "dns"]  # Needs HTTP headers and DNS CNAME
+```
+
+The CLI uses topological sort to ensure correct order:
+1. DNS runs first (no dependencies)
+2. HTTP runs (depends on DNS)
+3. CDN runs (depends on HTTP and DNS)
+
+Circular dependencies are detected and reported as errors.
+
+### 6. Output Verbosity Levels
+
+Controlled via `VerbosityLevel` enum:
+- **QUIET**: Minimal output (custom summary functions)
+- **NORMAL**: Standard output with summaries
+- **VERBOSE**: Detailed tables and full information
+- **DEBUG**: Maximum detail including debug logs
+
+Rows in `OutputDescriptor` specify minimum verbosity:
+
+```python
+descriptor.add_row(
+    label="DNSSEC",
+    value="Enabled",
+    verbosity=VerbosityLevel.VERBOSE,  # Only shown in verbose mode
+)
+```
 
 ## Analyzer Implementation Patterns
 
-### Standard Analyzer Structure
+### Complete Analyzer Template
 
-Each analyzer follows this pattern:
+Each analyzer is a **self-contained module** with config, logic, and output formatting:
 
 ```python
+"""My analyzer - does something useful."""
+
+import logging
+from dataclasses import dataclass, field
+
+from pydantic import Field
+
+from ..core.registry import registry
+from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+class MyConfig(AnalyzerConfig):
+    """My analyzer configuration."""
+
+    some_option: bool = Field(default=True, description="Enable some feature")
+    timeout: float = Field(default=10.0, description="Operation timeout")
+
+
+# ============================================================================
+# Result Model
+# ============================================================================
+
 @dataclass
-class AnalyzerResult:
-    """Result container with errors and warnings lists."""
+class MyResult:
+    """Results from my analyzer."""
+
     domain: str
+    success: bool = False
+    data: dict = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
-    # ... specific fields ...
 
-class Analyzer:
-    def __init__(self, config_params):
-        """Initialize with config parameters."""
-        pass
 
-    def analyze(self, domain: str) -> AnalyzerResult:
+# ============================================================================
+# Analyzer Implementation
+# ============================================================================
+
+@registry.register
+class MyAnalyzer:
+    """
+    My analyzer does X, Y, and Z.
+
+    This analyzer is completely self-contained - it declares its own:
+    - Configuration schema (MyConfig)
+    - Output formatting (via describe_output)
+    - JSON serialization (via to_dict)
+    - Metadata
+
+    Adding it to the registry makes it automatically available in
+    CLI, GUI, and any other frontend.
+    """
+
+    # ========================================================================
+    # Required Metadata
+    # ========================================================================
+
+    analyzer_id = "my-analyzer"
+    name = "My Analyzer"
+    description = "Does something useful"
+    category = "general"  # general, security, seo, advanced
+    icon = "globe"  # Semantic icon name
+    config_class = MyConfig
+    depends_on = []  # Or ["dns", "http"] if you need their results
+
+    # ========================================================================
+    # Required Protocol Methods
+    # ========================================================================
+
+    def analyze(self, domain: str, config: MyConfig) -> MyResult:
         """
-        Main entry point.
+        Perform analysis.
+
+        Args:
+            domain: Domain to analyze
+            config: This analyzer's configuration
 
         Returns:
-            Result object with errors and warnings populated
+            MyResult with analysis data
         """
-        result = AnalyzerResult(domain=domain)
+        result = MyResult(domain=domain)
 
         try:
-            # Perform analysis
-            # Add to result.errors or result.warnings as appropriate
+            # Perform your analysis here
+            result.success = True
+            result.data["example"] = "value"
+
         except Exception as e:
+            logger.error(f"Analysis failed: {e}", exc_info=True)
             result.errors.append(f"Analysis failed: {e}")
 
         return result
+
+    def describe_output(self, result: MyResult) -> OutputDescriptor:
+        """
+        Describe how to render this analyzer's output.
+
+        Uses semantic styling (theme-agnostic) - no hardcoded colors.
+
+        Args:
+            result: Analysis result
+
+        Returns:
+            OutputDescriptor with semantic styling
+        """
+        descriptor = OutputDescriptor(title=self.name, category=self.category)
+
+        # Quiet mode summary (optional)
+        descriptor.quiet_summary = lambda r: (
+            f"My Analyzer: {'Success' if r.success else 'Failed'}"
+        )
+
+        # Normal verbosity
+        descriptor.add_row(
+            label="Status",
+            value="Success" if result.success else "Failed",
+            style_class="success" if result.success else "error",
+            icon="check" if result.success else "cross",
+            severity="info",
+            verbosity=VerbosityLevel.NORMAL,
+        )
+
+        # Verbose data
+        descriptor.add_row(
+            label="Details",
+            value=result.data,
+            section_type="key_value",
+            verbosity=VerbosityLevel.VERBOSE,
+        )
+
+        # Errors and warnings
+        for error in result.errors:
+            descriptor.add_row(
+                value=error,
+                section_type="text",
+                style_class="error",
+                severity="error",
+                icon="cross",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        for warning in result.warnings:
+            descriptor.add_row(
+                value=warning,
+                section_type="text",
+                style_class="warning",
+                severity="warning",
+                icon="warning",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        return descriptor
+
+    def to_dict(self, result: MyResult) -> dict:
+        """
+        Serialize result to JSON-compatible dictionary.
+
+        Args:
+            result: Analysis result
+
+        Returns:
+            JSON-serializable dict
+        """
+        return {
+            "domain": result.domain,
+            "success": result.success,
+            "data": result.data,
+            "errors": result.errors,
+            "warnings": result.warnings,
+        }
 ```
 
 ### Error vs Warning Guidelines
@@ -296,63 +572,115 @@ class Analyzer:
 
 ### Adding a New Analyzer
 
-1. Create new file in `analyzers/`
-2. Define result dataclass with `errors` and `warnings` lists
-3. Implement `analyze(domain: str)` method
-4. Add configuration section to `config.py` if needed
-5. Integrate in `cli.py` - create instance and call analyze()
-6. Add output method in `output.py` for display
-7. Update README.md with new feature
+**CRITICAL: Adding an analyzer now requires editing only ONE file!**
 
-### Adding a New Configuration Option
+1. **Create new file** in `src/webmaster_domain_tool/analyzers/my_analyzer.py`
+2. **Copy the complete analyzer template** from "Analyzer Implementation Patterns" section above
+3. **Implement the three methods**: `analyze()`, `describe_output()`, `to_dict()`
+4. **Add `@registry.register`** decorator to your class
+5. **Done!** The analyzer is now:
+   - Available in CLI via `wdt analyze` (auto-discovered)
+   - Skippable via `wdt analyze --skip my-analyzer`
+   - Listed in `wdt list-analyzers`
+   - Available in GUI automatically
+   - Config section `[my-analyzer]` in TOML works automatically
 
-1. Add field to appropriate config class in `config.py`:
-   ```python
-   class DNSConfig(BaseModel):
-       new_option: bool = Field(
-           default=False,
-           description="Description here"
-       )
-   ```
+**Example - adding a WHOIS analyzer:**
 
-2. Update default config template in `create_default_user_config()`
+```python
+# Create: src/webmaster_domain_tool/analyzers/whois_analyzer.py
 
-3. Pass to analyzer in `cli.py`:
-   ```python
-   analyzer = DNSAnalyzer(
-       config_param=config.dns.new_option
-   )
-   ```
+from ..core.registry import registry
+from .protocol import AnalyzerConfig, OutputDescriptor
 
-4. Add CLI option if needed:
-   ```python
-   new_option: Optional[bool] = typer.Option(
-       None,
-       "--new-option/--no-new-option",
-       help="Description"
-   )
-   ```
+class WhoisConfig(AnalyzerConfig):
+    """WHOIS configuration."""
+    timeout: float = 10.0
+    expiry_warning_days: int = 30
 
-5. Update README.md with usage examples
+@registry.register  # ← That's it!
+class WhoisAnalyzer:
+    analyzer_id = "whois"
+    name = "WHOIS Information"
+    description = "Domain registration details"
+    category = "general"
+    icon = "search"
+    config_class = WhoisConfig
+    depends_on = []
+
+    def analyze(self, domain: str, config: WhoisConfig) -> WhoisResult:
+        # Your implementation
+        ...
+
+    def describe_output(self, result: WhoisResult) -> OutputDescriptor:
+        # Your output description
+        ...
+
+    def to_dict(self, result: WhoisResult) -> dict:
+        # JSON serialization
+        ...
+```
+
+**No other file changes needed!** The CLI, config system, and registry automatically discover it.
+
+### Adding Configuration Options to Existing Analyzer
+
+1. **Update the analyzer's config class** (in the analyzer file itself):
+
+```python
+class DNSConfig(AnalyzerConfig):
+    """DNS analyzer configuration."""
+    nameservers: list[str] = Field(default=["8.8.8.8"])
+    timeout: float = Field(default=5.0)
+
+    # Add new option
+    new_feature: bool = Field(
+        default=False,
+        description="Enable new feature"
+    )
+```
+
+2. **Update `default_config.toml`** with the new option:
+
+```toml
+[dns]
+enabled = true
+nameservers = ["8.8.8.8", "1.1.1.1"]
+timeout = 5.0
+new_feature = false
+```
+
+3. **Done!** The option is now:
+   - Available in config files
+   - Loaded via ConfigManager
+   - Passed to analyzer's `analyze()` method
+
+**No CLI changes needed** - config options are file-based only. CLI only has `--skip` parameter.
 
 ### Modifying Output Display
 
-**IMPORTANT:** When displaying errors/warnings, ALWAYS add to central arrays:
+**Analyzers control output** via `describe_output()` method.
+
+To add/modify output rows, edit the analyzer's `describe_output()`:
 
 ```python
-def _print_analyzer_results(self, result: AnalyzerResult) -> None:
-    # Display errors
-    for error in result.errors:
-        self.all_errors.append(("Category", error))  # ← CRITICAL
-        self.console.print(f"[red]✗ {error}[/red]")
+def describe_output(self, result: MyResult) -> OutputDescriptor:
+    descriptor = OutputDescriptor(title=self.name, category=self.category)
 
-    # Display warnings
-    for warning in result.warnings:
-        self.all_warnings.append(("Category", warning))  # ← CRITICAL
-        self.console.print(f"[yellow]⚠ {warning}[/yellow]")
+    # Add new row with semantic styling
+    descriptor.add_row(
+        label="New Field",
+        value=result.new_field,
+        style_class="success",  # semantic style
+        icon="check",  # semantic icon
+        severity="info",  # for error/warning tracking
+        verbosity=VerbosityLevel.NORMAL,  # when to show
+    )
+
+    return descriptor
 ```
 
-The category should be descriptive: "DNS", "HTTP", "SSL", "Email/SPF", etc.
+**Renderers automatically handle** error/warning collection from rows with `severity="error"` or `severity="warning"`.
 
 ## Testing
 
@@ -454,39 +782,94 @@ If you find yourself committing code changes without updating:
 
 ## Important Files
 
-- `cli.py` - Main CLI coordination
-- `output.py` - All display logic, central error/warning tracking
-- `dns_analyzer.py` - DNS queries and DNSSEC validation
-- `config.py` - Configuration schema and loading
-- `pyproject.toml` - Project metadata and dependencies
+**Core Architecture:**
+- `analyzers/protocol.py` - Protocol definitions, OutputDescriptor, VerbosityLevel
+- `core/registry.py` - Analyzer auto-discovery and dependency resolution
+- `core/config_manager.py` - Multi-layer configuration management
+- `cli.py` - CLI entry point with unified `--skip` parameter
+- `renderers/cli_renderer.py` - CLI output with semantic style mapping
+- `renderers/json_renderer.py` - JSON export renderer
+
+**Analyzers (self-contained):**
+- `analyzers/dns_analyzer.py` - DNS queries and DNSSEC validation
+- `analyzers/whois_analyzer.py` - WHOIS information
+- `analyzers/ssl_analyzer.py` - SSL/TLS certificate analysis
+- `analyzers/email_security.py` - Email security (SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT)
+- `analyzers/*` - 11 total analyzers, all following same pattern
+
+**Documentation:**
 - `README.md` - User-facing documentation (ALWAYS keep updated)
 - `CHANGELOG.md` - Version history (ALWAYS keep updated)
+- `CLAUDE.md` - This file, AI assistant guide
+- `pyproject.toml` - Project metadata and dependencies
 
 ## Common Pitfalls
 
-1. **Forgetting to add errors/warnings to central arrays** → Causes count mismatch
-2. **Violating DNS CNAME rule** → Showing both CNAME and A records
-3. **Not handling DNS timeouts gracefully** → Should be warnings, not errors
-4. **Not respecting verbosity levels** → Check `self.verbosity` in output methods
-5. **Hardcoding values** → Use configuration system instead
+1. **Hardcoding colors/icons instead of semantic styles** → Use `style_class="success"` not `color="green"`
+2. **Forgetting to import analyzer in `analyzers/__init__.py`** → Registry can't discover it
+3. **Violating DNS CNAME rule** → Showing both CNAME and A records
+4. **Not handling DNS timeouts gracefully** → Should be warnings, not errors
+5. **Not setting verbosity levels on OutputRows** → Data shows at wrong verbosity
+6. **Editing CLI/config/renderers when adding analyzer** → Only edit analyzer file!
+7. **Using `Any` type hints** → Be specific with types for better validation
+8. **Not updating dependent UI state after changes (GUI)** → When state changes (e.g., profile name), ALL dependent UI elements must be updated immediately
+   - Example: After saving new profile, button states must be updated via `_update_profile_buttons()`
+   - Example: After changing profile, dropdown value AND button states must sync
+   - Rule: **Think thoroughly about what else depends on the state you're changing**
+   - Always ask: "What UI elements read this state? Do they need to be updated?"
 
 ## Recent Major Changes
 
-1. **Error/Warning Counting System** (Latest)
-   - Centralized tracking in `OutputFormatter`
-   - All display methods updated to track in central arrays
-   - Summary now shows detailed list with categories
-   - 100% accurate counting guaranteed
+### Version 1.0.0 - Modular Architecture Refactoring (Latest)
 
-2. **CNAME/A Record Coexistence Fix**
-   - Implemented DNS rule enforcement
-   - Automatic removal of conflicting A/AAAA records
-   - Prevents showing invalid DNS configurations
+**Breaking changes - complete rewrite:**
 
-3. **WWW CNAME Warning Feature**
-   - New optional configuration `warn_www_not_cname`
-   - CLI flag `--warn-www-not-cname`
-   - Best practice guidance in README
+1. **Protocol-Based Plugin System**
+   - Analyzers use `@runtime_checkable Protocol` instead of inheritance
+   - Auto-discovery via `@registry.register` decorator
+   - Dependency resolution with topological sort
+   - Adding analyzer = create one file, done
+
+2. **Semantic Output Styling**
+   - `OutputDescriptor` with semantic style classes (success, error, warning, info)
+   - Renderers map to theme-specific colors/formatting
+   - Theme switching without code changes
+   - Future: HTML, GUI renderers without analyzer modifications
+
+3. **Per-Analyzer Configuration**
+   - Isolated TOML sections: `[dns]`, `[ssl]`, `[email]`
+   - Pydantic config classes in analyzer files
+   - Multi-layer merging with `ConfigManager`
+   - No config cross-contamination
+
+4. **Unified CLI**
+   - `--skip dns --skip whois` instead of `--skip-dns --skip-whois`
+   - `--verbosity quiet|normal|verbose|debug` instead of `-q/-v/-d`
+   - `--format cli|json` for output format
+   - `wdt list-analyzers` to see all available analyzers
+
+5. **Zero-Coupling Architecture**
+   - Analyzers never import CLI, config, or renderers
+   - Renderers never import specific analyzers
+   - Registry manages all coordination
+   - Complete decoupling for maintainability
+
+**Files deleted:**
+- `core/analyzer.py` (25KB) - Old monolithic orchestration
+- `utils/output.py` (78KB) - Old coupled OutputFormatter
+- `config.py` (16KB) - Old monolithic Config
+
+**Files created:**
+- `analyzers/protocol.py` - Protocol definitions
+- `core/registry.py` - Auto-discovery system
+- `core/config_manager.py` - Per-analyzer config
+- `renderers/` - Pluggable renderer system
+
+### Previous Versions
+
+- **0.x.x**: DNSSEC validation, RBL checking, email security, security headers
+- **0.x.x**: CNAME/A record coexistence fix, WWW CNAME warning feature
+- **0.x.x**: GUI application, CDN detection, SEO files, favicon analysis
 
 ## Git Workflow
 
@@ -497,65 +880,107 @@ If you find yourself committing code changes without updating:
 
 ## Questions to Ask Before Changes
 
-1. **Does this change affect error/warning counting?**
-   → Ensure central array tracking is updated
+1. **Am I adding a new analyzer?**
+   → Create one file in `analyzers/`, add `@registry.register`, done!
 
-2. **Does this introduce new DNS record handling?**
+2. **Am I modifying output?**
+   → Update analyzer's `describe_output()` with semantic styles, NOT colors
+
+3. **Does this introduce new DNS record handling?**
    → Verify DNS rules (CNAME coexistence) are respected
 
-3. **Is this configurable?**
-   → Should it be in config file, CLI arg, or both?
+4. **Am I adding configuration?**
+   → Add to analyzer's config class, update `default_config.toml`
 
-4. **How does this appear in different verbosity modes?**
-   → Update quiet, normal, and verbose output methods
+5. **How does this appear in different verbosity modes?**
+   → Set `verbosity` parameter on `OutputRow` objects
 
-5. **Does README need updating?**
+6. **Am I editing CLI/config/renderers?**
+   → STOP! You probably don't need to. Analyzers are self-contained.
+
+7. **Does README need updating?**
    → New features should be documented with examples
 
 ## Useful Commands
 
 ```bash
 # Development
-uv sync --dev                    # Install dependencies
-uv run webmaster-domain-tool analyze example.com  # Test run
+uv sync --dev                                    # Install dependencies
+uv run wdt analyze example.com                   # Test run
 
 # Code quality
-uv run black src/                # Format code
-uv run ruff check src/           # Lint
-uv run mypy src/                 # Type check
-uv run pytest                    # Run tests
+uv run black src/                                # Format code
+uv run ruff check src/                           # Lint
+uv run mypy src/                                 # Type check
+uv run pytest                                    # Run tests
 
-# Testing features
-wdt analyze --warn-www-not-cname example.com     # Test www CNAME warning
-wdt analyze -v example.com       # Verbose output
-wdt analyze --debug example.com  # Maximum verbosity
+# Testing new CLI
+wdt list-analyzers                               # List all analyzers
+wdt analyze --skip dns --skip whois example.com  # Skip analyzers
+wdt analyze --verbosity verbose example.com      # Verbose output
+wdt analyze --verbosity debug example.com        # Maximum verbosity
+wdt analyze --format json example.com            # JSON output
+
+# Testing specific analyzers
+wdt analyze --skip http --skip ssl example.com   # DNS and email only
 ```
 
 ## Architecture Diagram
 
 ```
-┌─────────────┐
-│   CLI       │  User input, arg parsing, config loading
-│  (cli.py)   │
-└──────┬──────┘
-       │
-       ├─────────┬─────────┬─────────┬─────────┬──────────┐
-       │         │         │         │         │          │
-       ▼         ▼         ▼         ▼         ▼          ▼
-    ┌──────┐ ┌──────┐ ┌──────┐ ┌───────┐ ┌────────┐ ┌──────┐
-    │ DNS  │ │ HTTP │ │ SSL  │ │ Email │ │Headers │ │ RBL  │  Analyzers
-    │      │ │      │ │      │ │       │ │        │ │      │
-    └───┬──┘ └───┬──┘ └───┬──┘ └───┬───┘ └───┬────┘ └───┬──┘
-        │        │        │        │         │          │
-        └────────┴────────┴────────┴─────────┴──────────┘
-                              │
-                              ▼
-                    ┌──────────────────┐
-                    │ OutputFormatter  │  Centralized display
-                    │   - Verbosity    │  & error tracking
-                    │   - Errors       │
-                    │   - Warnings     │
-                    └──────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                          User/Frontend                        │
+│                      (CLI, GUI, API, ...)                     │
+└────────────┬─────────────────────────────────┬────────────────┘
+             │                                 │
+             ▼                                 ▼
+    ┌─────────────────┐              ┌──────────────────┐
+    │   CLI (cli.py)  │              │   GUI (Flet)     │
+    │                 │              │                  │
+    │  - Arg parsing  │              │  - Web interface │
+    │  - Orchestration│              │  - Mobile UI     │
+    └────────┬────────┘              └────────┬─────────┘
+             │                                │
+             └────────────┬───────────────────┘
+                          ▼
+            ┌──────────────────────────────┐
+            │   Registry (core/registry.py) │
+            │                               │
+            │  - Auto-discovery             │
+            │  - Dependency resolution      │
+            │  - Topological sort           │
+            └──────────┬───────────────────┘
+                       │
+         ┌─────────────┼─────────────┐
+         │             │             │
+         ▼             ▼             ▼
+  ┌──────────┐  ┌──────────┐  ┌──────────┐
+  │ConfigMgr │  │Analyzers │  │Renderers │
+  │          │  │          │  │          │
+  │ Multi-   │  │ @register│  │ Semantic │
+  │ layer    │  │ Protocol │  │ styles   │
+  │ TOML     │  │ based    │  │ →colors  │
+  └──────────┘  └─────┬────┘  └──────────┘
+                      │
+        ┌─────────────┼─────────────┬────────────┬──────────┐
+        │             │             │            │          │
+        ▼             ▼             ▼            ▼          ▼
+    ┌──────┐    ┌──────┐    ┌──────┐    ┌──────────┐ ┌─────────┐
+    │ DNS  │    │WHOIS │    │ HTTP │    │   SSL    │ │  Email  │  ...
+    │      │    │      │    │      │    │          │ │         │
+    │  │   │    │  │   │    │  │   │    │    │     │ │    │    │
+    │  ↓   │    │  ↓   │    │  ↓   │    │    ↓     │ │    ↓    │
+    │Config│    │Config│    │Config│    │  Config  │ │  Config │
+    │Output│    │Output│    │Output│    │  Output  │ │  Output │
+    │ JSON │    │ JSON │    │ JSON │    │   JSON   │ │   JSON  │
+    └──────┘    └──────┘    └──────┘    └──────────┘ └─────────┘
+
+Key Principles:
+1. Zero coupling - analyzers never import CLI/config/renderers
+2. Protocol-based - no inheritance, duck typing via @runtime_checkable
+3. Auto-discovery - just add @registry.register
+4. Semantic output - analyzers say WHAT, renderers decide HOW
+5. Dependency resolution - automatic execution order
 ```
 
 ## Support

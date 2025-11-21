@@ -4,9 +4,7 @@ import json
 import logging
 from pathlib import Path
 
-from pydantic import ValidationError
-
-from .config import Config, load_config
+from .gui_config_adapter import GUIConfigAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -42,13 +40,13 @@ class ConfigProfileManager:
             profiles.append(file.stem)
         return sorted(profiles)
 
-    def save_profile(self, name: str, config: Config) -> None:
+    def save_profile(self, name: str, config_adapter: GUIConfigAdapter) -> None:
         """
         Save configuration as a named profile.
 
         Args:
             name: Profile name
-            config: Configuration to save
+            config_adapter: Configuration adapter to save
 
         Raises:
             ValueError: If profile name is invalid
@@ -59,7 +57,7 @@ class ConfigProfileManager:
         profile_path = self.profiles_dir / f"{name}.json"
 
         # Convert config to dict
-        config_dict = config.model_dump(mode="json")
+        config_dict = config_adapter.to_dict()
 
         # Save to JSON file
         with open(profile_path, "w") as f:
@@ -67,7 +65,7 @@ class ConfigProfileManager:
 
         logger.info(f"Saved profile: {name} to {profile_path}")
 
-    def load_profile(self, name: str) -> Config:
+    def load_profile(self, name: str) -> GUIConfigAdapter:
         """
         Load configuration from named profile.
 
@@ -75,7 +73,7 @@ class ConfigProfileManager:
             name: Profile name
 
         Returns:
-            Loaded configuration
+            Loaded configuration adapter
 
         Raises:
             FileNotFoundError: If profile doesn't exist
@@ -90,12 +88,13 @@ class ConfigProfileManager:
             with open(profile_path) as f:
                 config_dict = json.load(f)
 
-            # Validate and create Config
-            config = Config(**config_dict)
+            # Create adapter and load data
+            adapter = GUIConfigAdapter()
+            adapter.from_dict(config_dict)
             logger.info(f"Loaded profile: {name}")
-            return config
+            return adapter
 
-        except (json.JSONDecodeError, ValidationError) as e:
+        except (json.JSONDecodeError, Exception) as e:
             raise ValueError(f"Invalid profile {name}: {e}") from e
 
     def delete_profile(self, name: str) -> None:
@@ -129,17 +128,25 @@ class ConfigProfileManager:
         profile_path = self.profiles_dir / f"{name}.json"
         return profile_path.exists()
 
-    def get_or_create_default(self) -> Config:
+    def get_or_create_default(self) -> GUIConfigAdapter:
         """
-        Get default profile or create if doesn't exist.
+        Get default configuration (always from code, never saved).
+
+        The default config should always come from code (default_config.toml),
+        not from saved profiles. This ensures schema changes are properly picked up.
+
+        If an old "default" profile exists, it will be deleted (migration).
 
         Returns:
-            Default configuration profile
+            Fresh default configuration adapter from code
         """
+        # Migration: Delete old "default" profile if it exists
         if self.profile_exists("default"):
-            return self.load_profile("default")
-        else:
-            # Create default from current config
-            config = load_config()
-            self.save_profile("default", config)
-            return config
+            logger.info("Deleting old 'default' profile (migration to code-based defaults)")
+            try:
+                self.delete_profile("default")
+            except Exception as e:
+                logger.warning(f"Failed to delete old 'default' profile: {e}")
+
+        # Always return fresh config from code
+        return GUIConfigAdapter()

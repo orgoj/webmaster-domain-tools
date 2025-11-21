@@ -1,4 +1,8 @@
-"""Email security analysis module for SPF, DKIM, DMARC, BIMI, MTA-STS, and TLS-RPT."""
+"""Email security analysis module for SPF, DKIM, DMARC, BIMI, MTA-STS, and TLS-RPT.
+
+This analyzer detects and validates email authentication and security records.
+Completely self-contained with config, logic, and output formatting.
+"""
 
 import logging
 from dataclasses import dataclass, field
@@ -6,17 +10,39 @@ from dataclasses import dataclass, field
 import dns.exception
 import dns.resolver
 import httpx
+from pydantic import Field
 
-from ..constants import (
-    DEFAULT_DKIM_SELECTORS,
-    DEFAULT_EMAIL_TIMEOUT,
-    SPF_MAX_INCLUDES_LIMIT,
-    SPF_MAX_INCLUDES_WARNING,
-)
-from .base import BaseAnalysisResult, BaseAnalyzer
+from ..constants import DEFAULT_DKIM_SELECTORS, SPF_MAX_INCLUDES_LIMIT, SPF_MAX_INCLUDES_WARNING
+from ..core.registry import registry
 from .dns_utils import create_resolver
+from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+
+class EmailConfig(AnalyzerConfig):
+    """Email security analyzer configuration."""
+
+    dkim_selectors: list[str] = Field(
+        default_factory=lambda: DEFAULT_DKIM_SELECTORS.copy(),
+        description="List of DKIM selectors to check",
+    )
+    check_bimi: bool = Field(default=True, description="Check BIMI records")
+    check_mta_sts: bool = Field(default=True, description="Check MTA-STS")
+    check_tls_rpt: bool = Field(default=True, description="Check TLS-RPT")
+    nameservers: list[str] | None = Field(
+        default=None, description="Optional list of nameservers to use"
+    )
+
+
+# ============================================================================
+# Result Models
+# ============================================================================
 
 
 @dataclass
@@ -102,9 +128,10 @@ class TLSRPTRecord:
 
 
 @dataclass
-class EmailSecurityResult(BaseAnalysisResult):
+class EmailSecurityResult:
     """Results from email security analysis."""
 
+    domain: str
     spf: SPFRecord | None = None
     dkim: dict[str, DKIMRecord] = field(default_factory=dict)
     dmarc: DMARCRecord | None = None
@@ -112,111 +139,479 @@ class EmailSecurityResult(BaseAnalysisResult):
     bimi: BIMIRecord | None = None
     mta_sts: MTASTSRecord | None = None
     tls_rpt: TLSRPTRecord | None = None
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
-class EmailSecurityAnalyzer(BaseAnalyzer[EmailSecurityResult]):
-    """Analyzes email security records (SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT)."""
+# ============================================================================
+# Analyzer Implementation
+# ============================================================================
 
-    def __init__(
-        self,
-        dkim_selectors: list[str] | None = None,
-        timeout: float = DEFAULT_EMAIL_TIMEOUT,
-        check_bimi: bool = True,
-        check_mta_sts: bool = True,
-        check_tls_rpt: bool = True,
-        nameservers: list[str] | None = None,
-    ):
-        """
-        Initialize email security analyzer.
 
-        Args:
-            dkim_selectors: List of DKIM selectors to check
-            timeout: DNS and HTTP timeout in seconds
-            check_bimi: Check BIMI records
-            check_mta_sts: Check MTA-STS
-            check_tls_rpt: Check TLS-RPT
-            nameservers: Optional list of nameservers to use
-        """
-        self.dkim_selectors = dkim_selectors or DEFAULT_DKIM_SELECTORS
-        self.timeout = timeout
-        self.check_bimi = check_bimi
-        self.check_mta_sts = check_mta_sts
-        self.check_tls_rpt = check_tls_rpt
+@registry.register
+class EmailSecurityAnalyzer:
+    """
+    Analyzes email security records (SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT).
 
-        # Create DNS resolver using centralized utility
-        self.resolver = create_resolver(nameservers=nameservers, timeout=timeout)
+    This analyzer is completely self-contained - it declares its own:
+    - Configuration schema (EmailConfig)
+    - Output formatting (via describe_output)
+    - JSON serialization (via to_dict)
+    - Metadata
 
-    def analyze(self, domain: str) -> EmailSecurityResult:
+    Adding it to the registry makes it automatically available in
+    CLI, GUI, and any other frontend.
+    """
+
+    # ========================================================================
+    # Required Metadata
+    # ========================================================================
+
+    analyzer_id = "email"
+    name = "Email Security"
+    description = "Analyze email authentication and security records"
+    category = "security"
+    icon = "envelope"
+    config_class = EmailConfig
+    depends_on = ["dns"]  # Email needs DNS TXT records
+
+    # ========================================================================
+    # Required Protocol Methods
+    # ========================================================================
+
+    def analyze(self, domain: str, config: EmailConfig) -> EmailSecurityResult:
         """
         Perform comprehensive email security analysis.
 
         Args:
             domain: The domain to analyze
+            config: Email security analyzer configuration
 
         Returns:
             EmailSecurityResult with SPF, DKIM, DMARC, BIMI, MTA-STS, and TLS-RPT information
         """
         logger.info(f"Starting email security analysis for {domain}")
-        result = EmailSecurityResult(domain=domain, dkim_selectors_searched=self.dkim_selectors)
+        result = EmailSecurityResult(domain=domain, dkim_selectors_searched=config.dkim_selectors)
 
         # Normalize domain
         domain = domain.rstrip(".")
 
+        # Create DNS resolver
+        resolver = create_resolver(nameservers=config.nameservers, timeout=config.timeout)
+
         # Check SPF
-        result.spf = self._check_spf(domain)
+        result.spf = self._check_spf(domain, resolver)
         if result.spf:
             result.errors.extend(result.spf.errors)
             result.warnings.extend(result.spf.warnings)
 
         # Check DKIM
-        for selector in self.dkim_selectors:
-            dkim_record = self._check_dkim(domain, selector)
+        for selector in config.dkim_selectors:
+            dkim_record = self._check_dkim(domain, selector, resolver)
             if dkim_record:
                 result.dkim[selector] = dkim_record
                 result.errors.extend(dkim_record.errors)
                 result.warnings.extend(dkim_record.warnings)
 
-        # No need to add warning for missing DKIM - it's shown in output
-        # The selectors searched are stored in result.dkim_selectors_searched
-
         # Check DMARC
-        result.dmarc = self._check_dmarc(domain)
+        result.dmarc = self._check_dmarc(domain, resolver)
         if result.dmarc:
             result.errors.extend(result.dmarc.errors)
             result.warnings.extend(result.dmarc.warnings)
 
         # Check BIMI
-        if self.check_bimi:
-            result.bimi = self._check_bimi(domain)
+        if config.check_bimi:
+            result.bimi = self._check_bimi(domain, resolver)
             result.errors.extend(result.bimi.errors)
             result.warnings.extend(result.bimi.warnings)
 
         # Check MTA-STS
-        if self.check_mta_sts:
-            result.mta_sts = self._check_mta_sts(domain)
+        if config.check_mta_sts:
+            result.mta_sts = self._check_mta_sts(domain, resolver, config.timeout)
             result.errors.extend(result.mta_sts.errors)
             result.warnings.extend(result.mta_sts.warnings)
 
         # Check TLS-RPT
-        if self.check_tls_rpt:
-            result.tls_rpt = self._check_tls_rpt(domain)
+        if config.check_tls_rpt:
+            result.tls_rpt = self._check_tls_rpt(domain, resolver)
             result.errors.extend(result.tls_rpt.errors)
             result.warnings.extend(result.tls_rpt.warnings)
 
         return result
 
-    def _check_spf(self, domain: str) -> SPFRecord | None:
+    def describe_output(self, result: EmailSecurityResult) -> OutputDescriptor:
+        """
+        Describe how to render this analyzer's output.
+
+        Uses semantic styling (theme-agnostic) - no hardcoded colors.
+
+        Args:
+            result: Email security analysis result
+
+        Returns:
+            OutputDescriptor with semantic styling
+        """
+        descriptor = OutputDescriptor(title=self.name, category=self.category)
+
+        # Quiet mode summary
+        descriptor.quiet_summary = lambda r: self._get_quiet_summary(r)
+
+        # SPF Section
+        if result.spf:
+            descriptor.add_row(
+                label="SPF Record",
+                value="Found",
+                style_class="success" if result.spf.is_valid else "error",
+                icon="check" if result.spf.is_valid else "cross",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+            # Show SPF record in verbose mode
+            descriptor.add_row(
+                label="SPF Value",
+                value=result.spf.record,
+                style_class="info",
+                format_as="code",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+            # Show qualifier
+            descriptor.add_row(
+                label="SPF Qualifier",
+                value=result.spf.qualifier,
+                style_class="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+            # Show mechanisms in verbose
+            if result.spf.mechanisms:
+                descriptor.add_row(
+                    label="SPF Mechanisms",
+                    value=result.spf.mechanisms,
+                    section_type="list",
+                    style_class="info",
+                    verbosity=VerbosityLevel.VERBOSE,
+                )
+        else:
+            descriptor.add_row(
+                label="SPF Record",
+                value="Not found",
+                style_class="warning",
+                icon="warning",
+                severity="warning",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # DKIM Section
+        if result.dkim:
+            descriptor.add_row(
+                label="DKIM Records",
+                value=f"Found {len(result.dkim)} selector(s)",
+                style_class="success",
+                icon="check",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+            # Show each DKIM record in verbose
+            for selector, dkim in result.dkim.items():
+                descriptor.add_row(
+                    label=f"DKIM ({selector})",
+                    value=dkim.record if len(dkim.record) < 100 else dkim.record[:100] + "...",
+                    style_class="info",
+                    format_as="code",
+                    verbosity=VerbosityLevel.VERBOSE,
+                )
+        else:
+            descriptor.add_row(
+                label="DKIM Records",
+                value=f"Not found (checked: {', '.join(result.dkim_selectors_searched)})",
+                style_class="muted",
+                icon="info",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # DMARC Section
+        if result.dmarc:
+            # Style based on policy strength
+            policy_style = {
+                "reject": "success",
+                "quarantine": "warning",
+                "none": "muted",
+            }.get(result.dmarc.policy, "neutral")
+
+            descriptor.add_row(
+                label="DMARC Policy",
+                value=result.dmarc.policy.upper() if result.dmarc.policy else "Not set",
+                style_class=policy_style,
+                icon="check" if result.dmarc.is_valid else "cross",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+            # Show DMARC record in verbose
+            descriptor.add_row(
+                label="DMARC Record",
+                value=result.dmarc.record,
+                style_class="info",
+                format_as="code",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+            # Show report addresses
+            if result.dmarc.rua:
+                descriptor.add_row(
+                    label="Aggregate Reports (rua)",
+                    value=result.dmarc.rua,
+                    section_type="list",
+                    style_class="info",
+                    verbosity=VerbosityLevel.VERBOSE,
+                )
+        else:
+            descriptor.add_row(
+                label="DMARC Policy",
+                value="Not configured",
+                style_class="warning",
+                icon="warning",
+                severity="warning",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # BIMI Section
+        if result.bimi and result.bimi.record_found:
+            descriptor.add_row(
+                label="BIMI",
+                value="Configured",
+                style_class="success",
+                icon="check",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+            if result.bimi.logo_url:
+                descriptor.add_row(
+                    label="BIMI Logo",
+                    value=result.bimi.logo_url,
+                    link_url=result.bimi.logo_url,
+                    style_class="info",
+                    verbosity=VerbosityLevel.VERBOSE,
+                )
+
+        # MTA-STS Section
+        if result.mta_sts and result.mta_sts.record_found:
+            mode_style = {
+                "enforce": "success",
+                "testing": "warning",
+                "none": "muted",
+            }.get(result.mta_sts.policy_mode, "neutral")
+
+            descriptor.add_row(
+                label="MTA-STS",
+                value=(
+                    f"Enabled ({result.mta_sts.policy_mode})"
+                    if result.mta_sts.policy_mode
+                    else "DNS record found"
+                ),
+                style_class=mode_style,
+                icon="check",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+            if result.mta_sts.mx_patterns:
+                descriptor.add_row(
+                    label="MTA-STS MX Patterns",
+                    value=result.mta_sts.mx_patterns,
+                    section_type="list",
+                    style_class="info",
+                    verbosity=VerbosityLevel.VERBOSE,
+                )
+
+        # TLS-RPT Section
+        if result.tls_rpt and result.tls_rpt.record_found:
+            descriptor.add_row(
+                label="TLS-RPT",
+                value="Configured",
+                style_class="success",
+                icon="check",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+            if result.tls_rpt.reporting_addresses:
+                descriptor.add_row(
+                    label="TLS-RPT Addresses",
+                    value=result.tls_rpt.reporting_addresses,
+                    section_type="list",
+                    style_class="info",
+                    verbosity=VerbosityLevel.VERBOSE,
+                )
+
+        # Errors
+        for error in result.errors:
+            descriptor.add_row(
+                value=error,
+                section_type="text",
+                style_class="error",
+                severity="error",
+                icon="cross",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Warnings
+        for warning in result.warnings:
+            descriptor.add_row(
+                value=warning,
+                section_type="text",
+                style_class="warning",
+                severity="warning",
+                icon="warning",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        return descriptor
+
+    def to_dict(self, result: EmailSecurityResult) -> dict:
+        """
+        Serialize result to JSON-compatible dictionary.
+
+        Args:
+            result: Email security analysis result
+
+        Returns:
+            JSON-serializable dict
+        """
+        output = {
+            "domain": result.domain,
+            "errors": result.errors,
+            "warnings": result.warnings,
+        }
+
+        # SPF
+        if result.spf:
+            output["spf"] = {
+                "record": result.spf.record,
+                "mechanisms": result.spf.mechanisms,
+                "qualifier": result.spf.qualifier,
+                "is_valid": result.spf.is_valid,
+                "errors": result.spf.errors,
+                "warnings": result.spf.warnings,
+            }
+        else:
+            output["spf"] = None
+
+        # DKIM
+        output["dkim"] = {}
+        for selector, dkim in result.dkim.items():
+            output["dkim"][selector] = {
+                "record": dkim.record,
+                "version": dkim.version,
+                "key_type": dkim.key_type,
+                "public_key": dkim.public_key,
+                "is_valid": dkim.is_valid,
+                "errors": dkim.errors,
+                "warnings": dkim.warnings,
+            }
+        output["dkim_selectors_searched"] = result.dkim_selectors_searched
+
+        # DMARC
+        if result.dmarc:
+            output["dmarc"] = {
+                "record": result.dmarc.record,
+                "policy": result.dmarc.policy,
+                "subdomain_policy": result.dmarc.subdomain_policy,
+                "percentage": result.dmarc.percentage,
+                "rua": result.dmarc.rua,
+                "ruf": result.dmarc.ruf,
+                "is_valid": result.dmarc.is_valid,
+                "errors": result.dmarc.errors,
+                "warnings": result.dmarc.warnings,
+            }
+        else:
+            output["dmarc"] = None
+
+        # BIMI
+        if result.bimi:
+            output["bimi"] = {
+                "record_found": result.bimi.record_found,
+                "record_value": result.bimi.record_value,
+                "logo_url": result.bimi.logo_url,
+                "vmc_url": result.bimi.vmc_url,
+                "errors": result.bimi.errors,
+                "warnings": result.bimi.warnings,
+            }
+        else:
+            output["bimi"] = None
+
+        # MTA-STS
+        if result.mta_sts:
+            output["mta_sts"] = {
+                "record_found": result.mta_sts.record_found,
+                "record_value": result.mta_sts.record_value,
+                "policy_found": result.mta_sts.policy_found,
+                "policy_mode": result.mta_sts.policy_mode,
+                "policy_max_age": result.mta_sts.policy_max_age,
+                "mx_patterns": result.mta_sts.mx_patterns,
+                "errors": result.mta_sts.errors,
+                "warnings": result.mta_sts.warnings,
+            }
+        else:
+            output["mta_sts"] = None
+
+        # TLS-RPT
+        if result.tls_rpt:
+            output["tls_rpt"] = {
+                "record_found": result.tls_rpt.record_found,
+                "record_value": result.tls_rpt.record_value,
+                "reporting_addresses": result.tls_rpt.reporting_addresses,
+                "errors": result.tls_rpt.errors,
+                "warnings": result.tls_rpt.warnings,
+            }
+        else:
+            output["tls_rpt"] = None
+
+        return output
+
+    # ========================================================================
+    # Helper Methods (kept intact from original implementation)
+    # ========================================================================
+
+    def _get_quiet_summary(self, result: EmailSecurityResult) -> str:
+        """Generate quiet mode summary."""
+        parts = []
+
+        if result.spf:
+            parts.append(f"SPF: {result.spf.qualifier}")
+        else:
+            parts.append("SPF: None")
+
+        if result.dkim:
+            parts.append(f"DKIM: {len(result.dkim)}")
+        else:
+            parts.append("DKIM: None")
+
+        if result.dmarc:
+            parts.append(f"DMARC: {result.dmarc.policy}")
+        else:
+            parts.append("DMARC: None")
+
+        return " | ".join(parts)
+
+    def _check_spf(self, domain: str, resolver: dns.resolver.Resolver) -> SPFRecord | None:
         """
         Check SPF record for a domain.
 
         Args:
             domain: The domain to check
+            resolver: DNS resolver to use
 
         Returns:
             SPFRecord or None if not found
         """
         try:
-            answers = self.resolver.resolve(domain, "TXT")
+            answers = resolver.resolve(domain, "TXT")
 
             # Find SPF record (starts with "v=spf1")
             spf_record = None
@@ -280,20 +675,23 @@ class EmailSecurityAnalyzer(BaseAnalyzer[EmailSecurityResult]):
         if not spf.mechanisms:
             spf.warnings.append("SPF has no mechanisms defined")
 
-    def _check_dkim(self, domain: str, selector: str) -> DKIMRecord | None:
+    def _check_dkim(
+        self, domain: str, selector: str, resolver: dns.resolver.Resolver
+    ) -> DKIMRecord | None:
         """
         Check DKIM record for a domain and selector.
 
         Args:
             domain: The domain to check
             selector: The DKIM selector
+            resolver: DNS resolver to use
 
         Returns:
             DKIMRecord or None if not found
         """
         try:
             dkim_domain = f"{selector}._domainkey.{domain}"
-            answers = self.resolver.resolve(dkim_domain, "TXT")
+            answers = resolver.resolve(dkim_domain, "TXT")
 
             # Combine TXT record parts (DKIM records can be split)
             dkim_record = ""
@@ -362,19 +760,20 @@ class EmailSecurityAnalyzer(BaseAnalyzer[EmailSecurityResult]):
         if dkim.key_type not in ("rsa", "ed25519"):
             dkim.warnings.append(f"Unknown key type: {dkim.key_type}")
 
-    def _check_dmarc(self, domain: str) -> DMARCRecord | None:
+    def _check_dmarc(self, domain: str, resolver: dns.resolver.Resolver) -> DMARCRecord | None:
         """
         Check DMARC record for a domain.
 
         Args:
             domain: The domain to check
+            resolver: DNS resolver to use
 
         Returns:
             DMARCRecord or None if not found
         """
         try:
             dmarc_domain = f"_dmarc.{domain}"
-            answers = self.resolver.resolve(dmarc_domain, "TXT")
+            answers = resolver.resolve(dmarc_domain, "TXT")
 
             # Find DMARC record (starts with "v=DMARC1")
             dmarc_record = None
@@ -453,14 +852,14 @@ class EmailSecurityAnalyzer(BaseAnalyzer[EmailSecurityResult]):
         if not dmarc.rua:
             dmarc.warnings.append("No aggregate report address (rua) configured")
 
-    def _check_bimi(self, domain: str) -> BIMIRecord:
+    def _check_bimi(self, domain: str, resolver: dns.resolver.Resolver) -> BIMIRecord:
         """Check BIMI (Brand Indicators for Message Identification) record."""
         # BIMI record is at default._bimi.domain.com
         bimi_domain = f"default._bimi.{domain}"
         result = BIMIRecord(domain=domain)
 
         try:
-            answers = self.resolver.resolve(bimi_domain, "TXT")
+            answers = resolver.resolve(bimi_domain, "TXT")
 
             for rdata in answers:
                 txt_string = rdata.to_text().strip('"')
@@ -498,7 +897,9 @@ class EmailSecurityAnalyzer(BaseAnalyzer[EmailSecurityResult]):
 
         return result
 
-    def _check_mta_sts(self, domain: str) -> MTASTSRecord:
+    def _check_mta_sts(
+        self, domain: str, resolver: dns.resolver.Resolver, timeout: float
+    ) -> MTASTSRecord:
         """Check MTA-STS (Mail Transfer Agent Strict Transport Security)."""
         # MTA-STS DNS record is at _mta-sts.domain.com
         mta_sts_domain = f"_mta-sts.{domain}"
@@ -506,7 +907,7 @@ class EmailSecurityAnalyzer(BaseAnalyzer[EmailSecurityResult]):
 
         # Check DNS record
         try:
-            answers = self.resolver.resolve(mta_sts_domain, "TXT")
+            answers = resolver.resolve(mta_sts_domain, "TXT")
 
             for rdata in answers:
                 txt_string = rdata.to_text().strip('"')
@@ -533,7 +934,7 @@ class EmailSecurityAnalyzer(BaseAnalyzer[EmailSecurityResult]):
             policy_url = f"https://mta-sts.{domain}/.well-known/mta-sts.txt"
 
             try:
-                with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+                with httpx.Client(timeout=timeout, follow_redirects=True) as client:
                     response = client.get(policy_url)
 
                 if response.status_code == 200:
@@ -568,14 +969,14 @@ class EmailSecurityAnalyzer(BaseAnalyzer[EmailSecurityResult]):
 
         return result
 
-    def _check_tls_rpt(self, domain: str) -> TLSRPTRecord:
+    def _check_tls_rpt(self, domain: str, resolver: dns.resolver.Resolver) -> TLSRPTRecord:
         """Check TLS-RPT (TLS Reporting) record."""
         # TLS-RPT record is at _smtp._tls.domain.com
         tls_rpt_domain = f"_smtp._tls.{domain}"
         result = TLSRPTRecord(domain=domain)
 
         try:
-            answers = self.resolver.resolve(tls_rpt_domain, "TXT")
+            answers = resolver.resolve(tls_rpt_domain, "TXT")
 
             for rdata in answers:
                 txt_string = rdata.to_text().strip('"')

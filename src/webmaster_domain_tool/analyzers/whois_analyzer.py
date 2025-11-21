@@ -1,4 +1,9 @@
-"""WHOIS analysis module for checking domain registration information."""
+"""WHOIS analysis module - check domain registration information.
+
+This analyzer queries WHOIS databases to retrieve domain registration details,
+including registrar, expiration dates, and contact information.
+Completely self-contained with config, logic, and output formatting.
+"""
 
 import logging
 from dataclasses import dataclass, field
@@ -6,20 +11,38 @@ from datetime import datetime
 from typing import Any
 
 import whois
+from pydantic import Field
 
-from .base import BaseAnalysisResult, BaseAnalyzer
+from ..core.registry import registry
+from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
 
 logger = logging.getLogger(__name__)
 
-# Default expiry warning threshold (in days)
-DEFAULT_WHOIS_EXPIRY_WARNING_DAYS = 30
-DEFAULT_WHOIS_EXPIRY_CRITICAL_DAYS = 7
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+
+class WHOISConfig(AnalyzerConfig):
+    """WHOIS analyzer configuration."""
+
+    expiry_warning_days: int = Field(default=30, description="Days before expiry to show warning")
+    expiry_critical_days: int = Field(
+        default=7, description="Days before expiry to show critical error"
+    )
+
+
+# ============================================================================
+# Result Model
+# ============================================================================
 
 
 @dataclass
-class WhoisAnalysisResult(BaseAnalysisResult):
+class WhoisAnalysisResult:
     """Results from WHOIS analysis."""
 
+    domain: str
     registrar: str | None = None
     creation_date: datetime | None = None
     expiration_date: datetime | None = None
@@ -33,32 +56,53 @@ class WhoisAnalysisResult(BaseAnalysisResult):
     nameservers: list[str] = field(default_factory=list)
     status: list[str] = field(default_factory=list)
     days_until_expiry: int | None = None
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
-class WhoisAnalyzer(BaseAnalyzer[WhoisAnalysisResult]):
-    """Analyzes WHOIS registration information for a domain."""
+# ============================================================================
+# Analyzer Implementation
+# ============================================================================
 
-    def __init__(
-        self,
-        expiry_warning_days: int = DEFAULT_WHOIS_EXPIRY_WARNING_DAYS,
-        expiry_critical_days: int = DEFAULT_WHOIS_EXPIRY_CRITICAL_DAYS,
-    ):
-        """
-        Initialize WHOIS analyzer.
 
-        Args:
-            expiry_warning_days: Days before expiry to show warning
-            expiry_critical_days: Days before expiry to show critical error
-        """
-        self.expiry_warning_days = expiry_warning_days
-        self.expiry_critical_days = expiry_critical_days
+@registry.register
+class WhoisAnalyzer:
+    """
+    Analyzes WHOIS registration information for a domain.
 
-    def analyze(self, domain: str) -> WhoisAnalysisResult:
+    This analyzer is completely self-contained - it declares its own:
+    - Configuration schema (WHOISConfig)
+    - Output formatting (via describe_output)
+    - JSON serialization (via to_dict)
+    - Metadata
+
+    Adding it to the registry makes it automatically available in
+    CLI, GUI, and any other frontend.
+    """
+
+    # ========================================================================
+    # Required Metadata
+    # ========================================================================
+
+    analyzer_id = "whois"
+    name = "WHOIS Information"
+    description = "Query domain registration information from WHOIS databases"
+    category = "general"
+    icon = "info"
+    config_class = WHOISConfig
+    depends_on = []  # WHOIS has no dependencies
+
+    # ========================================================================
+    # Required Protocol Methods
+    # ========================================================================
+
+    def analyze(self, domain: str, config: WHOISConfig) -> WhoisAnalysisResult:
         """
         Perform WHOIS analysis of a domain.
 
         Args:
             domain: The domain to analyze
+            config: WHOIS analyzer configuration
 
         Returns:
             WhoisAnalysisResult with registration information
@@ -101,9 +145,9 @@ class WhoisAnalyzer(BaseAnalyzer[WhoisAnalysisResult]):
 
                 if days_until_expiry < 0:
                     result.errors.append(f"Domain has expired {abs(days_until_expiry)} days ago")
-                elif days_until_expiry <= self.expiry_critical_days:
+                elif days_until_expiry <= config.expiry_critical_days:
                     result.errors.append(f"Domain expires in {days_until_expiry} days (critical)")
-                elif days_until_expiry <= self.expiry_warning_days:
+                elif days_until_expiry <= config.expiry_warning_days:
                     result.warnings.append(f"Domain expires in {days_until_expiry} days")
             else:
                 result.warnings.append("Expiration date not available in WHOIS data")
@@ -186,6 +230,234 @@ class WhoisAnalyzer(BaseAnalyzer[WhoisAnalysisResult]):
                 logger.debug(f"Unexpected error in WHOIS analysis for {domain}: {e}")
 
         return result
+
+    def describe_output(self, result: WhoisAnalysisResult) -> OutputDescriptor:
+        """
+        Describe how to render this analyzer's output.
+
+        Uses semantic styling (theme-agnostic) - no hardcoded colors.
+
+        Args:
+            result: WHOIS analysis result
+
+        Returns:
+            OutputDescriptor with semantic styling
+        """
+        descriptor = OutputDescriptor(title=self.name, category=self.category)
+
+        # Quiet mode summary
+        descriptor.quiet_summary = lambda r: (
+            f"WHOIS: {r.registrar or 'Unknown'}, expires in {r.days_until_expiry} days"
+            if r.days_until_expiry is not None
+            else f"WHOIS: {r.registrar or 'Unknown'}"
+        )
+
+        # Registrar
+        if result.registrar:
+            descriptor.add_row(
+                label="Registrar",
+                value=result.registrar,
+                style_class="info",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Expiration date with semantic styling based on urgency
+        if result.expiration_date:
+            expiry_style = "success"
+            expiry_icon = "check"
+
+            if result.days_until_expiry is not None:
+                if result.days_until_expiry < 0:
+                    expiry_style = "error"
+                    expiry_icon = "cross"
+                elif result.days_until_expiry <= 7:
+                    expiry_style = "error"
+                    expiry_icon = "warning"
+                elif result.days_until_expiry <= 30:
+                    expiry_style = "warning"
+                    expiry_icon = "warning"
+
+            descriptor.add_row(
+                label="Expiration Date",
+                value=result.expiration_date.strftime("%Y-%m-%d"),
+                style_class=expiry_style,
+                severity=(
+                    "info"
+                    if expiry_style == "success"
+                    else "warning" if expiry_style == "warning" else "error"
+                ),
+                icon=expiry_icon,
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+            if result.days_until_expiry is not None:
+                descriptor.add_row(
+                    label="Days Until Expiry",
+                    value=str(result.days_until_expiry),
+                    style_class=expiry_style,
+                    severity=(
+                        "info"
+                        if expiry_style == "success"
+                        else "warning" if expiry_style == "warning" else "error"
+                    ),
+                    verbosity=VerbosityLevel.NORMAL,
+                )
+
+        # Creation date
+        if result.creation_date:
+            descriptor.add_row(
+                label="Creation Date",
+                value=result.creation_date.strftime("%Y-%m-%d"),
+                style_class="info",
+                severity="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+        # Updated date
+        if result.updated_date:
+            descriptor.add_row(
+                label="Last Updated",
+                value=result.updated_date.strftime("%Y-%m-%d"),
+                style_class="info",
+                severity="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+        # Registrant information (verbose only - may contain sensitive data)
+        if result.registrant_name:
+            descriptor.add_row(
+                label="Registrant Name",
+                value=result.registrant_name,
+                style_class="muted",
+                severity="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+        if result.registrant_organization:
+            descriptor.add_row(
+                label="Registrant Organization",
+                value=result.registrant_organization,
+                style_class="muted",
+                severity="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+        if result.registrant_email:
+            descriptor.add_row(
+                label="Registrant Email",
+                value=result.registrant_email,
+                style_class="muted",
+                severity="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+        # Admin contact (verbose only)
+        if result.admin_name:
+            descriptor.add_row(
+                label="Admin Name",
+                value=result.admin_name,
+                style_class="muted",
+                severity="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+        if result.admin_email:
+            descriptor.add_row(
+                label="Admin Email",
+                value=result.admin_email,
+                style_class="muted",
+                severity="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+        if result.admin_contact:
+            descriptor.add_row(
+                label="Admin Contact Handle",
+                value=result.admin_contact,
+                style_class="muted",
+                severity="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+        # Nameservers (verbose)
+        if result.nameservers:
+            descriptor.add_row(
+                label="Nameservers",
+                value=result.nameservers,
+                section_type="list",
+                style_class="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+        # Status (verbose)
+        if result.status:
+            descriptor.add_row(
+                label="Domain Status",
+                value=result.status,
+                section_type="list",
+                style_class="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+        # Errors
+        for error in result.errors:
+            descriptor.add_row(
+                value=error,
+                section_type="text",
+                style_class="error",
+                severity="error",
+                icon="cross",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Warnings
+        for warning in result.warnings:
+            descriptor.add_row(
+                value=warning,
+                section_type="text",
+                style_class="warning",
+                severity="warning",
+                icon="warning",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        return descriptor
+
+    def to_dict(self, result: WhoisAnalysisResult) -> dict:
+        """
+        Serialize result to JSON-compatible dictionary.
+
+        Args:
+            result: WHOIS analysis result
+
+        Returns:
+            JSON-serializable dict
+        """
+        return {
+            "domain": result.domain,
+            "registrar": result.registrar,
+            "creation_date": result.creation_date.isoformat() if result.creation_date else None,
+            "expiration_date": (
+                result.expiration_date.isoformat() if result.expiration_date else None
+            ),
+            "updated_date": result.updated_date.isoformat() if result.updated_date else None,
+            "days_until_expiry": result.days_until_expiry,
+            "registrant_name": result.registrant_name,
+            "registrant_organization": result.registrant_organization,
+            "registrant_email": result.registrant_email,
+            "admin_name": result.admin_name,
+            "admin_email": result.admin_email,
+            "admin_contact": result.admin_contact,
+            "nameservers": result.nameservers,
+            "status": result.status,
+            "errors": result.errors,
+            "warnings": result.warnings,
+        }
+
+    # ========================================================================
+    # Helper Methods (Internal)
+    # ========================================================================
 
     def _extract_string_field(self, whois_data: Any, field: str) -> str | None:
         """

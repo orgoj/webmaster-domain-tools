@@ -1,4 +1,9 @@
-"""DNS analysis module for checking domain DNS records."""
+"""DNS analysis module for checking domain DNS records.
+
+This analyzer performs comprehensive DNS analysis including record lookups,
+DNSSEC validation, PTR checks, and MX validation. Follows the modular
+analyzer protocol for self-contained configuration and output.
+"""
 
 import logging
 from dataclasses import dataclass, field
@@ -9,10 +14,12 @@ import dns.exception
 import dns.name
 import dns.resolver
 import dns.reversename
+from pydantic import Field
 
 from ..constants import DEFAULT_DNS_TIMEOUT
-from .base import BaseAnalysisResult, BaseAnalyzer
+from ..core.registry import registry
 from .dns_utils import create_resolver
+from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +45,35 @@ def _format_seconds_human(seconds: int) -> str:
         return f"{days}d"
 
 
+# ============================================================================
+# Configuration
+# ============================================================================
+
+
+class DNSConfig(AnalyzerConfig):
+    """DNS analyzer configuration."""
+
+    nameservers: list[str] | None = Field(
+        default=None,
+        description="Custom nameservers to use for queries (uses system default if not specified)",
+    )
+    check_dnssec: bool = Field(default=True, description="Check DNSSEC validation status")
+    warn_www_not_cname: bool = Field(
+        default=False,
+        description="Warn if www subdomain uses A/AAAA instead of CNAME",
+    )
+    skip_www: bool = Field(
+        default=False,
+        description="Skip checking www subdomain (useful for subdomains)",
+    )
+    timeout: float = Field(default=DEFAULT_DNS_TIMEOUT, description="DNS query timeout in seconds")
+
+
+# ============================================================================
+# Result Models
+# ============================================================================
+
+
 @dataclass
 class DNSRecord:
     """Represents a DNS record."""
@@ -61,51 +97,71 @@ class DNSSECInfo:
 
 
 @dataclass
-class DNSAnalysisResult(BaseAnalysisResult):
+class DNSAnalysisResult:
     """Results from DNS analysis."""
 
+    domain: str
     records: dict[str, list[DNSRecord]] = field(default_factory=dict)
     ptr_records: dict[str, str] = field(default_factory=dict)  # IP -> PTR mapping
     dnssec: DNSSECInfo | None = None
     info_messages: list[str] = field(default_factory=list)  # Informational messages (not warnings)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
-class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
-    """Analyzes DNS records for a domain."""
+# ============================================================================
+# Analyzer Implementation
+# ============================================================================
+
+
+@registry.register
+class DNSAnalyzer:
+    """
+    Analyzes DNS records for a domain.
+
+    This analyzer is completely self-contained - it declares its own:
+    - Configuration schema (DNSConfig)
+    - Output formatting (via describe_output)
+    - JSON serialization (via to_dict)
+    - Metadata
+
+    Performs comprehensive DNS analysis including:
+    - A, AAAA, MX, TXT, NS, SOA, CAA, CNAME records
+    - DNSSEC validation (DNSKEY, DS records)
+    - PTR (reverse DNS) lookups
+    - MX record validation
+    - www subdomain checks with best practice warnings
+    """
+
+    # ========================================================================
+    # Required Metadata
+    # ========================================================================
+
+    analyzer_id = "dns"
+    name = "DNS Analysis"
+    description = "Comprehensive DNS record analysis and DNSSEC validation"
+    category = "general"
+    icon = "globe"
+    config_class = DNSConfig
+    depends_on = []  # DNS has no dependencies
+
+    # ========================================================================
+    # DNS Record Types
+    # ========================================================================
 
     RECORD_TYPES = ["A", "AAAA", "MX", "TXT", "NS", "SOA", "CAA", "CNAME"]
 
-    def __init__(
-        self,
-        nameservers: list[str] | None = None,
-        check_dnssec: bool = True,
-        warn_www_not_cname: bool = False,
-        skip_www: bool = False,
-        timeout: float = DEFAULT_DNS_TIMEOUT,
-    ):
-        """
-        Initialize DNS analyzer.
+    # ========================================================================
+    # Required Protocol Methods
+    # ========================================================================
 
-        Args:
-            nameservers: Optional list of nameservers to use for queries
-            check_dnssec: Whether to check DNSSEC validation
-            warn_www_not_cname: Warn if www subdomain is not a CNAME record
-            skip_www: Skip checking www subdomain (useful for subdomains or domains without www)
-            timeout: DNS query timeout in seconds
-        """
-        self.check_dnssec = check_dnssec
-        self.warn_www_not_cname = warn_www_not_cname
-        self.skip_www = skip_www
-
-        # Create DNS resolver using centralized utility
-        self.resolver = create_resolver(nameservers=nameservers, timeout=timeout)
-
-    def analyze(self, domain: str) -> DNSAnalysisResult:
+    def analyze(self, domain: str, config: DNSConfig) -> DNSAnalysisResult:
         """
         Perform comprehensive DNS analysis of a domain.
 
         Args:
             domain: The domain to analyze
+            config: DNS analyzer configuration
 
         Returns:
             DNSAnalysisResult with all DNS information
@@ -117,38 +173,264 @@ class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
 
         result = DNSAnalysisResult(domain=domain)
 
+        # Create DNS resolver using centralized utility
+        resolver = create_resolver(nameservers=config.nameservers, timeout=config.timeout)
+
         # Check main domain
-        self._check_domain_records(domain, result)
+        self._check_domain_records(domain, result, resolver)
 
         # Check www subdomain if not already a subdomain and not skipping www
-        if not self.skip_www and not domain.startswith("www."):
+        if not config.skip_www and not domain.startswith("www."):
             www_domain = f"www.{domain}"
-            self._check_domain_records(www_domain, result)
+            self._check_domain_records(www_domain, result, resolver)
 
             # Check if www subdomain should be CNAME
-            if self.warn_www_not_cname:
+            if config.warn_www_not_cname:
                 self._check_www_cname(www_domain, result)
 
         # Validate MX records
-        self._validate_mx_records(result)
+        self._validate_mx_records(result, resolver)
 
         # Check PTR records for A records
-        self._check_ptr_records(result)
+        self._check_ptr_records(result, resolver)
 
         # Check DNSSEC
-        if self.check_dnssec:
-            result.dnssec = self._check_dnssec(domain)
+        if config.check_dnssec:
+            result.dnssec = self._check_dnssec(domain, resolver)
             if result.dnssec:
                 result.errors.extend(result.dnssec.errors)
                 result.warnings.extend(result.dnssec.warnings)
 
         return result
 
-    def _check_domain_records(self, domain: str, result: DNSAnalysisResult) -> None:
+    def describe_output(self, result: DNSAnalysisResult) -> OutputDescriptor:
+        """
+        Describe how to render DNS analysis results.
+
+        Uses semantic styling (theme-agnostic) - no hardcoded colors.
+
+        Args:
+            result: DNS analysis result
+
+        Returns:
+            OutputDescriptor with semantic styling
+        """
+        descriptor = OutputDescriptor(title=self.name, category=self.category)
+
+        # Quiet mode summary
+        descriptor.quiet_summary = lambda r: (
+            f"DNS: {len([k for k in r.records.keys() if not k.endswith(':CNAME_A')])} record types"
+        )
+
+        # Display DNS records grouped by domain and type
+        domains_seen = set()
+        for key in sorted(result.records.keys()):
+            if key.endswith(":CNAME_A"):
+                continue  # Skip CNAME_A records (shown with CNAME)
+
+            domain_name, record_type = key.rsplit(":", 1)
+            records_list = result.records[key]
+
+            if not records_list:
+                continue
+
+            # Add domain heading if new domain
+            if domain_name not in domains_seen:
+                domains_seen.add(domain_name)
+                descriptor.add_row(
+                    value=f"DNS Records for {domain_name}",
+                    section_type="heading",
+                    style_class="info",
+                    verbosity=VerbosityLevel.NORMAL,
+                )
+
+            # Format records for display
+            if record_type == "CNAME":
+                # Show CNAME and its resolved A records
+                for record in records_list:
+                    descriptor.add_row(
+                        label=f"{record_type} ({_format_ttl(record.ttl)})",
+                        value=record.value,
+                        style_class="success",
+                        icon="arrow",
+                        verbosity=VerbosityLevel.NORMAL,
+                    )
+
+                    # Show resolved A records if available
+                    cname_a_key = f"{domain_name}:CNAME_A"
+                    if cname_a_key in result.records:
+                        a_records = result.records[cname_a_key]
+                        for a_rec in a_records:
+                            descriptor.add_row(
+                                label="  → A",
+                                value=a_rec.value,
+                                style_class="info",
+                                verbosity=VerbosityLevel.NORMAL,
+                            )
+            else:
+                # Standard record display
+                for record in records_list:
+                    descriptor.add_row(
+                        label=f"{record_type} ({_format_ttl(record.ttl)})",
+                        value=record.value,
+                        style_class="success",
+                        icon="check",
+                        verbosity=VerbosityLevel.NORMAL,
+                    )
+
+        # DNSSEC Information
+        if result.dnssec:
+            descriptor.add_row(
+                value="DNSSEC Status",
+                section_type="heading",
+                style_class="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+            if result.dnssec.enabled:
+                status = "Valid" if result.dnssec.valid else "Enabled (validation incomplete)"
+                style = "success" if result.dnssec.valid else "warning"
+                icon = "check" if result.dnssec.valid else "warning"
+
+                descriptor.add_row(
+                    label="DNSSEC",
+                    value=status,
+                    style_class=style,
+                    icon=icon,
+                    verbosity=VerbosityLevel.NORMAL,
+                )
+
+                # Show details in verbose mode
+                descriptor.add_row(
+                    label="DNSKEY",
+                    value="Present" if result.dnssec.has_dnskey else "Missing",
+                    style_class="success" if result.dnssec.has_dnskey else "muted",
+                    verbosity=VerbosityLevel.VERBOSE,
+                )
+
+                descriptor.add_row(
+                    label="DS Record",
+                    value="Present" if result.dnssec.has_ds else "Missing",
+                    style_class="success" if result.dnssec.has_ds else "muted",
+                    verbosity=VerbosityLevel.VERBOSE,
+                )
+            else:
+                descriptor.add_row(
+                    label="DNSSEC",
+                    value="Not enabled",
+                    style_class="muted",
+                    verbosity=VerbosityLevel.NORMAL,
+                )
+
+        # PTR Records (Reverse DNS)
+        if result.ptr_records:
+            descriptor.add_row(
+                value="Reverse DNS (PTR Records)",
+                section_type="heading",
+                style_class="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+            for ip, ptr in result.ptr_records.items():
+                descriptor.add_row(
+                    label=ip,
+                    value=ptr,
+                    style_class="success",
+                    icon="check",
+                    verbosity=VerbosityLevel.VERBOSE,
+                )
+
+        # Info Messages
+        for info_msg in result.info_messages:
+            descriptor.add_row(
+                value=info_msg,
+                section_type="text",
+                style_class="info",
+                severity="info",
+                icon="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+        # Errors
+        for error in result.errors:
+            descriptor.add_row(
+                value=error,
+                section_type="text",
+                style_class="error",
+                severity="error",
+                icon="cross",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Warnings
+        for warning in result.warnings:
+            descriptor.add_row(
+                value=warning,
+                section_type="text",
+                style_class="warning",
+                severity="warning",
+                icon="warning",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        return descriptor
+
+    def to_dict(self, result: DNSAnalysisResult) -> dict:
+        """
+        Serialize result to JSON-compatible dictionary.
+
+        Args:
+            result: DNS analysis result
+
+        Returns:
+            JSON-serializable dict
+        """
+        # Convert DNSRecord objects to dicts
+        records_dict = {}
+        for key, records_list in result.records.items():
+            records_dict[key] = [
+                {
+                    "type": rec.record_type,
+                    "name": rec.name,
+                    "value": rec.value,
+                    "ttl": rec.ttl,
+                }
+                for rec in records_list
+            ]
+
+        # Convert DNSSEC info
+        dnssec_dict = None
+        if result.dnssec:
+            dnssec_dict = {
+                "enabled": result.dnssec.enabled,
+                "valid": result.dnssec.valid,
+                "has_dnskey": result.dnssec.has_dnskey,
+                "has_ds": result.dnssec.has_ds,
+                "errors": result.dnssec.errors,
+                "warnings": result.dnssec.warnings,
+            }
+
+        return {
+            "domain": result.domain,
+            "records": records_dict,
+            "ptr_records": result.ptr_records,
+            "dnssec": dnssec_dict,
+            "info_messages": result.info_messages,
+            "errors": result.errors,
+            "warnings": result.warnings,
+        }
+
+    # ========================================================================
+    # Helper Methods (Internal DNS Logic)
+    # ========================================================================
+
+    def _check_domain_records(
+        self, domain: str, result: DNSAnalysisResult, resolver: dns.resolver.Resolver
+    ) -> None:
         """Check all DNS records for a domain."""
         for record_type in self.RECORD_TYPES:
             try:
-                answers = self.resolver.resolve(domain, record_type)
+                answers = resolver.resolve(domain, record_type)
 
                 # Track seen values to avoid duplicates
                 key = f"{domain}:{record_type}"
@@ -172,7 +454,7 @@ class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
                         if record_type == "CNAME":
                             cname_target = str(rdata).rstrip(".")
                             try:
-                                a_answers = self.resolver.resolve(cname_target, "A")
+                                a_answers = resolver.resolve(cname_target, "A")
                                 a_key = f"{domain}:CNAME_A"
                                 if a_key not in result.records:
                                     result.records[a_key] = []
@@ -278,7 +560,9 @@ class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
             logger.debug(f"Error creating DNS record: {e}")
             return None
 
-    def _validate_mx_records(self, result: DNSAnalysisResult) -> None:
+    def _validate_mx_records(
+        self, result: DNSAnalysisResult, resolver: dns.resolver.Resolver
+    ) -> None:
         """Validate MX records and check for common issues."""
         mx_keys = [k for k in result.records.keys() if k.endswith(":MX")]
 
@@ -296,12 +580,14 @@ class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
 
                     # Check if MX host resolves
                     try:
-                        self.resolver.resolve(mx_host, "A")
+                        resolver.resolve(mx_host, "A")
                         logger.debug(f"MX host {mx_host} resolves correctly")
                     except Exception as e:
                         result.warnings.append(f"MX host {mx_host} does not resolve: {str(e)}")
 
-    def _check_ptr_records(self, result: DNSAnalysisResult) -> None:
+    def _check_ptr_records(
+        self, result: DNSAnalysisResult, resolver: dns.resolver.Resolver
+    ) -> None:
         """Check PTR (reverse DNS) records for all A records."""
         # Collect all A records (IPv4)
         a_record_keys = [k for k in result.records.keys() if k.endswith(":A")]
@@ -313,7 +599,7 @@ class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
                 try:
                     # Perform reverse DNS lookup
                     rev_name = dns.reversename.from_address(ip_address)
-                    answers = self.resolver.resolve(rev_name, "PTR")
+                    answers = resolver.resolve(rev_name, "PTR")
 
                     if answers:
                         # Get first PTR record
@@ -324,7 +610,7 @@ class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
                         # Validate PTR record points back to original domain
                         # Forward lookup PTR value to verify it resolves to the same IP
                         try:
-                            forward_answers = self.resolver.resolve(ptr_value, "A")
+                            forward_answers = resolver.resolve(ptr_value, "A")
                             forward_ips = [str(rdata) for rdata in forward_answers]
 
                             if ip_address not in forward_ips:
@@ -343,12 +629,13 @@ class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
                 except Exception as e:
                     logger.debug(f"Error checking PTR for {ip_address}: {e}")
 
-    def _check_dnssec(self, domain: str) -> DNSSECInfo:
+    def _check_dnssec(self, domain: str, resolver: dns.resolver.Resolver) -> DNSSECInfo:
         """
         Check DNSSEC status for a domain.
 
         Args:
             domain: The domain to check
+            resolver: DNS resolver to use
 
         Returns:
             DNSSECInfo with validation status
@@ -360,7 +647,7 @@ class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
 
             # Check for DNSKEY records
             try:
-                dnskey_answers = self.resolver.resolve(domain, "DNSKEY")
+                dnskey_answers = resolver.resolve(domain, "DNSKEY")
                 if dnskey_answers:
                     dnssec_info.has_dnskey = True
                     dnssec_info.enabled = True
@@ -374,7 +661,7 @@ class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
             # We need to query parent zone for DS records
             if len(domain_name.labels) > 2:  # Has parent zone
                 try:
-                    ds_answers = self.resolver.resolve(domain, "DS")
+                    ds_answers = resolver.resolve(domain, "DS")
                     if ds_answers:
                         dnssec_info.has_ds = True
                         logger.debug(f"DS records found for {domain}")
@@ -408,3 +695,15 @@ class DNSAnalyzer(BaseAnalyzer[DNSAnalysisResult]):
             dnssec_info.errors.append(f"Error checking DNSSEC: {str(e)}")
 
         return dnssec_info
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+
+def _format_ttl(ttl: int | None) -> str:
+    """Format TTL for display."""
+    if ttl is None:
+        return "TTL: N/A"
+    return f"TTL: {_format_seconds_human(ttl)}"

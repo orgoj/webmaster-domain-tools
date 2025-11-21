@@ -1,9 +1,35 @@
-"""CDN detection analyzer - identify CDN providers."""
+"""CDN detection analyzer - identify CDN providers.
+
+This analyzer detects CDN usage from HTTP headers and DNS CNAME records.
+Completely self-contained with config, logic, and output formatting.
+"""
 
 import logging
 from dataclasses import dataclass, field
 
+from pydantic import Field
+
+from ..core.registry import registry
+from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
+
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+
+class CDNConfig(AnalyzerConfig):
+    """CDN detector configuration."""
+
+    check_headers: bool = Field(default=True, description="Check HTTP headers for CDN signatures")
+    check_cname: bool = Field(default=True, description="Check DNS CNAME for CDN providers")
+
+
+# ============================================================================
+# Result Model
+# ============================================================================
 
 
 @dataclass
@@ -20,14 +46,41 @@ class CDNDetectionResult:
     warnings: list[str] = field(default_factory=list)
 
 
+# ============================================================================
+# Analyzer Implementation
+# ============================================================================
+
+
+@registry.register
 class CDNDetector:
     """
-    Detects CDN usage from headers and DNS records.
+    Detects CDN usage from HTTP headers and DNS CNAME records.
 
-    Note: This analyzer does NOT inherit from BaseAnalyzer because it has
-    a different API pattern - it provides separate methods for different
-    detection sources (headers, CNAME) and combines them externally.
+    This analyzer is completely self-contained - it declares its own:
+    - Configuration schema (CDNConfig)
+    - Output formatting (via describe_output)
+    - JSON serialization (via to_dict)
+    - Metadata
+
+    Adding it to the registry makes it automatically available in
+    CLI, GUI, and any other frontend.
     """
+
+    # ========================================================================
+    # Required Metadata
+    # ========================================================================
+
+    analyzer_id = "cdn"
+    name = "CDN Detection"
+    description = "Detect Content Delivery Network usage"
+    category = "advanced"
+    icon = "cloud"
+    config_class = CDNConfig
+    depends_on = ["http", "dns"]  # Needs HTTP headers and DNS CNAME records
+
+    # ========================================================================
+    # CDN Detection Patterns
+    # ========================================================================
 
     # CDN detection patterns for HTTP headers
     HEADER_PATTERNS = {
@@ -92,6 +145,34 @@ class CDNDetector:
         "Vercel": ["vercel.app", "vercel-dns.com"],
         "Cloudflare Pages": ["pages.dev"],
     }
+
+    # ========================================================================
+    # Required Protocol Methods
+    # ========================================================================
+
+    def analyze(self, domain: str, config: CDNConfig) -> CDNDetectionResult:
+        """
+        Perform CDN detection.
+
+        Note: This method receives data from http and dns analyzers via
+        the execution context. For now, it returns placeholder data.
+        Full integration happens in CLI orchestration.
+
+        Args:
+            domain: Domain to analyze
+            config: CDN detector configuration
+
+        Returns:
+            CDNDetectionResult with detection information
+        """
+        result = CDNDetectionResult(domain=domain)
+
+        # TODO: Get HTTP headers and DNS CNAME from context
+        # For now, return placeholder
+        result.cdn_detected = False
+        result.evidence.append("CDN detection requires HTTP and DNS analysis first")
+
+        return result
 
     def detect_from_headers(self, headers: dict[str, str]) -> CDNDetectionResult:
         """
@@ -254,3 +335,121 @@ class CDNDetector:
             result.evidence.append("No CDN detected")
 
         return result
+
+    def describe_output(self, result: CDNDetectionResult) -> OutputDescriptor:
+        """
+        Describe how to render this analyzer's output.
+
+        Uses semantic styling (theme-agnostic) - no hardcoded colors.
+
+        Args:
+            result: CDN detection result
+
+        Returns:
+            OutputDescriptor with semantic styling
+        """
+        descriptor = OutputDescriptor(title=self.name, category=self.category)
+
+        # Quiet mode summary
+        descriptor.quiet_summary = lambda r: (
+            f"CDN: {r.cdn_provider}" if r.cdn_detected else "CDN: None"
+        )
+
+        # Normal verbosity
+        if result.cdn_detected:
+            descriptor.add_row(
+                label="CDN Provider",
+                value=result.cdn_provider,
+                style_class="success",  # Semantic style (not color)
+                icon="check",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+            # Confidence with semantic styling
+            confidence_style = {
+                "high": "success",
+                "medium": "warning",
+                "low": "muted",
+            }.get(result.confidence, "neutral")
+
+            descriptor.add_row(
+                label="Confidence",
+                value=result.confidence.capitalize(),
+                style_class=confidence_style,
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+            descriptor.add_row(
+                label="Detection Method",
+                value=(
+                    result.detection_method.capitalize() if result.detection_method else "Unknown"
+                ),
+                style_class="info",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+        else:
+            descriptor.add_row(
+                label="CDN",
+                value="Not detected",
+                style_class="muted",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Verbose - show evidence
+        if result.evidence:
+            descriptor.add_row(
+                label="Evidence",
+                value=result.evidence,
+                section_type="list",
+                style_class="info",
+                verbosity=VerbosityLevel.VERBOSE,
+            )
+
+        # Errors
+        for error in result.errors:
+            descriptor.add_row(
+                value=error,
+                section_type="text",
+                style_class="error",
+                severity="error",
+                icon="cross",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Warnings
+        for warning in result.warnings:
+            descriptor.add_row(
+                value=warning,
+                section_type="text",
+                style_class="warning",
+                severity="warning",
+                icon="warning",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        return descriptor
+
+    def to_dict(self, result: CDNDetectionResult) -> dict:
+        """
+        Serialize result to JSON-compatible dictionary.
+
+        Args:
+            result: CDN detection result
+
+        Returns:
+            JSON-serializable dict
+        """
+        return {
+            "domain": result.domain,
+            "cdn_detected": result.cdn_detected,
+            "cdn_provider": result.cdn_provider,
+            "detection_method": result.detection_method,
+            "confidence": result.confidence,
+            "evidence": result.evidence,
+            "errors": result.errors,
+            "warnings": result.warnings,
+        }

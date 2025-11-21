@@ -1,15 +1,15 @@
-"""Core analysis functionality shared between CLI and GUI."""
+"""Core components of the webmaster-domain-tool.
 
-from .analyzer import (
-    ANALYZER_REGISTRY,
-    AnalyzerMetadata,
-    DomainAnalysisResults,
-    run_domain_analysis,
-)
+This package contains the core infrastructure for the modular analyzer system.
+"""
+
+from .config_manager import ConfigManager, GlobalConfig
+from .registry import AnalyzerMetadata, AnalyzerRegistry, registry
 
 __all__ = [
-    "ANALYZER_REGISTRY",
+    "ConfigManager",
+    "GlobalConfig",
+    "registry",
     "AnalyzerMetadata",
-    "DomainAnalysisResults",
-    "run_domain_analysis",
+    "AnalyzerRegistry",
 ]

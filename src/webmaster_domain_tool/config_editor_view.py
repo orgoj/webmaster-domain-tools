@@ -1,4 +1,4 @@
-"""Configuration editor dialog for Flet GUI - Migrated to new modular architecture."""
+"""Configuration editor view for Flet GUI - Full-page view (not dialog)."""
 
 import logging
 from collections.abc import Callable
@@ -12,9 +12,9 @@ from .gui_config_adapter import GUIConfigAdapter
 logger = logging.getLogger(__name__)
 
 
-class ConfigEditorDialog:
+class ConfigEditorView:
     """
-    Configuration editor dialog with sidebar navigation.
+    Configuration editor as full-page view with sidebar navigation.
 
     Automatically generates editor UI for all registered analyzers.
     Uses left sidebar with icons for navigation.
@@ -25,14 +25,18 @@ class ConfigEditorDialog:
         page: ft.Page,
         config_adapter: GUIConfigAdapter,
         on_save: Callable[[GUIConfigAdapter], None],
+        on_cancel: Callable[[], None],
+        theme: Any,
     ) -> None:
         """
-        Initialize config editor dialog.
+        Initialize config editor view.
 
         Args:
             page: Flet page
             config_adapter: Current configuration adapter to edit
             on_save: Callback when config is saved
+            on_cancel: Callback when cancel/back is clicked
+            theme: UITheme instance
         """
         self.page = page
         # Work on a copy
@@ -40,6 +44,8 @@ class ConfigEditorDialog:
         self.config_adapter = GUIConfigAdapter()
         self.config_adapter.from_dict(temp_dict)
         self.on_save = on_save
+        self.on_cancel = on_cancel
+        self.theme = theme
 
         # UI field references (analyzer_id -> field_name -> control)
         self.analyzer_fields: dict[str, dict[str, ft.Control]] = {}
@@ -57,9 +63,6 @@ class ConfigEditorDialog:
             padding=20,
             expand=True,
         )
-
-        # Build dialog
-        self.dialog = self._build_dialog()
 
     def _build_sections(self) -> None:
         """Build all configuration sections (global + analyzers)."""
@@ -90,9 +93,9 @@ class ConfigEditorDialog:
                     }
                 )
 
-    def _build_dialog(self) -> ft.AlertDialog:
-        """Build the main dialog with sidebar navigation."""
-        # Build navigation rail (left sidebar)
+    def build(self) -> ft.Column:
+        """Build the full-page view with sidebar navigation."""
+        # Build navigation rail destinations
         nav_rail_destinations = []
         for section in self.sections:
             nav_rail_destinations.append(
@@ -102,67 +105,82 @@ class ConfigEditorDialog:
                 )
             )
 
-        # Wrap NavigationRail in scrollable column for long lists
-        nav_rail = ft.Column(
-            [
-                ft.NavigationRail(
-                    selected_index=self.current_index,
-                    label_type=ft.NavigationRailLabelType.ALL,
-                    min_width=180,
-                    destinations=nav_rail_destinations,
-                    on_change=self._on_nav_change,
-                    bgcolor=ft.Colors.GREY_300,
-                    expand=True,  # Fix: NavigationRail needs expand for bounded height
-                ),
-            ],
-            scroll=ft.ScrollMode.AUTO,
+        # Sidebar Container with NavigationRail (full height)
+        sidebar = ft.Container(
+            width=200,  # Fixed width
+            expand=True,  # Full height
+            bgcolor=ft.Colors.GREY_300,
+            content=ft.NavigationRail(
+                selected_index=self.current_index,
+                label_type=ft.NavigationRailLabelType.ALL,
+                min_width=180,
+                destinations=nav_rail_destinations,
+                on_change=self._on_nav_change,
+                bgcolor=ft.Colors.GREY_300,
+                expand=True,  # Fill sidebar height
+            ),
+        )
+
+        # Content area - full height
+        content_area = ft.Container(
+            content=self.content_container,
             expand=True,
         )
 
-        # Main layout: Row with nav rail on left, content on right
-        main_content = ft.Row(
+        # Main content row - sidebar + content (full height)
+        content_row = ft.Row(
             [
-                ft.Container(
-                    content=nav_rail,
-                    width=200,
-                    bgcolor=ft.Colors.GREY_300,
-                ),
+                sidebar,
                 ft.VerticalDivider(width=1),
-                ft.Column(
-                    [
-                        self.content_container,
-                    ],
-                    expand=True,
-                ),
+                content_area,
             ],
             spacing=0,
-            expand=True,
+            expand=True,  # Full height available
         )
 
-        # Action buttons at bottom
-        action_buttons = ft.Row(
+        # Header with Back and Save buttons
+        header = ft.Row(
             [
-                ft.TextButton("Cancel", on_click=lambda _: self._close_dialog()),
-                ft.ElevatedButton("Save", on_click=lambda _: self._save_and_close()),
+                ft.IconButton(
+                    icon=ft.Icons.ARROW_BACK,
+                    tooltip="Back to main view",
+                    on_click=lambda _: self._cancel(),
+                ),
+                ft.Text(
+                    "Configuration Editor",
+                    size=20,
+                    weight=ft.FontWeight.BOLD,
+                    color=self.theme.primary_color,
+                ),
+                ft.Container(expand=True),  # Spacer
+                ft.TextButton(
+                    "Cancel",
+                    icon=ft.Icons.CANCEL,
+                    on_click=lambda _: self._cancel(),
+                ),
+                ft.ElevatedButton(
+                    "Save",
+                    icon=ft.Icons.SAVE,
+                    on_click=lambda _: self._save(),
+                    style=ft.ButtonStyle(
+                        color=self.theme.primary_bg,
+                        bgcolor=self.theme.primary_color,
+                    ),
+                ),
             ],
-            alignment=ft.MainAxisAlignment.END,
+            alignment=ft.MainAxisAlignment.START,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
-        return ft.AlertDialog(
-            modal=True,
-            title=ft.Text("Configuration Editor", size=20, weight="bold"),
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        main_content,
-                        ft.Divider(),
-                        action_buttons,
-                    ],
-                    spacing=10,
-                ),
-                width=1100,
-                height=700,
-            ),
+        # Full-page layout - header + content row
+        return ft.Column(
+            [
+                header,
+                ft.Divider(),
+                content_row,
+            ],
+            spacing=10,
+            expand=True,  # Fill page height
         )
 
     def _on_nav_change(self, e: ft.ControlEvent) -> None:
@@ -388,19 +406,21 @@ class ConfigEditorDialog:
         snackbar.open = True
         self.page.update()
 
-    def _save_and_close(self) -> None:
-        """Validate, save, and close dialog."""
+    def _save(self) -> None:
+        """Validate and save configuration."""
         if self._validate_and_save():
+            # Show confirmation snackbar
+            snackbar = ft.SnackBar(
+                content=ft.Text("Configuration saved successfully"),
+                bgcolor=ft.Colors.GREEN,
+            )
+            self.page.overlay.append(snackbar)
+            snackbar.open = True
+            self.page.update()
+
+            # Call save callback
             self.on_save(self.config_adapter)
-            self._close_dialog()
 
-    def _close_dialog(self) -> None:
-        """Close the dialog."""
-        self.dialog.open = False
-        self.page.update()
-
-    def show(self) -> None:
-        """Show the config editor dialog."""
-        self.page.overlay.append(self.dialog)
-        self.dialog.open = True
-        self.page.update()
+    def _cancel(self) -> None:
+        """Cancel editing and go back."""
+        self.on_cancel()

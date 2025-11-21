@@ -1,12 +1,47 @@
-"""Security headers analysis module."""
+"""Security headers analysis module.
+
+This analyzer checks HTTP security headers and provides a security score.
+Completely self-contained with config, logic, and output formatting.
+"""
 
 import logging
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
-from .base import BaseAnalysisResult, BaseAnalyzer
+from pydantic import Field
+
+from ..core.registry import registry
+from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+
+class SecurityHeadersConfig(AnalyzerConfig):
+    """Security headers analyzer configuration."""
+
+    check_strict_transport_security: bool = Field(default=True, description="Check HSTS header")
+    check_content_security_policy: bool = Field(default=True, description="Check CSP header")
+    check_x_frame_options: bool = Field(default=True, description="Check X-Frame-Options header")
+    check_x_content_type_options: bool = Field(
+        default=True, description="Check X-Content-Type-Options header"
+    )
+    check_referrer_policy: bool = Field(default=True, description="Check Referrer-Policy header")
+    check_permissions_policy: bool = Field(
+        default=True, description="Check Permissions-Policy header"
+    )
+    check_x_xss_protection: bool = Field(default=True, description="Check X-XSS-Protection header")
+    check_content_type: bool = Field(default=True, description="Check Content-Type header")
+    check_cors: bool = Field(default=True, description="Check CORS headers")
+
+
+# ============================================================================
+# Result Model
+# ============================================================================
 
 
 @dataclass
@@ -23,16 +58,52 @@ class SecurityHeaderCheck:
 
 
 @dataclass
-class SecurityHeadersResult(BaseAnalysisResult):
+class SecurityHeadersResult:
     """Results from security headers analysis."""
 
+    domain: str
     url: str = ""
     headers: dict[str, SecurityHeaderCheck] = field(default_factory=dict)
     score: int = 0  # Score out of 100
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
-class SecurityHeadersAnalyzer(BaseAnalyzer[SecurityHeadersResult]):
-    """Analyzes HTTP security headers."""
+# ============================================================================
+# Analyzer Implementation
+# ============================================================================
+
+
+@registry.register
+class SecurityHeadersAnalyzer:
+    """
+    Analyzes HTTP security headers.
+
+    This analyzer is completely self-contained - it declares its own:
+    - Configuration schema (SecurityHeadersConfig)
+    - Output formatting (via describe_output)
+    - JSON serialization (via to_dict)
+    - Metadata
+
+    Adding it to the registry makes it automatically available in
+    CLI, GUI, and any other frontend.
+    """
+
+    # ========================================================================
+    # Required Metadata
+    # ========================================================================
+
+    analyzer_id = "headers"
+    name = "Security Headers"
+    description = "Analyze HTTP security headers"
+    category = "security"
+    icon = "shield"
+    config_class = SecurityHeadersConfig
+    depends_on = ["http"]  # Needs HTTP headers
+
+    # ========================================================================
+    # Security Headers Definitions
+    # ========================================================================
 
     # Security headers to check with their recommendations
     SECURITY_HEADERS = {
@@ -98,35 +169,66 @@ class SecurityHeadersAnalyzer(BaseAnalyzer[SecurityHeadersResult]):
         },
     }
 
-    def __init__(self, enabled_checks: dict[str, bool] | None = None):
+    # ========================================================================
+    # Required Protocol Methods
+    # ========================================================================
+
+    def analyze(self, domain: str, config: SecurityHeadersConfig) -> SecurityHeadersResult:
         """
-        Initialize security headers analyzer.
+        Perform security headers analysis.
+
+        Note: This method receives HTTP headers from the http analyzer via
+        the execution context. For now, it returns placeholder data.
+        Full integration happens in CLI orchestration.
 
         Args:
-            enabled_checks: Dictionary of header config keys to enabled status
-                           (e.g., {"check_strict_transport_security": True})
-        """
-        self.enabled_checks = enabled_checks or {}
+            domain: Domain to analyze
+            config: Security headers configuration
 
-    def analyze(self, url: str, headers: dict[str, str]) -> SecurityHeadersResult:
+        Returns:
+            SecurityHeadersResult with header analysis
+        """
+        # TODO: Get HTTP headers from context
+        # For now, return placeholder
+        result = SecurityHeadersResult(domain=domain)
+        result.warnings.append("Security headers analysis requires HTTP analysis first")
+        return result
+
+    def analyze_headers(
+        self, url: str, headers: dict[str, str], config: SecurityHeadersConfig
+    ) -> SecurityHeadersResult:
         """
         Analyze security headers from HTTP response.
 
         Args:
             url: The URL that was checked
             headers: Dictionary of HTTP headers
+            config: Configuration for header checks
 
         Returns:
             SecurityHeadersResult with analysis
         """
         logger.info(f"Analyzing security headers for {url}")
-        # Extract domain from URL for BaseAnalysisResult
+        # Extract domain from URL
         parsed_url = urlparse(url)
         domain = parsed_url.netloc or parsed_url.path  # fallback to path if no netloc
         result = SecurityHeadersResult(domain=domain, url=url)
 
         # Normalize header names (case-insensitive)
         normalized_headers = {k.lower(): v for k, v in headers.items()}
+
+        # Build enabled checks dict from config
+        enabled_checks = {
+            "check_strict_transport_security": config.check_strict_transport_security,
+            "check_content_security_policy": config.check_content_security_policy,
+            "check_x_frame_options": config.check_x_frame_options,
+            "check_x_content_type_options": config.check_x_content_type_options,
+            "check_referrer_policy": config.check_referrer_policy,
+            "check_permissions_policy": config.check_permissions_policy,
+            "check_x_xss_protection": config.check_x_xss_protection,
+            "check_content_type": config.check_content_type,
+            "check_cors": config.check_cors,
+        }
 
         total_weight = sum(h["weight"] for h in self.SECURITY_HEADERS.values())
         score = 0
@@ -135,7 +237,7 @@ class SecurityHeadersAnalyzer(BaseAnalyzer[SecurityHeadersResult]):
         for header_name, header_info in self.SECURITY_HEADERS.items():
             # Skip if disabled in config
             config_key = header_info.get("config_key")
-            if config_key and not self.enabled_checks.get(config_key, True):
+            if config_key and not enabled_checks.get(config_key, True):
                 logger.debug(f"Skipping {header_name} check (disabled in config)")
                 continue
 
@@ -195,6 +297,151 @@ class SecurityHeadersAnalyzer(BaseAnalyzer[SecurityHeadersResult]):
             )
 
         return result
+
+    def describe_output(self, result: SecurityHeadersResult) -> OutputDescriptor:
+        """
+        Describe how to render this analyzer's output.
+
+        Uses semantic styling (theme-agnostic) - no hardcoded colors.
+
+        Args:
+            result: Security headers analysis result
+
+        Returns:
+            OutputDescriptor with semantic styling
+        """
+        descriptor = OutputDescriptor(title=self.name, category=self.category)
+
+        # Quiet mode summary
+        descriptor.quiet_summary = lambda r: f"Security Score: {r.score}/100"
+
+        # Overall score with semantic styling
+        score_style = (
+            "error" if result.score < 50 else "warning" if result.score < 75 else "success"
+        )
+        score_icon = "cross" if result.score < 50 else "warning" if result.score < 75 else "check"
+
+        descriptor.add_row(
+            label="Security Score",
+            value=f"{result.score}/100",
+            style_class=score_style,
+            icon=score_icon,
+            severity="info",
+            verbosity=VerbosityLevel.NORMAL,
+        )
+
+        # Normal verbosity - show header summary
+        present_headers = [name for name, check in result.headers.items() if check.present]
+
+        if present_headers:
+            descriptor.add_row(
+                label="Headers Present",
+                value=f"{len(present_headers)}/{len(result.headers)}",
+                style_class="info",
+                severity="info",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Verbose - show detailed header information
+        for header_name, check in result.headers.items():
+            if check.present:
+                # Determine style based on warnings
+                header_style = "warning" if check.warnings else "success"
+                header_icon = "warning" if check.warnings else "check"
+
+                descriptor.add_row(
+                    label=header_name,
+                    value=check.value if check.value else "Present",
+                    style_class=header_style,
+                    icon=header_icon,
+                    severity="info",
+                    verbosity=VerbosityLevel.VERBOSE,
+                )
+
+                # Show warnings for this header
+                for warning in check.warnings:
+                    descriptor.add_row(
+                        value=f"  └─ {warning}",
+                        style_class="warning",
+                        severity="warning",
+                        verbosity=VerbosityLevel.VERBOSE,
+                    )
+            else:
+                descriptor.add_row(
+                    label=header_name,
+                    value="Not present",
+                    style_class="muted",
+                    icon="cross",
+                    severity="info",
+                    verbosity=VerbosityLevel.VERBOSE,
+                )
+
+                # Show recommendation
+                if check.recommendation:
+                    descriptor.add_row(
+                        value=f"  └─ Recommended: {check.recommendation}",
+                        style_class="muted",
+                        severity="info",
+                        verbosity=VerbosityLevel.VERBOSE,
+                    )
+
+        # Errors
+        for error in result.errors:
+            descriptor.add_row(
+                value=error,
+                section_type="text",
+                style_class="error",
+                severity="error",
+                icon="cross",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        # Warnings (overall warnings, not per-header)
+        for warning in result.warnings:
+            descriptor.add_row(
+                value=warning,
+                section_type="text",
+                style_class="warning",
+                severity="warning",
+                icon="warning",
+                verbosity=VerbosityLevel.NORMAL,
+            )
+
+        return descriptor
+
+    def to_dict(self, result: SecurityHeadersResult) -> dict:
+        """
+        Serialize result to JSON-compatible dictionary.
+
+        Args:
+            result: Security headers analysis result
+
+        Returns:
+            JSON-serializable dict
+        """
+        return {
+            "domain": result.domain,
+            "url": result.url,
+            "score": result.score,
+            "headers": {
+                name: {
+                    "header_name": check.header_name,
+                    "present": check.present,
+                    "value": check.value,
+                    "is_valid": check.is_valid,
+                    "recommendation": check.recommendation,
+                    "errors": check.errors,
+                    "warnings": check.warnings,
+                }
+                for name, check in result.headers.items()
+            },
+            "errors": result.errors,
+            "warnings": result.warnings,
+        }
+
+    # ========================================================================
+    # Header Validation Methods (preserved from original)
+    # ========================================================================
 
     def _validate_hsts(self, check: SecurityHeaderCheck, max_score: int) -> int:
         """Validate Strict-Transport-Security header."""

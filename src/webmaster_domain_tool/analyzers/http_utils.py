@@ -1,11 +1,15 @@
 """HTTP utilities for analyzers."""
 
+import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
 from ..constants import DEFAULT_HTTP_TIMEOUT, DEFAULT_USER_AGENT
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -30,7 +34,7 @@ def safe_http_get(
     **kwargs: Any,
 ) -> HTTPResult:
     """
-    Perform HTTP GET with standardized error handling.
+    Perform HTTP GET with standardized error handling and debug logging.
 
     This utility centralizes HTTP GET logic that was previously duplicated
     across multiple analyzers. It provides consistent error handling for:
@@ -39,6 +43,11 @@ def safe_http_get(
     - SSL/TLS errors
     - Connection errors
     - Other general errors
+
+    Debug logging shows:
+    - URL being fetched
+    - Request duration
+    - Response status code or error
 
     Args:
         url: URL to fetch
@@ -57,6 +66,9 @@ def safe_http_get(
         ... else:
         ...     print(f"Error: {result.error}")
     """
+    logger.debug(f"→ HTTP GET: {url} (timeout={timeout}s)")
+    start_time = time.time()
+
     ua = user_agent or DEFAULT_USER_AGENT
     headers = kwargs.pop("headers", {})
     if "User-Agent" not in headers:
@@ -69,10 +81,15 @@ def safe_http_get(
             **kwargs,
         ) as client:
             response = client.get(url, headers=headers)
+            elapsed = time.time() - start_time
+
             response.raise_for_status()
+            logger.debug(f"✓ HTTP {response.status_code}: {url} ({elapsed:.2f}s)")
             return HTTPResult(success=True, response=response)
 
     except httpx.TimeoutException:
+        elapsed = time.time() - start_time
+        logger.debug(f"✗ Timeout: {url} ({elapsed:.2f}s, limit={timeout}s)")
         return HTTPResult(
             success=False,
             error=f"Timeout accessing {url} ({timeout}s)",
@@ -80,6 +97,8 @@ def safe_http_get(
         )
 
     except httpx.HTTPStatusError as e:
+        elapsed = time.time() - start_time
+        logger.debug(f"✗ HTTP {e.response.status_code}: {url} ({elapsed:.2f}s)")
         return HTTPResult(
             success=False,
             response=e.response,
@@ -88,17 +107,20 @@ def safe_http_get(
         )
 
     except httpx.ConnectError as e:
+        elapsed = time.time() - start_time
         # Check if it's SSL-related error
         error_msg = str(e).lower()
         is_ssl_error = any(ssl_term in error_msg for ssl_term in ["ssl", "certificate", "tls"])
 
         if is_ssl_error:
+            logger.debug(f"✗ SSL error: {url} ({elapsed:.2f}s)")
             return HTTPResult(
                 success=False,
                 error=f"SSL error accessing {url}: {e}",
                 error_type="ssl_error",
             )
         else:
+            logger.debug(f"✗ Connection error: {url} ({elapsed:.2f}s)")
             return HTTPResult(
                 success=False,
                 error=f"Connection error accessing {url}: {e}",
@@ -106,6 +128,8 @@ def safe_http_get(
             )
 
     except Exception as e:
+        elapsed = time.time() - start_time
+        logger.debug(f"✗ Error: {url} ({elapsed:.2f}s) - {e}")
         return HTTPResult(
             success=False,
             error=f"Error accessing {url}: {e}",

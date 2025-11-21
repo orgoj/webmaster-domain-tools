@@ -30,11 +30,26 @@ class TestAnalyzerInstantiation:
 
     def test_email_security_analyzer(self):
         """Test EmailSecurityAnalyzer instantiation and interface (includes BIMI, MTA-STS, TLS-RPT)."""
-        from webmaster_domain_tool.analyzers.email_security import EmailSecurityAnalyzer
+        from webmaster_domain_tool.analyzers.email_security import (
+            EmailConfig,
+            EmailSecurityAnalyzer,
+        )
 
+        # New modular protocol - class has metadata and methods, no __init__
         analyzer = EmailSecurityAnalyzer()
         assert hasattr(analyzer, "analyze"), "EmailSecurityAnalyzer must have analyze() method"
         assert callable(analyzer.analyze), "analyze() must be callable"
+        assert hasattr(
+            analyzer, "describe_output"
+        ), "EmailSecurityAnalyzer must have describe_output() method"
+        assert hasattr(analyzer, "to_dict"), "EmailSecurityAnalyzer must have to_dict() method"
+
+        # Check metadata
+        assert hasattr(EmailSecurityAnalyzer, "analyzer_id")
+        assert EmailSecurityAnalyzer.analyzer_id == "email"
+        assert hasattr(EmailSecurityAnalyzer, "name")
+        assert hasattr(EmailSecurityAnalyzer, "config_class")
+        assert EmailSecurityAnalyzer.config_class == EmailConfig
 
     def test_rbl_checker(self):
         """Test RBLChecker instantiation and interface."""
@@ -80,14 +95,26 @@ class TestAnalyzerInstantiation:
 
     def test_security_headers_analyzer(self):
         """Test SecurityHeadersAnalyzer instantiation and interface."""
-        from webmaster_domain_tool.analyzers.security_headers import SecurityHeadersAnalyzer
+        from webmaster_domain_tool.analyzers.security_headers import (
+            SecurityHeadersAnalyzer,
+            SecurityHeadersConfig,
+        )
 
         analyzer = SecurityHeadersAnalyzer()
         assert hasattr(analyzer, "analyze"), "SecurityHeadersAnalyzer must have analyze() method"
         assert callable(analyzer.analyze), "analyze() must be callable"
 
-        # Test that analyze() works with URL parameter
-        result = analyzer.analyze("https://example.com", {"Server": "nginx"})
+        # Test protocol method analyze(domain, config) - returns placeholder
+        config = SecurityHeadersConfig()
+        result = analyzer.analyze("example.com", config)
+        assert result.domain == "example.com", "domain should be set"
+        assert len(result.warnings) > 0, "should have warning about requiring HTTP analysis"
+
+        # Test actual implementation method analyze_headers(url, headers, config)
+        assert hasattr(
+            analyzer, "analyze_headers"
+        ), "SecurityHeadersAnalyzer must have analyze_headers() method"
+        result = analyzer.analyze_headers("https://example.com", {"Server": "nginx"}, config)
         assert result.domain == "example.com", "domain should be extracted from URL"
         assert result.url == "https://example.com", "url should be preserved"
 

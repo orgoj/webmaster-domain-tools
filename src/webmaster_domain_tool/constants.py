@@ -5,7 +5,7 @@ DEFAULT_DNS_TIMEOUT = 5.0  # DNS query timeout in seconds
 DEFAULT_DNS_PUBLIC_SERVERS = ["8.8.8.8", "8.8.4.4", "1.1.1.1"]  # Google and Cloudflare DNS
 
 # HTTP Constants
-DEFAULT_HTTP_TIMEOUT = 10.0  # HTTP request timeout in seconds
+DEFAULT_HTTP_TIMEOUT = 5.0  # HTTP request timeout in seconds (reduced from 10s for faster analysis)
 DEFAULT_HTTP_MAX_REDIRECTS = 10  # Maximum number of redirects to follow
 MAX_REDIRECT_WARNING = 3  # Warn if redirect chain exceeds this number
 DEFAULT_USER_AGENT = (
@@ -15,7 +15,9 @@ DEFAULT_USER_AGENT = (
 
 # SSL/TLS Constants
 DEFAULT_SSL_PORT = 443
-DEFAULT_SSL_TIMEOUT = 10.0  # SSL connection timeout in seconds
+DEFAULT_SSL_TIMEOUT = (
+    5.0  # SSL connection timeout in seconds (reduced from 10s for faster analysis)
+)
 DEFAULT_SSL_EXPIRY_WARNING_DAYS = 14  # Warn if cert expires within this many days
 DEFAULT_SSL_EXPIRY_CRITICAL_DAYS = 7  # Critical if cert expires within this many days
 
@@ -46,7 +48,9 @@ DEFAULT_RBL_SERVERS = [
 ]
 
 # Site Verification Constants
-DEFAULT_SITE_VERIFICATION_TIMEOUT = 10.0  # HTTP request timeout in seconds
+DEFAULT_SITE_VERIFICATION_TIMEOUT = (
+    5.0  # HTTP request timeout in seconds (reduced from 10s for faster analysis)
+)
 MAX_SAN_DISPLAY = 5  # Maximum number of SAN entries to display before truncating
 
 # Tracking code patterns (Google specific - legacy)
