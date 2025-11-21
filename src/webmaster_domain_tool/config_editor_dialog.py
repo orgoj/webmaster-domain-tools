@@ -126,6 +126,7 @@ class ConfigEditorDialog:
                     content=nav_rail,
                     width=200,
                     bgcolor=ft.Colors.GREY_300,
+                    expand=True,  # CRITICAL: Container must expand for NavigationRail height
                 ),
                 ft.VerticalDivider(width=1),
                 ft.Column(
