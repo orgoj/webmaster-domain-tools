@@ -37,6 +37,7 @@ from .analyzers.protocol import VerbosityLevel  # noqa: E402
 from .core.config_manager import ConfigManager  # noqa: E402
 from .core.registry import registry  # noqa: E402
 from .renderers import BulkJSONLinesRenderer, CLIRenderer, JSONRenderer  # noqa: E402
+from .utils.debug_stats import get_stats_tracker  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -314,6 +315,13 @@ def analyze(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
+    # Enable debug statistics tracking if in debug mode
+    stats_tracker = get_stats_tracker()
+    if verbosity == "debug":
+        stats_tracker.enable()
+        stats_tracker.reset()
+        logger.debug("Debug statistics tracking enabled")
+
     # Handle --only option
     if only:
         # Parse comma-separated list
@@ -405,6 +413,11 @@ def analyze(
 
         # Render summary
         renderer.render_summary()
+
+    # Print debug statistics if in debug mode
+    if verbosity == "debug" and stats_tracker.is_enabled():
+        # Print to stderr (where logging goes) so it doesn't interfere with JSON output
+        sys.stderr.write(stats_tracker.get_summary() + "\n")
 
     # Exit code based on errors
     if hasattr(renderer, "all_errors") and renderer.all_errors:

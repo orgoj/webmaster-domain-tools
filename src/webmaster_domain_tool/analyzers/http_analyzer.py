@@ -20,6 +20,7 @@ from ..constants import (
     MAX_REDIRECT_WARNING,
 )
 from ..core.registry import registry
+from ..utils.debug_stats import get_stats_tracker
 from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
 
 logger = logging.getLogger(__name__)
@@ -245,6 +246,7 @@ class HTTPAnalyzer:
         Returns:
             RedirectChain with all responses
         """
+        stats = get_stats_tracker()
         chain = RedirectChain(start_url=start_url, final_url=start_url)
         current_url = start_url
         redirect_count = 0
@@ -269,6 +271,14 @@ class HTTPAnalyzer:
 
                     logger.debug(
                         f"✓ HTTP {response.status_code}: {current_url} ({response_time:.2f}s)"
+                    )
+
+                    # Record statistics
+                    stats.record_http_request(
+                        url=current_url,
+                        status_code=response.status_code,
+                        success=True,
+                        response_time=response_time,
                     )
 
                     # Create HTTPResponse object
@@ -318,16 +328,29 @@ class HTTPAnalyzer:
                     ssl_term in error_msg for ssl_term in ["ssl", "certificate", "tls"]
                 )
 
+                error_str = (
+                    f"SSL error: {str(e)}" if is_ssl_error else f"Connection error: {str(e)}"
+                )
+
                 if is_ssl_error:
                     logger.debug(f"✗ SSL error: {current_url} ({elapsed:.2f}s)")
                 else:
                     logger.debug(f"✗ Connection error: {current_url} ({elapsed:.2f}s)")
 
+                # Record statistics
+                stats.record_http_request(
+                    url=current_url,
+                    status_code=None,
+                    success=False,
+                    error=error_str,
+                    response_time=elapsed,
+                )
+
                 http_response = HTTPResponse(
                     url=current_url,
                     status_code=0,
                     headers={},
-                    error=f"SSL error: {str(e)}" if is_ssl_error else f"Connection error: {str(e)}",
+                    error=error_str,
                     ssl_verified=False if is_ssl_error else True,
                     response_time=elapsed,
                 )
@@ -337,6 +360,15 @@ class HTTPAnalyzer:
             except httpx.TimeoutException:
                 elapsed = (datetime.now() - request_start).total_seconds()
                 logger.debug(f"✗ Timeout: {current_url} ({elapsed:.2f}s, limit={config.timeout}s)")
+
+                # Record statistics
+                stats.record_http_request(
+                    url=current_url,
+                    status_code=None,
+                    success=False,
+                    error=f"Request timeout ({config.timeout}s)",
+                )
+
                 http_response = HTTPResponse(
                     url=current_url,
                     status_code=0,
@@ -348,6 +380,15 @@ class HTTPAnalyzer:
 
             except Exception as e:
                 logger.debug(f"Unexpected error for {current_url}: {e}")
+
+                # Record statistics
+                stats.record_http_request(
+                    url=current_url,
+                    status_code=None,
+                    success=False,
+                    error=f"Unexpected error: {str(e)}",
+                )
+
                 http_response = HTTPResponse(
                     url=current_url,
                     status_code=0,
@@ -414,6 +455,8 @@ class HTTPAnalyzer:
         Returns:
             PathCheckResult with status and content information
         """
+        stats = get_stats_tracker()
+
         # Ensure path starts with /
         if not path.startswith("/"):
             path = "/" + path
@@ -440,6 +483,14 @@ class HTTPAnalyzer:
             result.response_time = (datetime.now() - start_time).total_seconds()
             result.status_code = response.status_code
 
+            # Record statistics
+            stats.record_http_request(
+                url=full_url,
+                status_code=response.status_code,
+                success=True,
+                response_time=result.response_time,
+            )
+
             # Check if successful (200 OK)
             if response.status_code == 200:
                 content = response.text
@@ -462,13 +513,37 @@ class HTTPAnalyzer:
             result.error = f"Connection error: {str(e)}"
             logger.debug(f"Path check connection error for {full_url}: {e}")
 
+            # Record statistics
+            stats.record_http_request(
+                url=full_url,
+                status_code=None,
+                success=False,
+                error=result.error,
+            )
+
         except httpx.TimeoutException:
             result.error = f"Request timeout ({config.timeout}s)"
             logger.debug(f"Path check timeout for {full_url}")
 
+            # Record statistics
+            stats.record_http_request(
+                url=full_url,
+                status_code=None,
+                success=False,
+                error=result.error,
+            )
+
         except Exception as e:
             result.error = f"Unexpected error: {str(e)}"
             logger.debug(f"Path check unexpected error for {full_url}: {e}")
+
+            # Record statistics
+            stats.record_http_request(
+                url=full_url,
+                status_code=None,
+                success=False,
+                error=result.error,
+            )
 
         return result
 

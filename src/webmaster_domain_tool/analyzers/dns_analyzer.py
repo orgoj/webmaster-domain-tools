@@ -18,6 +18,7 @@ from pydantic import Field
 
 from ..constants import DEFAULT_DNS_TIMEOUT
 from ..core.registry import registry
+from ..utils.debug_stats import get_stats_tracker
 from .dns_utils import create_resolver
 from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
 
@@ -428,9 +429,12 @@ class DNSAnalyzer:
         self, domain: str, result: DNSAnalysisResult, resolver: dns.resolver.Resolver
     ) -> None:
         """Check all DNS records for a domain."""
+        stats = get_stats_tracker()
+
         for record_type in self.RECORD_TYPES:
             try:
                 answers = resolver.resolve(domain, record_type)
+                stats.record_dns_query(domain, record_type, success=True)
 
                 # Track seen values to avoid duplicates
                 key = f"{domain}:{record_type}"
@@ -455,6 +459,7 @@ class DNSAnalyzer:
                             cname_target = str(rdata).rstrip(".")
                             try:
                                 a_answers = resolver.resolve(cname_target, "A")
+                                stats.record_dns_query(cname_target, "A", success=True)
                                 a_key = f"{domain}:CNAME_A"
                                 if a_key not in result.records:
                                     result.records[a_key] = []
@@ -473,6 +478,9 @@ class DNSAnalyzer:
                                         result.records[a_key].append(a_record)
                                 logger.debug(f"Resolved CNAME {cname_target} to A records")
                             except Exception as e:
+                                stats.record_dns_query(
+                                    cname_target, "A", success=False, error=str(e)
+                                )
                                 logger.debug(f"Could not resolve CNAME target {cname_target}: {e}")
 
                 logger.debug(
@@ -480,19 +488,24 @@ class DNSAnalyzer:
                 )
 
             except dns.resolver.NXDOMAIN:
+                stats.record_dns_query(domain, record_type, success=False, error="NXDOMAIN")
                 logger.debug(f"Domain {domain} does not exist")
                 result.errors.append(f"Domain {domain} does not exist (NXDOMAIN)")
                 break  # No point checking other records
             except dns.resolver.NoAnswer:
+                stats.record_dns_query(domain, record_type, success=False, error="NoAnswer")
                 logger.debug(f"No {record_type} records found for {domain}")
             except dns.resolver.NoNameservers:
+                stats.record_dns_query(domain, record_type, success=False, error="NoNameservers")
                 logger.debug(f"No nameservers available for {domain}")
                 result.errors.append(f"No nameservers available for {domain}")
                 break
             except dns.exception.Timeout:
+                stats.record_dns_query(domain, record_type, success=False, error="Timeout")
                 logger.debug(f"DNS query timeout for {domain} {record_type}")
                 result.warnings.append(f"DNS query timeout for {domain} {record_type}")
             except Exception as e:
+                stats.record_dns_query(domain, record_type, success=False, error=str(e))
                 logger.debug(f"Error querying {record_type} for {domain}: {e}")
                 result.errors.append(f"Error querying {record_type} for {domain}: {str(e)}")
 
@@ -564,6 +577,7 @@ class DNSAnalyzer:
         self, result: DNSAnalysisResult, resolver: dns.resolver.Resolver
     ) -> None:
         """Validate MX records and check for common issues."""
+        stats = get_stats_tracker()
         mx_keys = [k for k in result.records.keys() if k.endswith(":MX")]
 
         if not mx_keys:
@@ -581,14 +595,17 @@ class DNSAnalyzer:
                     # Check if MX host resolves
                     try:
                         resolver.resolve(mx_host, "A")
+                        stats.record_dns_query(mx_host, "A", success=True)
                         logger.debug(f"MX host {mx_host} resolves correctly")
                     except Exception as e:
+                        stats.record_dns_query(mx_host, "A", success=False, error=str(e))
                         result.warnings.append(f"MX host {mx_host} does not resolve: {str(e)}")
 
     def _check_ptr_records(
         self, result: DNSAnalysisResult, resolver: dns.resolver.Resolver
     ) -> None:
         """Check PTR (reverse DNS) records for all A records."""
+        stats = get_stats_tracker()
         # Collect all A records (IPv4)
         a_record_keys = [k for k in result.records.keys() if k.endswith(":A")]
 
@@ -600,6 +617,7 @@ class DNSAnalyzer:
                     # Perform reverse DNS lookup
                     rev_name = dns.reversename.from_address(ip_address)
                     answers = resolver.resolve(rev_name, "PTR")
+                    stats.record_dns_query(ip_address, "PTR", success=True)
 
                     if answers:
                         # Get first PTR record
@@ -611,22 +629,27 @@ class DNSAnalyzer:
                         # Forward lookup PTR value to verify it resolves to the same IP
                         try:
                             forward_answers = resolver.resolve(ptr_value, "A")
+                            stats.record_dns_query(ptr_value, "A", success=True)
                             forward_ips = [str(rdata) for rdata in forward_answers]
 
                             if ip_address not in forward_ips:
                                 result.warnings.append(
                                     f"PTR record {ptr_value} for {ip_address} resolves to {', '.join(forward_ips)} (mismatch)"
                                 )
-                        except Exception:
+                        except Exception as e:
+                            stats.record_dns_query(ptr_value, "A", success=False, error=str(e))
                             result.info_messages.append(
                                 f"PTR record {ptr_value} for {ip_address} does not resolve in forward lookup"
                             )
                 except dns.resolver.NXDOMAIN:
+                    stats.record_dns_query(ip_address, "PTR", success=False, error="NXDOMAIN")
                     logger.debug(f"No PTR record for {ip_address}")
                     result.info_messages.append(f"No PTR record found for {ip_address}")
                 except dns.resolver.NoAnswer:
+                    stats.record_dns_query(ip_address, "PTR", success=False, error="NoAnswer")
                     logger.debug(f"No PTR record for {ip_address}")
                 except Exception as e:
+                    stats.record_dns_query(ip_address, "PTR", success=False, error=str(e))
                     logger.debug(f"Error checking PTR for {ip_address}: {e}")
 
     def _check_dnssec(self, domain: str, resolver: dns.resolver.Resolver) -> DNSSECInfo:
@@ -640,6 +663,7 @@ class DNSAnalyzer:
         Returns:
             DNSSECInfo with validation status
         """
+        stats = get_stats_tracker()
         dnssec_info = DNSSECInfo()
 
         try:
@@ -648,13 +672,16 @@ class DNSAnalyzer:
             # Check for DNSKEY records
             try:
                 dnskey_answers = resolver.resolve(domain, "DNSKEY")
+                stats.record_dns_query(domain, "DNSKEY", success=True)
                 if dnskey_answers:
                     dnssec_info.has_dnskey = True
                     dnssec_info.enabled = True
                     logger.debug(f"DNSKEY records found for {domain}")
             except dns.resolver.NoAnswer:
+                stats.record_dns_query(domain, "DNSKEY", success=False, error="NoAnswer")
                 logger.debug(f"No DNSKEY records for {domain}")
             except Exception as e:
+                stats.record_dns_query(domain, "DNSKEY", success=False, error=str(e))
                 logger.debug(f"Error checking DNSKEY for {domain}: {e}")
 
             # Check for DS records (in parent zone)
@@ -662,12 +689,15 @@ class DNSAnalyzer:
             if len(domain_name.labels) > 2:  # Has parent zone
                 try:
                     ds_answers = resolver.resolve(domain, "DS")
+                    stats.record_dns_query(domain, "DS", success=True)
                     if ds_answers:
                         dnssec_info.has_ds = True
                         logger.debug(f"DS records found for {domain}")
                 except dns.resolver.NoAnswer:
+                    stats.record_dns_query(domain, "DS", success=False, error="NoAnswer")
                     logger.debug(f"No DS records for {domain}")
                 except Exception as e:
+                    stats.record_dns_query(domain, "DS", success=False, error=str(e))
                     logger.debug(f"Error checking DS for {domain}: {e}")
 
             # If DNSSEC is enabled, try to validate
