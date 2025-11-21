@@ -1,5 +1,6 @@
 """Configuration editor view for Flet GUI - Full-page view (not dialog)."""
 
+import json
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -50,6 +51,9 @@ class ConfigEditorView:
         # UI field references (analyzer_id -> field_name -> control)
         self.analyzer_fields: dict[str, dict[str, ft.Control]] = {}
 
+        # Editor mode storage (analyzer_id:field_name -> "gui" | "json")
+        self.editor_modes: dict[str, str] = {}
+
         # Build analyzer sections (id -> {name, icon, content})
         self.sections: list[dict[str, Any]] = []
         self._build_sections()
@@ -62,6 +66,473 @@ class ConfigEditorView:
         self.content_container = ft.Container(
             content=self.sections[0]["content"] if self.sections else ft.Text("No config"),
             padding=20,
+        )
+
+    def _is_nested_dict_of_models(self, value: Any, field_info: Any) -> bool:
+        """Check if field is dict[str, BaseModel]."""
+        if not isinstance(value, dict):
+            return False
+
+        # Check if dict values are Pydantic models
+        if value:
+            first_value = next(iter(value.values()))
+            return hasattr(first_value, "model_dump")  # Pydantic model
+
+        # Empty dict - check type hints if available from field_info
+        if field_info and hasattr(field_info, "annotation"):
+            # Check if annotation looks like dict[str, SomeModel]
+            annotation_str = str(field_info.annotation)
+            # Simple heuristic: contains "dict" and doesn't end with basic types
+            if "dict" in annotation_str.lower() and not any(
+                t in annotation_str for t in ["str]", "int]", "float]", "bool]", "list]"]
+            ):
+                return True
+
+        return False
+
+    def _is_nested_list_of_dicts(self, value: Any) -> bool:
+        """Check if field is list[dict] or list[BaseModel]."""
+        if not isinstance(value, list):
+            return False
+
+        if value:
+            first_item = value[0]
+            return isinstance(first_item, dict) or hasattr(first_item, "model_dump")
+
+        return False
+
+    def _create_mode_toggle(
+        self,
+        current_mode: str,
+        on_change: Callable[[str], None],
+    ) -> ft.Row:
+        """
+        Create mode toggle button.
+
+        Args:
+            current_mode: "gui" or "json"
+            on_change: Callback when mode changes
+
+        Returns:
+            Row with toggle button and mode label
+        """
+
+        def handle_change(e):
+            """Handle toggle change."""
+            selected = e.control.selected
+            if selected:
+                new_mode = list(selected)[0]
+                on_change(new_mode)
+
+        return ft.Row(
+            [
+                ft.Text("Edit Mode:", size=12, weight=ft.FontWeight.BOLD),
+                ft.SegmentedButton(
+                    selected={current_mode},
+                    segments=[
+                        ft.Segment(
+                            value="gui",
+                            label=ft.Text("Visual"),
+                            icon=ft.Icon(ft.Icons.VIEW_MODULE),
+                        ),
+                        ft.Segment(
+                            value="json",
+                            label=ft.Text("JSON"),
+                            icon=ft.Icon(ft.Icons.CODE),
+                        ),
+                    ],
+                    on_change=handle_change,
+                    allow_empty_selection=False,
+                ),
+            ],
+            spacing=10,
+        )
+
+    def _create_nested_dict_manager(
+        self,
+        analyzer_id: str,
+        field_name: str,
+        profiles_dict: dict[str, Any],
+        item_class: type,
+    ) -> ft.Container:
+        """
+        Create UI for managing dict[str, BaseModel] with GUI/JSON mode toggle.
+
+        Args:
+            analyzer_id: Analyzer ID
+            field_name: Field name (e.g., "profiles")
+            profiles_dict: Current dict of items
+            item_class: BaseModel class for items
+
+        Returns:
+            Container with profile management UI (supports both GUI and JSON modes)
+        """
+        # Store reference for later access
+        if analyzer_id not in self.analyzer_fields:
+            self.analyzer_fields[analyzer_id] = {}
+
+        # Create storage for this nested field
+        nested_key = f"_nested_{field_name}"
+        if nested_key not in self.analyzer_fields[analyzer_id]:
+            self.analyzer_fields[analyzer_id][nested_key] = {}
+
+        # Initialize with current profiles
+        self.analyzer_fields[analyzer_id][nested_key] = dict(profiles_dict)
+
+        # Initialize mode (default to GUI)
+        mode_key = f"{analyzer_id}:{field_name}"
+        if mode_key not in self.editor_modes:
+            self.editor_modes[mode_key] = "gui"
+
+        # Content containers for both modes
+        gui_container = ft.Column(spacing=10)
+        json_container = ft.Column(spacing=10)
+        active_container = ft.Container()
+
+        # ====================================================================
+        # GUI Mode Functions
+        # ====================================================================
+
+        def refresh_gui_mode():
+            """Refresh GUI mode display."""
+            gui_container.controls.clear()
+
+            current_profiles = self.analyzer_fields[analyzer_id][nested_key]
+
+            # Profile cards container
+            profiles_container = ft.Column(spacing=10)
+
+            if not current_profiles:
+                profiles_container.controls.append(
+                    ft.Text("No profiles configured", italic=True, color=ft.Colors.GREY_700)
+                )
+            else:
+                for profile_id, profile_data in current_profiles.items():
+                    # Get profile name
+                    profile_name = (
+                        profile_data.get("name", profile_id)
+                        if isinstance(profile_data, dict)
+                        else getattr(profile_data, "name", profile_id)
+                    )
+
+                    # Create profile card with edit/delete buttons
+                    profile_card = ft.Card(
+                        content=ft.Container(
+                            content=ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.FOLDER, color=ft.Colors.BLUE_700),
+                                    ft.Column(
+                                        [
+                                            ft.Text(profile_name, weight=ft.FontWeight.BOLD),
+                                            ft.Text(
+                                                f"ID: {profile_id}",
+                                                size=11,
+                                                color=ft.Colors.GREY_700,
+                                            ),
+                                        ],
+                                        spacing=2,
+                                    ),
+                                    ft.Row(
+                                        [
+                                            ft.IconButton(
+                                                icon=ft.Icons.EDIT,
+                                                tooltip="Edit profile",
+                                                on_click=lambda e, pid=profile_id: edit_profile(
+                                                    pid
+                                                ),
+                                            ),
+                                            ft.IconButton(
+                                                icon=ft.Icons.DELETE,
+                                                tooltip="Delete profile",
+                                                icon_color=ft.Colors.RED_700,
+                                                on_click=lambda e, pid=profile_id: delete_profile(
+                                                    pid
+                                                ),
+                                            ),
+                                        ],
+                                        spacing=5,
+                                    ),
+                                ],
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            ),
+                            padding=10,
+                        )
+                    )
+                    profiles_container.controls.append(profile_card)
+
+            # Add button
+            add_button = ft.ElevatedButton(
+                "Add Profile",
+                icon=ft.Icons.ADD,
+                on_click=add_profile,
+            )
+
+            gui_container.controls = [add_button, profiles_container]
+            active_container.content = gui_container
+            self.page.update()
+
+        def add_profile(e):
+            """Show dialog to add new profile."""
+            profile_id_field = ft.TextField(label="Profile ID", hint_text="e.g., web-server-1")
+
+            # Get all fields from item_class
+            fields_dict = {}
+            if hasattr(item_class, "model_fields"):
+                for fname, finfo in item_class.model_fields.items():
+                    default_val = finfo.default if finfo.default is not None else ""
+                    if isinstance(default_val, list):
+                        default_val = ""
+                    fields_dict[fname] = ft.TextField(
+                        label=fname.replace("_", " ").title(),
+                        value=str(default_val),
+                        multiline=True if fname in ["description"] else False,
+                    )
+
+            def save_new_profile(e):
+                pid = profile_id_field.value.strip()
+                if not pid:
+                    return
+
+                # Collect field values
+                new_profile = {}
+                for fname, field in fields_dict.items():
+                    val = field.value.strip()
+                    # Try to parse lists
+                    if "[" in str(item_class.model_fields[fname].annotation):
+                        new_profile[fname] = [v.strip() for v in val.split(",") if v.strip()]
+                    else:
+                        new_profile[fname] = val
+
+                # Add to storage
+                self.analyzer_fields[analyzer_id][nested_key][pid] = new_profile
+                refresh_gui_mode()
+                dialog.open = False
+                self.page.update()
+
+            dialog = ft.AlertDialog(
+                title=ft.Text("Add New Profile"),
+                content=ft.Column(
+                    [
+                        profile_id_field,
+                        ft.Divider(),
+                        *fields_dict.values(),
+                    ],
+                    tight=True,
+                    scroll=ft.ScrollMode.AUTO,
+                    height=400,
+                ),
+                actions=[
+                    ft.TextButton(
+                        "Cancel",
+                        on_click=lambda e: setattr(dialog, "open", False) or self.page.update(),
+                    ),
+                    ft.TextButton("Add", on_click=save_new_profile),
+                ],
+            )
+
+            self.page.overlay.append(dialog)
+            dialog.open = True
+            self.page.update()
+
+        def edit_profile(profile_id: str):
+            """Edit existing profile."""
+            current_data = self.analyzer_fields[analyzer_id][nested_key][profile_id]
+
+            # Create fields pre-filled with current values
+            fields_dict = {}
+            for fname in current_data.keys():
+                val = current_data[fname]
+                if isinstance(val, list):
+                    val = ", ".join(val)
+                fields_dict[fname] = ft.TextField(
+                    label=fname.replace("_", " ").title(),
+                    value=str(val),
+                    multiline=True if fname in ["description"] else False,
+                )
+
+            def save_edited_profile(e):
+                # Update storage
+                for fname, field in fields_dict.items():
+                    val = field.value.strip()
+                    # Parse lists
+                    if isinstance(current_data[fname], list):
+                        self.analyzer_fields[analyzer_id][nested_key][profile_id][fname] = [
+                            v.strip() for v in val.split(",") if v.strip()
+                        ]
+                    else:
+                        self.analyzer_fields[analyzer_id][nested_key][profile_id][fname] = val
+
+                refresh_gui_mode()
+                dialog.open = False
+                self.page.update()
+
+            dialog = ft.AlertDialog(
+                title=ft.Text(f"Edit Profile: {profile_id}"),
+                content=ft.Column(
+                    [
+                        *fields_dict.values(),
+                    ],
+                    tight=True,
+                    scroll=ft.ScrollMode.AUTO,
+                    height=400,
+                ),
+                actions=[
+                    ft.TextButton(
+                        "Cancel",
+                        on_click=lambda e: setattr(dialog, "open", False) or self.page.update(),
+                    ),
+                    ft.TextButton("Save", on_click=save_edited_profile),
+                ],
+            )
+
+            self.page.overlay.append(dialog)
+            dialog.open = True
+            self.page.update()
+
+        def delete_profile(profile_id: str):
+            """Delete profile with confirmation."""
+
+            def confirm_delete(e):
+                del self.analyzer_fields[analyzer_id][nested_key][profile_id]
+                refresh_gui_mode()
+                dialog.open = False
+                self.page.update()
+
+            dialog = ft.AlertDialog(
+                title=ft.Text("Confirm Delete"),
+                content=ft.Text(f"Delete profile '{profile_id}'?"),
+                actions=[
+                    ft.TextButton(
+                        "Cancel",
+                        on_click=lambda e: setattr(dialog, "open", False) or self.page.update(),
+                    ),
+                    ft.TextButton("Delete", on_click=confirm_delete),
+                ],
+            )
+
+            self.page.overlay.append(dialog)
+            dialog.open = True
+            self.page.update()
+
+        # ====================================================================
+        # JSON Mode Functions
+        # ====================================================================
+
+        # Store JSON TextField reference for updates
+        json_field_ref = {"field": None, "validation_text": None}
+
+        def refresh_json_mode():
+            """Refresh JSON mode display."""
+            json_container.controls.clear()
+
+            # Convert current data to JSON
+            current_data = self.analyzer_fields[analyzer_id][nested_key]
+            json_str = json.dumps(current_data, indent=2)
+
+            # Validation indicator
+            validation_text = ft.Text(
+                "✓ Valid JSON",
+                size=11,
+                color=ft.Colors.GREEN_700,
+            )
+
+            def update_from_json(e):
+                """Update internal storage from JSON."""
+                json_value = e.control.value
+                try:
+                    parsed = json.loads(json_value)
+                    if not isinstance(parsed, dict):
+                        raise ValueError("Root must be an object/dict")
+
+                    # Update storage
+                    self.analyzer_fields[analyzer_id][nested_key] = parsed
+
+                    # Update validation
+                    validation_text.value = "✓ Valid JSON"
+                    validation_text.color = ft.Colors.GREEN_700
+                except json.JSONDecodeError as err:
+                    validation_text.value = f"✗ Invalid JSON: {str(err)}"
+                    validation_text.color = ft.Colors.RED_700
+                except ValueError as err:
+                    validation_text.value = f"✗ Error: {str(err)}"
+                    validation_text.color = ft.Colors.RED_700
+
+                self.page.update()
+
+            # JSON TextField
+            json_field = ft.TextField(
+                value=json_str,
+                multiline=True,
+                min_lines=10,
+                max_lines=20,
+                on_change=update_from_json,
+                hint_text='Edit JSON directly (e.g., {"profile-id": {"name": "...", ...}})',
+                text_style=ft.TextStyle(font_family="Courier New"),
+            )
+
+            # Store reference
+            json_field_ref["field"] = json_field
+            json_field_ref["validation_text"] = validation_text
+
+            # Help text
+            help_text = ft.Text(
+                "💡 Tip: Edit JSON directly. Changes are validated in real-time.",
+                size=11,
+                italic=True,
+                color=ft.Colors.GREY_700,
+            )
+
+            json_container.controls = [
+                help_text,
+                json_field,
+                validation_text,
+            ]
+            active_container.content = json_container
+            self.page.update()
+
+        # ====================================================================
+        # Mode Switching
+        # ====================================================================
+
+        def switch_mode(new_mode: str):
+            """Switch between GUI and JSON mode."""
+            self.editor_modes[mode_key] = new_mode
+
+            if new_mode == "gui":
+                refresh_gui_mode()
+            else:
+                refresh_json_mode()
+
+        # Create mode toggle
+        mode_toggle = self._create_mode_toggle(
+            current_mode=self.editor_modes[mode_key],
+            on_change=switch_mode,
+        )
+
+        # Initial render
+        if self.editor_modes[mode_key] == "gui":
+            refresh_gui_mode()
+        else:
+            refresh_json_mode()
+
+        # Build final container
+        return ft.Container(
+            content=ft.Column(
+                [
+                    ft.Text(
+                        field_name.replace("_", " ").title(),
+                        size=14,
+                        weight=ft.FontWeight.BOLD,
+                    ),
+                    mode_toggle,
+                    ft.Divider(),
+                    active_container,
+                ],
+                spacing=10,
+            ),
+            padding=10,
+            border=ft.border.all(1, ft.Colors.GREY_400),
+            border_radius=5,
         )
 
     def _build_sections(self) -> None:
@@ -278,6 +749,52 @@ class ConfigEditorView:
                 if field_name == "enabled":
                     continue  # Already added
 
+                # Get field info from config class for type checking
+                field_info = None
+                if hasattr(metadata.config_class, "model_fields"):
+                    field_info = metadata.config_class.model_fields.get(field_name)
+
+                # Get original value from config object (not dumped)
+                original_value = getattr(config, field_name, value)
+
+                # Check for nested dict of models (check original, not dumped)
+                if self._is_nested_dict_of_models(original_value, field_info):
+                    # Get item class from annotation (more reliable)
+                    item_class = None
+                    if field_info and hasattr(field_info, "annotation"):
+                        # Try to extract item class from annotation
+                        annotation = field_info.annotation
+                        # Get the value type from dict[str, ValueType]
+                        if hasattr(annotation, "__args__") and len(annotation.__args__) > 1:
+                            item_class = annotation.__args__[1]
+
+                    if not item_class and original_value:
+                        # Fallback: get from first item
+                        item_class = type(next(iter(original_value.values())))
+
+                    if item_class:
+                        nested_ui = self._create_nested_dict_manager(
+                            analyzer_id, field_name, value, item_class
+                        )
+                        controls.append(nested_ui)
+                        continue
+
+                # Check for nested list
+                if self._is_nested_list_of_dicts(value):
+                    # For now, show as JSON text area (simpler than full list manager)
+                    import json
+
+                    field = ft.TextField(
+                        label=field_name.replace("_", " ").title() + " (JSON)",
+                        value=json.dumps(value, indent=2),
+                        multiline=True,
+                        min_lines=5,
+                        max_lines=10,
+                    )
+                    fields[field_name] = field
+                    controls.append(field)
+                    continue
+
                 # Create appropriate control based on type
                 if isinstance(value, bool):
                     field = ft.Checkbox(
@@ -368,6 +885,17 @@ class ConfigEditorView:
                 current_config = self.config_adapter.get_analyzer_config(analyzer_id)
 
                 for field_name, control in fields.items():
+                    # Check for nested dict storage (skip the _nested_ keys themselves)
+                    if field_name.startswith("_nested_"):
+                        continue
+
+                    # Check if there's a nested dict for this field
+                    nested_key = f"_nested_{field_name}"
+                    if nested_key in fields:
+                        # This is a nested dict - get from storage
+                        config_dict[field_name] = fields[nested_key]
+                        continue
+
                     if isinstance(control, ft.Checkbox):
                         config_dict[field_name] = control.value
                     elif isinstance(control, ft.TextField):
@@ -376,7 +904,16 @@ class ConfigEditorView:
                         # Get original type from current config
                         original_value = getattr(current_config, field_name, None)
 
-                        if original_value is None:
+                        # Check if this is a JSON field (nested list)
+                        if "(JSON)" in control.label:
+                            import json
+
+                            try:
+                                config_dict[field_name] = json.loads(value_str) if value_str else []
+                            except json.JSONDecodeError:
+                                logger.warning(f"Invalid JSON for {field_name}, using empty list")
+                                config_dict[field_name] = []
+                        elif original_value is None:
                             # Optional field
                             config_dict[field_name] = value_str if value_str else None
                         elif isinstance(original_value, list):

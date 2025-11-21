@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Domain Configuration Validator** - New analyzer for validating domains against infrastructure profiles
+  - Multi-profile support for different server configurations (production, staging, testing, etc.)
+  - IP address validation (IPv4/IPv6) with flexible match modes (`any` or `all`)
+  - CDN provider validation
+  - Verification file checking with optional content matching for ownership proof
+  - Email security validation:
+    - SPF includes and IP addresses validation
+    - DKIM selector requirement checking
+    - DMARC policy enforcement
+  - Security-hardened implementation:
+    - SSRF protection - rejects IP addresses, localhost, private/link-local networks in domain field
+    - Path traversal protection for verification file paths (blocks `..`, absolute paths)
+    - Response size limits (1MB maximum) to prevent resource exhaustion attacks
+    - Infrastructure detail hiding (hides expected values by default to prevent reconnaissance)
+  - Configurable strict/warning mode
+  - Integration with existing DNS, HTTP, Email, and CDN analyzers via context
+  - Analyzer ID: `domain-validator`
+
+### Changed
+
+- Updated `AnalyzerPlugin` protocol to formally support optional `context` parameter
+  - Allows analyzers to access results from dependency analyzers
+  - Backward compatible - context parameter is optional with default `None`
+  - CLI automatically provides context dict with dependency results
+  - Example: Domain Validator uses `dns`, `http`, `email`, `cdn` results from context
+
+### Security
+
+- **Domain Configuration Validator** implements multiple security protections:
+  - **SSRF Prevention**: Validates domain format and rejects IP addresses, localhost, and private networks
+  - **Path Traversal Prevention**: Validates verification file paths and rejects `..`, absolute paths, and suspicious patterns
+  - **Resource Exhaustion Prevention**: Limits HTTP response sizes to 1MB to prevent memory exhaustion
+  - **Information Disclosure Prevention**: Hides expected infrastructure values by default (configurable via `hide_expected_values`)
+
 ## [1.1.0] - 2025-01-21
 
 ### Added

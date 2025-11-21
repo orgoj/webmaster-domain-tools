@@ -205,13 +205,18 @@ class AnalyzerPlugin(Protocol[TConfig, TResult]):
     depends_on: list[str]  # Dependencies: ["dns", "http"]
 
     @abstractmethod
-    def analyze(self, domain: str, config: TConfig) -> TResult:
+    def analyze(
+        self, domain: str, config: TConfig, context: dict[str, Any] | None = None
+    ) -> TResult:
         """
         Perform analysis.
 
         Args:
             domain: Domain to analyze
             config: This analyzer's configuration
+            context: Optional context dict with results from dependency analyzers.
+                     Populated by CLI with {analyzer_id: result} for dependencies.
+                     Analyzers can ignore this if they don't need dependency results.
 
         Returns:
             Result object (must have errors/warnings lists)

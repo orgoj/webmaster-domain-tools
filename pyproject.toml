@@ -1,6 +1,6 @@
 [project]
 name = "webmaster-domain-tool"
-version = "1.1.0"
+version = "1.2.0"
 description = "Comprehensive domain analysis tool for webmasters"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -36,6 +36,7 @@ dependencies = [
     "python-whois>=0.9.6",
     "flet>=0.28.3",
     "flet-desktop>=0.28.3",
+    "flet-web>=0.28.3",
     "beautifulsoup4>=4.12.0",
     "html5lib>=1.1",
 ]
