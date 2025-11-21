@@ -1,5 +1,21 @@
 # Webmaster Domain Tool - AI Assistant Guide
 
+## ⚠️ META: Rules for CLAUDE.md Itself
+
+**CLAUDE.md musí být:**
+- **Stručný** - žádné dlouhé vysvětlování, jen fakta
+- **Jasný** - přímé instrukce, ne vágní rady
+- **Důrazný** - pravidla, ne návrhy
+- **Bez duplicit** - před přidáním ZKONTROLUJ, že to tam už není
+
+**Když přidáváš do CLAUDE.md:**
+1. Vyhledej zda to tam už není (`grep`, `Ctrl+F`)
+2. Zkontroluj všechny CRITICAL sekce
+3. NESKLEJ duplicity - radši vylepši stávající text
+4. CLAUDE.md není bordel - je to tvůj startup config!
+
+---
+
 This document provides comprehensive information about the project for AI assistants working on this codebase.
 
 ## Project Overview
