@@ -1,11 +1,11 @@
-"""Test config editor dialog can be imported (catches type hint errors)."""
+"""Test config editor view can be imported (catches type hint errors)."""
 
 
-def test_import_config_editor_dialog():
-    """Test that config_editor_dialog module can be imported without errors."""
-    from webmaster_domain_tool.config_editor_dialog import ConfigEditorDialog
+def test_import_config_editor_view():
+    """Test that config_editor_view module can be imported without errors."""
+    from webmaster_domain_tool.config_editor_view import ConfigEditorView
 
-    assert ConfigEditorDialog is not None
+    assert ConfigEditorView is not None
 
 
 def test_import_flet_config_manager():
