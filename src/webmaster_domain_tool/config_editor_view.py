@@ -1,5 +1,6 @@
 """Configuration editor view for Flet GUI - Full-page view (not dialog)."""
 
+import json
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -50,6 +51,9 @@ class ConfigEditorView:
         # UI field references (analyzer_id -> field_name -> control)
         self.analyzer_fields: dict[str, dict[str, ft.Control]] = {}
 
+        # Editor mode storage (analyzer_id:field_name -> "gui" | "json")
+        self.editor_modes: dict[str, str] = {}
+
         # Build analyzer sections (id -> {name, icon, content})
         self.sections: list[dict[str, Any]] = []
         self._build_sections()
@@ -97,6 +101,53 @@ class ConfigEditorView:
 
         return False
 
+    def _create_mode_toggle(
+        self,
+        current_mode: str,
+        on_change: Callable[[str], None],
+    ) -> ft.Row:
+        """
+        Create mode toggle button.
+
+        Args:
+            current_mode: "gui" or "json"
+            on_change: Callback when mode changes
+
+        Returns:
+            Row with toggle button and mode label
+        """
+
+        def handle_change(e):
+            """Handle toggle change."""
+            selected = e.control.selected
+            if selected:
+                new_mode = list(selected)[0]
+                on_change(new_mode)
+
+        return ft.Row(
+            [
+                ft.Text("Edit Mode:", size=12, weight=ft.FontWeight.BOLD),
+                ft.SegmentedButton(
+                    selected={current_mode},
+                    segments=[
+                        ft.Segment(
+                            value="gui",
+                            label=ft.Text("Visual"),
+                            icon=ft.Icon(ft.Icons.VIEW_MODULE),
+                        ),
+                        ft.Segment(
+                            value="json",
+                            label=ft.Text("JSON"),
+                            icon=ft.Icon(ft.Icons.CODE),
+                        ),
+                    ],
+                    on_change=handle_change,
+                    allow_empty_selection=False,
+                ),
+            ],
+            spacing=10,
+        )
+
     def _create_nested_dict_manager(
         self,
         analyzer_id: str,
@@ -105,7 +156,7 @@ class ConfigEditorView:
         item_class: type,
     ) -> ft.Container:
         """
-        Create UI for managing dict[str, BaseModel] (e.g., profiles).
+        Create UI for managing dict[str, BaseModel] with GUI/JSON mode toggle.
 
         Args:
             analyzer_id: Analyzer ID
@@ -114,7 +165,7 @@ class ConfigEditorView:
             item_class: BaseModel class for items
 
         Returns:
-            Container with profile management UI
+            Container with profile management UI (supports both GUI and JSON modes)
         """
         # Store reference for later access
         if analyzer_id not in self.analyzer_fields:
@@ -125,14 +176,31 @@ class ConfigEditorView:
         if nested_key not in self.analyzer_fields[analyzer_id]:
             self.analyzer_fields[analyzer_id][nested_key] = {}
 
-        # Profile list container (will be updated dynamically)
-        profiles_container = ft.Column(spacing=10)
+        # Initialize with current profiles
+        self.analyzer_fields[analyzer_id][nested_key] = dict(profiles_dict)
 
-        def refresh_profiles():
-            """Refresh the profiles list display."""
-            profiles_container.controls.clear()
+        # Initialize mode (default to GUI)
+        mode_key = f"{analyzer_id}:{field_name}"
+        if mode_key not in self.editor_modes:
+            self.editor_modes[mode_key] = "gui"
+
+        # Content containers for both modes
+        gui_container = ft.Column(spacing=10)
+        json_container = ft.Column(spacing=10)
+        active_container = ft.Container()
+
+        # ====================================================================
+        # GUI Mode Functions
+        # ====================================================================
+
+        def refresh_gui_mode():
+            """Refresh GUI mode display."""
+            gui_container.controls.clear()
 
             current_profiles = self.analyzer_fields[analyzer_id][nested_key]
+
+            # Profile cards container
+            profiles_container = ft.Column(spacing=10)
 
             if not current_profiles:
                 profiles_container.controls.append(
@@ -192,6 +260,15 @@ class ConfigEditorView:
                     )
                     profiles_container.controls.append(profile_card)
 
+            # Add button
+            add_button = ft.ElevatedButton(
+                "Add Profile",
+                icon=ft.Icons.ADD,
+                on_click=add_profile,
+            )
+
+            gui_container.controls = [add_button, profiles_container]
+            active_container.content = gui_container
             self.page.update()
 
         def add_profile(e):
@@ -228,7 +305,7 @@ class ConfigEditorView:
 
                 # Add to storage
                 self.analyzer_fields[analyzer_id][nested_key][pid] = new_profile
-                refresh_profiles()
+                refresh_gui_mode()
                 dialog.open = False
                 self.page.update()
 
@@ -285,7 +362,7 @@ class ConfigEditorView:
                     else:
                         self.analyzer_fields[analyzer_id][nested_key][profile_id][fname] = val
 
-                refresh_profiles()
+                refresh_gui_mode()
                 dialog.open = False
                 self.page.update()
 
@@ -317,7 +394,7 @@ class ConfigEditorView:
 
             def confirm_delete(e):
                 del self.analyzer_fields[analyzer_id][nested_key][profile_id]
-                refresh_profiles()
+                refresh_gui_mode()
                 dialog.open = False
                 self.page.update()
 
@@ -337,19 +414,108 @@ class ConfigEditorView:
             dialog.open = True
             self.page.update()
 
-        # Initialize with current profiles
-        self.analyzer_fields[analyzer_id][nested_key] = dict(profiles_dict)
+        # ====================================================================
+        # JSON Mode Functions
+        # ====================================================================
 
-        # Build UI
-        add_button = ft.ElevatedButton(
-            "Add Profile",
-            icon=ft.Icons.ADD,
-            on_click=add_profile,
+        # Store JSON TextField reference for updates
+        json_field_ref = {"field": None, "validation_text": None}
+
+        def refresh_json_mode():
+            """Refresh JSON mode display."""
+            json_container.controls.clear()
+
+            # Convert current data to JSON
+            current_data = self.analyzer_fields[analyzer_id][nested_key]
+            json_str = json.dumps(current_data, indent=2)
+
+            # Validation indicator
+            validation_text = ft.Text(
+                "✓ Valid JSON",
+                size=11,
+                color=ft.Colors.GREEN_700,
+            )
+
+            def update_from_json(e):
+                """Update internal storage from JSON."""
+                json_value = e.control.value
+                try:
+                    parsed = json.loads(json_value)
+                    if not isinstance(parsed, dict):
+                        raise ValueError("Root must be an object/dict")
+
+                    # Update storage
+                    self.analyzer_fields[analyzer_id][nested_key] = parsed
+
+                    # Update validation
+                    validation_text.value = "✓ Valid JSON"
+                    validation_text.color = ft.Colors.GREEN_700
+                except json.JSONDecodeError as err:
+                    validation_text.value = f"✗ Invalid JSON: {str(err)}"
+                    validation_text.color = ft.Colors.RED_700
+                except ValueError as err:
+                    validation_text.value = f"✗ Error: {str(err)}"
+                    validation_text.color = ft.Colors.RED_700
+
+                self.page.update()
+
+            # JSON TextField
+            json_field = ft.TextField(
+                value=json_str,
+                multiline=True,
+                min_lines=10,
+                max_lines=20,
+                on_change=update_from_json,
+                hint_text='Edit JSON directly (e.g., {"profile-id": {"name": "...", ...}})',
+                text_style=ft.TextStyle(font_family="Courier New"),
+            )
+
+            # Store reference
+            json_field_ref["field"] = json_field
+            json_field_ref["validation_text"] = validation_text
+
+            # Help text
+            help_text = ft.Text(
+                "💡 Tip: Edit JSON directly. Changes are validated in real-time.",
+                size=11,
+                italic=True,
+                color=ft.Colors.GREY_700,
+            )
+
+            json_container.controls = [
+                help_text,
+                json_field,
+                validation_text,
+            ]
+            active_container.content = json_container
+            self.page.update()
+
+        # ====================================================================
+        # Mode Switching
+        # ====================================================================
+
+        def switch_mode(new_mode: str):
+            """Switch between GUI and JSON mode."""
+            self.editor_modes[mode_key] = new_mode
+
+            if new_mode == "gui":
+                refresh_gui_mode()
+            else:
+                refresh_json_mode()
+
+        # Create mode toggle
+        mode_toggle = self._create_mode_toggle(
+            current_mode=self.editor_modes[mode_key],
+            on_change=switch_mode,
         )
 
-        # Initial refresh
-        refresh_profiles()
+        # Initial render
+        if self.editor_modes[mode_key] == "gui":
+            refresh_gui_mode()
+        else:
+            refresh_json_mode()
 
+        # Build final container
         return ft.Container(
             content=ft.Column(
                 [
@@ -358,8 +524,9 @@ class ConfigEditorView:
                         size=14,
                         weight=ft.FontWeight.BOLD,
                     ),
-                    add_button,
-                    profiles_container,
+                    mode_toggle,
+                    ft.Divider(),
+                    active_container,
                 ],
                 spacing=10,
             ),
