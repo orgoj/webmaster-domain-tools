@@ -62,11 +62,11 @@ class UITheme:
     text_secondary: str = ft.Colors.GREY_700
 
     # Status colors
-    success_color: str = ft.Colors.GREEN
+    success_color: str = ft.Colors.GREEN_700
     success_bg: str = ft.Colors.GREEN_50
-    error_color: str = ft.Colors.RED
+    error_color: str = ft.Colors.RED_700
     error_bg: str = ft.Colors.RED_50
-    warning_color: str = ft.Colors.ORANGE
+    warning_color: str = ft.Colors.ORANGE_700
     warning_bg: str = ft.Colors.ORANGE_50
     # Specific warning orange shades (previously hardcoded as hex)
     warning_orange: str = "#FFA500"  # Orange for warnings
