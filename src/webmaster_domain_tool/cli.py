@@ -9,7 +9,10 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
+
+if TYPE_CHECKING:
+    from .renderers.base import BaseRenderer
 
 import rich.panel
 import typer
@@ -33,7 +36,7 @@ from . import analyzers  # noqa: F401, E402  # Triggers analyzer registration
 from .analyzers.protocol import VerbosityLevel  # noqa: E402
 from .core.config_manager import ConfigManager  # noqa: E402
 from .core.registry import registry  # noqa: E402
-from .renderers import CLIRenderer, JSONRenderer  # noqa: E402
+from .renderers import BulkJSONLinesRenderer, CLIRenderer, JSONRenderer  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +104,113 @@ def validate_verbosity(value: str) -> str:
 
 
 # ============================================================================
+# Helper Functions
+# ============================================================================
+
+
+def _analyze_single_domain(
+    domain: str,
+    execution_order: list[str],
+    config_manager: ConfigManager,
+    renderer: "BaseRenderer",
+) -> None:
+    """
+    Analyze a single domain.
+
+    Args:
+        domain: Domain to analyze
+        execution_order: List of analyzer IDs in execution order
+        config_manager: Configuration manager
+        renderer: Output renderer
+    """
+    analysis_context: dict[str, object] = {}  # Shared data between analyzers
+
+    for analyzer_id in execution_order:
+        metadata = registry.get(analyzer_id)
+        if not metadata:
+            logger.error(f"Analyzer not found: {analyzer_id}")
+            continue
+
+        config = config_manager.get_analyzer_config(analyzer_id)
+
+        try:
+            # Instantiate analyzer
+            analyzer = metadata.plugin_class()
+
+            # Run analysis - pass context if analyzer supports it
+            analyze_signature = inspect.signature(analyzer.analyze)
+            if "context" in analyze_signature.parameters:
+                result = analyzer.analyze(domain, config, context=analysis_context)
+            else:
+                result = analyzer.analyze(domain, config)
+
+            # Store in context for dependent analyzers
+            analysis_context[analyzer_id] = result
+
+            # Describe output
+            descriptor = analyzer.describe_output(result)
+
+            # Render
+            renderer.render(descriptor, result, analyzer_id)
+
+        except Exception as e:
+            logger.error(f"Analyzer '{analyzer_id}' failed: {e}", exc_info=True)
+            # Don't print error in bulk mode - just log it
+            if not hasattr(renderer, "set_current_domain"):
+                console.print(f"[red]✗ Analyzer '{analyzer_id}' failed: {e}[/red]")
+
+
+def _process_bulk_domains(
+    domain_file: str,
+    execution_order: list[str],
+    config_manager: ConfigManager,
+    renderer: "BaseRenderer",
+) -> None:
+    """
+    Process multiple domains from file or stdin.
+
+    Args:
+        domain_file: Path to file or '-' for stdin
+        execution_order: List of analyzer IDs in execution order
+        config_manager: Configuration manager
+        renderer: Output renderer
+    """
+    # Read domains
+    try:
+        if domain_file == "-":
+            domains = [line.strip() for line in sys.stdin if line.strip()]
+        else:
+            with open(domain_file) as f:
+                domains = [line.strip() for line in f if line.strip()]
+    except Exception as e:
+        console.print(f"[red]Error reading domain file: {e}[/red]")
+        raise typer.Exit(1)
+
+    if not domains:
+        console.print("[yellow]No domains found in input[/yellow]")
+        raise typer.Exit(0)
+
+    # Process each domain
+    for domain_line in domains:
+        # Validate domain
+        try:
+            domain = validate_domain(domain_line)
+        except typer.BadParameter as e:
+            logger.warning(f"Skipping invalid domain: {domain_line} - {e}")
+            continue
+
+        # Set current domain (for bulk renderer)
+        if hasattr(renderer, "set_current_domain"):
+            renderer.set_current_domain(domain)
+
+        # Analyze domain
+        _analyze_single_domain(domain, execution_order, config_manager, renderer)
+
+        # Render summary for this domain
+        renderer.render_summary()
+
+
+# ============================================================================
 # CLI Commands
 # ============================================================================
 
@@ -108,12 +218,18 @@ def validate_verbosity(value: str) -> str:
 @app.command()
 def analyze(
     domain: Annotated[
-        str,
+        str | None,
         typer.Argument(
-            help="Domain to analyze (e.g., example.com)",
-            callback=validate_domain,
+            help="Domain to analyze (e.g., example.com). Optional if --domain-file is used.",
         ),
-    ],
+    ] = None,
+    domain_file: Annotated[
+        str | None,
+        typer.Option(
+            "--domain-file",
+            help="File with list of domains (one per line). Use '-' for stdin.",
+        ),
+    ] = None,
     skip: Annotated[
         list[str] | None,
         typer.Option(help="Analyzers to skip (e.g., --skip dns --skip whois)"),
@@ -138,7 +254,7 @@ def analyze(
         typer.Option(
             "--format",
             "-f",
-            help="Output format: cli, json",
+            help="Output format: cli, json, jsonlines",
         ),
     ] = "cli",
     config_file: Annotated[
@@ -153,18 +269,32 @@ def analyze(
     ] = None,
 ):
     """
-    Analyze a domain.
+    Analyze a domain or multiple domains from a file.
 
-    Runs all enabled analyzers on the specified domain. Use --skip to disable
+    Runs all enabled analyzers on the specified domain(s). Use --skip to disable
     specific analyzers, or --only to run just specific analyzers.
 
-    Example:
+    Single domain analysis:
         wdt analyze example.com
         wdt analyze example.com --skip dns --skip whois
         wdt analyze example.com --only html
-        wdt analyze example.com --only html,dns,ssl
         wdt analyze example.com --verbosity verbose --format json
+
+    Bulk domain analysis:
+        wdt analyze --domain-file domains.txt --format jsonlines
+        cat domains.txt | wdt analyze --domain-file - --format jsonlines
+        wdt analyze --domain-file domains.txt --config custom.toml
     """
+    # Validate domain or domain_file is provided
+    if not domain and not domain_file:
+        console.print("[red]Error: Either DOMAIN or --domain-file must be provided[/red]")
+        raise typer.Exit(1)
+
+    if domain and domain_file:
+        console.print("[red]Error: Cannot use both DOMAIN and --domain-file together[/red]")
+        console.print("Use either a single domain or --domain-file for bulk analysis")
+        raise typer.Exit(1)
+
     # Validate --only and --skip are mutually exclusive
     if only and skip:
         console.print("[red]Error: Cannot use --only and --skip together[/red]")
@@ -248,58 +378,33 @@ def analyze(
         )
     elif output_format == "json":
         renderer = JSONRenderer(verbosity=verbosity_level)
+    elif output_format == "jsonlines":
+        renderer = BulkJSONLinesRenderer(verbosity=verbosity_level)
     else:
         console.print(f"[red]Error: Unknown output format: {output_format}[/red]")
-        console.print("Available formats: cli, json")
+        console.print("Available formats: cli, json, jsonlines")
         raise typer.Exit(1)
 
-    # Display header (CLI only)
-    if output_format == "cli" and verbosity != "quiet":
-        console.print(f"[bold blue]Analyzing domain: {domain}[/bold blue]")
-        console.print(f"[dim]Running {len(execution_order)} analyzer(s)[/dim]")
+    # Branch: Bulk processing or single domain
+    if domain_file:
+        # Bulk domain processing
+        _process_bulk_domains(domain_file, execution_order, config_manager, renderer)
+    else:
+        # Single domain processing
+        # Validate domain (should not be None at this point)
+        assert domain is not None
+        domain = validate_domain(domain)
 
-    # Execute analyzers
-    results: dict[str, tuple[object, object]] = {}  # analyzer_id -> (descriptor, result)
-    analysis_context: dict[str, object] = {}  # Shared data between analyzers
+        # Display header (CLI only)
+        if output_format == "cli" and verbosity != "quiet":
+            console.print(f"[bold blue]Analyzing domain: {domain}[/bold blue]")
+            console.print(f"[dim]Running {len(execution_order)} analyzer(s)[/dim]")
 
-    for analyzer_id in execution_order:
-        metadata = registry.get(analyzer_id)
-        if not metadata:
-            logger.error(f"Analyzer not found: {analyzer_id}")
-            continue
+        # Analyze domain
+        _analyze_single_domain(domain, execution_order, config_manager, renderer)
 
-        config = config_manager.get_analyzer_config(analyzer_id)
-
-        try:
-            # Instantiate analyzer
-            analyzer = metadata.plugin_class()
-
-            # Run analysis - pass context if analyzer supports it
-            analyze_signature = inspect.signature(analyzer.analyze)
-            if "context" in analyze_signature.parameters:
-                result = analyzer.analyze(domain, config, context=analysis_context)
-            else:
-                result = analyzer.analyze(domain, config)
-
-            # Store in context for dependent analyzers
-            analysis_context[analyzer_id] = result
-
-            # Describe output
-            descriptor = analyzer.describe_output(result)
-
-            # Render
-            renderer.render(descriptor, result, analyzer_id)
-
-            # Store for summary
-            results[analyzer_id] = (descriptor, result)
-
-        except Exception as e:
-            logger.error(f"Analyzer '{analyzer_id}' failed: {e}", exc_info=True)
-            console.print(f"[red]✗ Analyzer '{analyzer_id}' failed: {e}[/red]")
-            continue
-
-    # Render summary
-    renderer.render_summary()
+        # Render summary
+        renderer.render_summary()
 
     # Exit code based on errors
     if hasattr(renderer, "all_errors") and renderer.all_errors:

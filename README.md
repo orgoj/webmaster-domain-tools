@@ -476,6 +476,58 @@ wdt analyze --format cli example.com
 # JSON output - machine-readable format
 wdt analyze --format json example.com
 wdt analyze -f json example.com > output.json
+
+# JSON Lines output - for bulk domain analysis (one JSON object per line)
+wdt analyze --format jsonlines example.com
+```
+
+#### Bulk Domain Analysis
+
+Analyze multiple domains from a file or stdin using **JSON Lines format** (one JSON object per domain per line):
+
+```bash
+# From a file (one domain per line)
+wdt analyze --domain-file domains.txt --format jsonlines
+
+# From stdin
+cat domains.txt | wdt analyze --domain-file - --format jsonlines
+echo "example.com" | wdt analyze --domain-file - --format jsonlines
+
+# With custom configuration
+wdt analyze --domain-file domains.txt --config custom.toml --format jsonlines
+
+# Run specific analyzers only
+wdt analyze --domain-file domains.txt --only html --format jsonlines
+
+# Skip certain analyzers
+wdt analyze --domain-file domains.txt --skip dns --skip whois --format jsonlines
+
+# Process and filter with jq
+cat domains.txt | wdt analyze --domain-file - --format jsonlines | \
+  jq 'select(.summary.total_errors > 0)'
+
+# Extract specific data (e.g., all domains with SSL issues)
+wdt analyze --domain-file domains.txt --only ssl --format jsonlines | \
+  jq 'select(.summary.total_warnings > 0) | {domain, warnings: .summary.warnings}'
+```
+
+**Domain file format:**
+```
+example.com
+github.com
+google.com
+```
+
+**JSON Lines output format:**
+- Each line is a complete JSON object for one domain
+- Streaming-friendly for large domain lists
+- Easy to process with tools like `jq`, `grep`, or custom scripts
+- Each domain analyzed independently (one failure doesn't stop others)
+
+**Example output:**
+```json
+{"domain": "example.com", "analyzers": {...}, "summary": {"total_errors": 2, "total_warnings": 4, ...}}
+{"domain": "github.com", "analyzers": {...}, "summary": {"total_errors": 0, "total_warnings": 3, ...}}
 ```
 
 #### Verbosity (output levels)
