@@ -107,13 +107,13 @@ class ConfigEditorView:
 
         # Sidebar - scrollable navigation with icons and labels below
         sidebar = ft.Container(
-            width=72,  # Fixed width for icons + labels below
             bgcolor=ft.Colors.GREY_300,
             content=ft.Column(
                 [
                     ft.NavigationRail(
                         selected_index=self.current_index,
                         label_type=ft.NavigationRailLabelType.SELECTED,  # Show label only for selected item
+                        min_width=72,  # Minimum width for rail
                         destinations=nav_rail_destinations,
                         on_change=self._on_nav_change,
                         bgcolor=ft.Colors.GREY_300,
