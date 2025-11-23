@@ -17,11 +17,28 @@ from pydantic import Field
 
 from ..constants import DEFAULT_USER_AGENT, TRACKING_PATTERNS
 from ..core.registry import registry
-from .base import BaseAnalysisResult, BaseAnalyzer
 from .dns_utils import create_resolver
 from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Base Result Class
+# ============================================================================
+
+
+@dataclass
+class BaseAnalysisResult:
+    """
+    Base class for analysis results.
+
+    Provides consistent error and warning tracking across analyzers.
+    """
+
+    domain: str
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 # ============================================================================
@@ -110,7 +127,7 @@ class SiteVerificationAnalysisResult(BaseAnalysisResult):
 
 
 @registry.register
-class SiteVerificationAnalyzer(BaseAnalyzer[SiteVerificationAnalysisResult]):
+class SiteVerificationAnalyzer:
     """
     Universal site verification analyzer supporting multiple services.
 

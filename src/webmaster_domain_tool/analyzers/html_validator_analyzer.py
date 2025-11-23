@@ -512,7 +512,7 @@ class HTMLValidatorAnalyzer:
             # SEO Elements
             descriptor.add_row(
                 section_name="SEO Elements",
-                section_type="section_header",
+                section_type="heading",
                 verbosity=VerbosityLevel.NORMAL,
             )
 
@@ -579,7 +579,7 @@ class HTMLValidatorAnalyzer:
             if any([result.og_title, result.og_description, result.og_image]):
                 descriptor.add_row(
                     section_name="Open Graph",
-                    section_type="section_header",
+                    section_type="heading",
                     verbosity=VerbosityLevel.VERBOSE,
                 )
 
@@ -605,7 +605,7 @@ class HTMLValidatorAnalyzer:
             # Accessibility
             descriptor.add_row(
                 section_name="Accessibility",
-                section_type="section_header",
+                section_type="heading",
                 verbosity=VerbosityLevel.NORMAL,
             )
 
@@ -646,7 +646,7 @@ class HTMLValidatorAnalyzer:
             # Structure
             descriptor.add_row(
                 section_name="Structure",
-                section_type="section_header",
+                section_type="heading",
                 verbosity=VerbosityLevel.VERBOSE,
             )
 
