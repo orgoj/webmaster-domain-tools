@@ -434,7 +434,7 @@ check_mta_sts = true
 check_tls_rpt = true
 dkim_selectors = ["default", "google", "k1", "k2"]
 
-[security-headers]
+[headers]
 enabled = true
 timeout = 10.0
 # Individual header checks can be disabled
@@ -443,7 +443,7 @@ check_csp = true
 check_x_frame_options = true
 # ... more headers ...
 
-[site-verification]
+[verification]
 enabled = true
 timeout = 10.0
 check_google = true
@@ -469,7 +469,7 @@ enabled = true
 check_headers = true
 check_cname = true
 
-[seo-files]
+[seo]
 enabled = true
 timeout = 10.0
 check_robots = true
@@ -594,12 +594,13 @@ wdt analyze -v debug example.com
 - `http` - HTTP/HTTPS redirect analysis
 - `ssl` - SSL/TLS certificate analysis
 - `email` - Email security (SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT)
-- `security-headers` - Security headers checking
-- `site-verification` - Site verification and tracking codes
+- `headers` - Security headers checking
+- `verification` - Site verification and tracking codes
 - `rbl` - RBL blacklist checking
 - `cdn` - CDN detection
-- `seo-files` - robots.txt, sitemap.xml, llms.txt
+- `seo` - robots.txt, sitemap.xml, llms.txt
 - `favicon` - Favicon analysis
+- `html` - HTML validation, SEO, and accessibility
 - `domain-validator` - Domain configuration validation against infrastructure profiles
 
 ```bash
@@ -614,8 +615,8 @@ wdt list-analyzers
 
 # Run only DNS and HTTP (skip everything else)
 wdt analyze --skip whois --skip ssl --skip email \
-    --skip security-headers --skip site-verification \
-    --skip rbl --skip cdn --skip seo-files --skip favicon \
+    --skip headers --skip verification \
+    --skip rbl --skip cdn --skip seo --skip favicon --skip html \
     example.com
 ```
 
@@ -690,13 +691,13 @@ All services have **auto-detection enabled** by default - the tool will find ver
 wdt analyze example.com
 
 # Skip site verification entirely
-wdt analyze --skip site-verification example.com
+wdt analyze --skip verification example.com
 ```
 
 You can configure specific verification IDs to check in the config file:
 
 ```toml
-[site-verification]
+[verification]
 enabled = true
 check_google = true
 check_facebook = true
@@ -705,11 +706,11 @@ check_bing = true
 check_yandex = true
 
 # Optional: specify verification IDs to verify (auto-detection still works)
-[[site-verification.services]]
+[[verification.services]]
 name = "Google"
 ids = ["abc123def456", "ghi789jkl012"]
 
-[[site-verification.services]]
+[[verification.services]]
 name = "Facebook"
 ids = ["your-facebook-id"]
 ```
@@ -829,7 +830,7 @@ wdt analyze --verbosity debug example.com
 
 # Email and security checks only
 wdt analyze --skip dns --skip whois --skip http --skip ssl \
-    --skip cdn --skip seo-files --skip favicon example.com
+    --skip cdn --skip seo --skip favicon --skip html example.com
 
 # JSON output for automated processing
 wdt analyze --format json --verbosity verbose example.com > report.json

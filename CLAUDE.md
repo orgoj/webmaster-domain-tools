@@ -186,13 +186,17 @@ src/webmaster_domain_tool/
 │   ├── rbl_checker.py          # RBL blacklist checking
 │   ├── cdn_detector.py         # CDN provider detection
 │   ├── seo_files_analyzer.py   # robots.txt, sitemap.xml, llms.txt
-│   └── favicon_analyzer.py     # Favicon detection and analysis
+│   ├── favicon_analyzer.py     # Favicon detection and analysis
+│   ├── html_validator_analyzer.py     # HTML validation, SEO, accessibility
+│   └── domain_config_validator.py     # Infrastructure validation against profiles
 ├── renderers/
 │   ├── base.py                 # Base renderer protocol
 │   ├── cli_renderer.py         # CLI output with Rich
-│   └── json_renderer.py        # JSON export renderer
+│   ├── json_renderer.py        # JSON export renderer
+│   └── bulk_jsonlines_renderer.py     # Bulk JSONL export for multiple domains
 └── utils/
-    └── logger.py               # Logging configuration
+    ├── logger.py               # Logging configuration
+    └── debug_stats.py          # Performance tracking
 ```
 
 ### Data Flow
@@ -339,7 +343,6 @@ Optional feature (`warn_www_not_cname`) that warns when www subdomain uses direc
 
 Implementation:
 - Config: `dns.warn_www_not_cname = true/false`
-- CLI: `--warn-www-not-cname` / `--no-warn-www-not-cname`
 - Check in `DNSAnalyzer._check_www_cname()`
 
 ### Per-Analyzer Configuration (Isolated)
@@ -700,7 +703,7 @@ new_feature = false
    - Loaded via ConfigManager
    - Passed to analyzer's `analyze()` method
 
-**No CLI changes needed** - config options are file-based only. CLI only has `--skip` parameter.
+**No CLI changes needed** - config options are file-based only. CLI has `--skip` and `--only` parameters for analyzer selection.
 
 ### Modifying Output Display
 
@@ -838,9 +841,18 @@ If you find yourself committing code changes without updating:
 **Analyzers (self-contained):**
 - `analyzers/dns_analyzer.py` - DNS queries and DNSSEC validation
 - `analyzers/whois_analyzer.py` - WHOIS information
+- `analyzers/http_analyzer.py` - HTTP/HTTPS redirect analysis
 - `analyzers/ssl_analyzer.py` - SSL/TLS certificate analysis
 - `analyzers/email_security.py` - Email security (SPF, DKIM, DMARC, BIMI, MTA-STS, TLS-RPT)
-- `analyzers/*` - 11 total analyzers, all following same pattern
+- `analyzers/security_headers.py` - Security headers checking
+- `analyzers/site_verification_analyzer.py` - Site verification and tracking codes
+- `analyzers/rbl_checker.py` - RBL blacklist checking
+- `analyzers/cdn_detector.py` - CDN provider detection
+- `analyzers/seo_files_analyzer.py` - SEO files (robots.txt, sitemap.xml, llms.txt)
+- `analyzers/favicon_analyzer.py` - Favicon detection and analysis
+- `analyzers/html_validator_analyzer.py` - HTML validation, SEO, accessibility
+- `analyzers/domain_config_validator.py` - Infrastructure validation against profiles
+- `analyzers/*` - 13 total analyzers, all following same pattern
 
 **Documentation:**
 - `README.md` - User-facing documentation (ALWAYS keep updated)
@@ -888,10 +900,12 @@ If you find yourself committing code changes without updating:
    - No config cross-contamination
 
 4. **Unified CLI**
-   - `--skip dns --skip whois` instead of `--skip-dns --skip-whois`
+   - `--skip dns --skip whois` or `--only dns,http` for analyzer selection
    - `--verbosity quiet|normal|verbose|debug` instead of `-q/-v/-d`
-   - `--format cli|json` for output format
+   - `--format cli|json|jsonlines` for output format
    - `wdt list-analyzers` to see all available analyzers
+   - `wdt create-validator-profile` for infrastructure validation setup
+   - `wdt test-validator-profile` to test validation profiles
 
 5. **Zero-Coupling Architecture**
    - Analyzers never import CLI, config, or renderers
@@ -961,13 +975,19 @@ uv run pytest                                    # Run tests
 
 # Testing new CLI
 wdt list-analyzers                               # List all analyzers
-wdt analyze --skip dns --skip whois example.com  # Skip analyzers
+wdt analyze --skip dns --skip whois example.com  # Skip specific analyzers
+wdt analyze --only dns,http,ssl example.com      # Run only specific analyzers
 wdt analyze --verbosity verbose example.com      # Verbose output
 wdt analyze --verbosity debug example.com        # Maximum verbosity
 wdt analyze --format json example.com            # JSON output
+wdt analyze --format jsonlines example.com       # JSON Lines output
+
+# Validator profiles
+wdt create-validator-profile                     # Interactive profile wizard
+wdt test-validator-profile example.com -p prod   # Test domain against profile
 
 # Testing specific analyzers
-wdt analyze --skip http --skip ssl example.com   # DNS and email only
+wdt analyze --only dns,email example.com         # DNS and email only
 ```
 
 ## Architecture Diagram
