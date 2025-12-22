@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Social Media Settings Analyzer** - New analyzer for Open Graph and Twitter Cards validation
+  - Complete Open Graph protocol support (Facebook, LinkedIn, etc.)
+    - Required tags validation (og:title, og:type, og:image, og:url)
+    - Optional tags extraction (description, site_name, locale)
+    - Image metadata (secure_url, dimensions, alt text)
+    - Article metadata (published_time, author, section, tags)
+  - Twitter Cards detection and validation
+    - Card type validation (summary, summary_large_image, app, player)
+    - Twitter-specific tags (site, creator, title, description, image)
+    - Fallback to Open Graph tags detection
+  - Best practice recommendations
+    - Title and description length validation
+    - HTTP vs HTTPS warnings for images
+    - Missing og:description and og:site_name warnings
+    - Image dimension and alt text suggestions
+  - Configuration options:
+    - `check_image_dimensions` - Enable/disable og:image dimension checking
+  - Analyzer ID: `social-media`
+
 - **Domain Configuration Validator** - New analyzer for validating domains against infrastructure profiles
   - Multi-profile support for different server configurations (production, staging, testing, etc.)
   - IP address validation (IPv4/IPv6) with flexible match modes (`any` or `all`)

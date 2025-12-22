@@ -188,6 +188,36 @@ check_default_paths = true
 check_manifest = true
 
 # -----------------------------------------------------------------------------
+# Social Media Settings (Open Graph, Twitter Cards)
+# -----------------------------------------------------------------------------
+[social-media]
+enabled = true
+# HTTP request timeout in seconds
+timeout = 10.0
+# User agent string for HTTP requests
+user_agent = "Mozilla/5.0 (compatible; WebmasterDomainTool/1.0)"
+# Check if og:image dimensions are specified (recommended for optimal display)
+check_image_dimensions = false
+
+# -----------------------------------------------------------------------------
+# HTML Validator
+# -----------------------------------------------------------------------------
+[html]
+enabled = true
+# HTTP request timeout in seconds
+timeout = 10.0
+# User agent string for HTTP requests
+user_agent = "Mozilla/5.0 (compatible; WebmasterDomainTool/1.0)"
+# Maximum HTML size to download (bytes)
+max_html_size = 10485760  # 10 MB
+# Check images for alt attributes
+check_images = true
+# Check SEO elements
+check_seo = true
+# Check accessibility features
+check_accessibility = true
+
+# -----------------------------------------------------------------------------
 # Domain Configuration Validator
 # -----------------------------------------------------------------------------
 # Validates domain configuration against infrastructure profiles.

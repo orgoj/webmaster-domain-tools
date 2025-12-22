@@ -182,6 +182,47 @@ Comprehensive tool for webmasters that analyzes and clearly displays all importa
   - Location tracking (HTML head vs body)
   - Minimum length validation to prevent false positives
 
+### Social Media Settings
+- ✅ **Open Graph Protocol** (Facebook, LinkedIn, etc.)
+  - Required tags validation (og:title, og:type, og:image, og:url)
+  - Optional tags extraction (description, site_name, locale)
+  - Image metadata (secure_url, dimensions, alt text)
+  - Article metadata (published_time, author, section, tags)
+  - Title and description length validation
+  - HTTP vs HTTPS warnings for images
+- ✅ **Twitter Cards**
+  - Card type detection (summary, summary_large_image, app, player)
+  - Twitter-specific tags (site, creator, title, description, image)
+  - Validation against valid card types
+  - Fallback to Open Graph tags detection
+- ✅ **Best Practice Recommendations**
+  - Missing og:description warnings
+  - Missing og:site_name recommendations
+  - Image dimension suggestions
+  - Accessibility improvements (image alt text)
+
+### HTML Validator
+- ✅ **HTML5 validation**
+  - DOCTYPE detection
+  - Character encoding validation
+  - Parse error detection
+- ✅ **SEO elements checking**
+  - Title tag validation (length 30-60 chars)
+  - Meta description validation (length 120-160 chars)
+  - Canonical URL detection
+  - H1 heading analysis (single H1 recommended)
+  - Complete heading structure (H1-H6)
+  - Open Graph tag extraction
+- ✅ **Accessibility features**
+  - Lang attribute on HTML tag
+  - Image alt attribute checking
+  - Semantic HTML elements (main, nav, header, footer)
+  - Missing alt attribute warnings
+- ✅ **Structural analysis**
+  - Total element count
+  - Link analysis (internal vs external)
+  - HTML size reporting
+
 ## Installation
 
 ### Via uvx (recommended)
