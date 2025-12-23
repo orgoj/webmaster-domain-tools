@@ -128,7 +128,10 @@ class CLIRenderer(BaseRenderer):
         if row.section_type == "heading":
             style = self.STYLE_MAP.get(row.style_class, "")
             text = row.value or row.label
-            self.console.print(f"{indent}[{style} bold]{text}[/{style} bold]")
+            if style:
+                self.console.print(f"{indent}[{style} bold]{text}[/{style}]")
+            else:
+                self.console.print(f"{indent}[bold]{text}[/bold]")
             self.console.print()
             return
 
