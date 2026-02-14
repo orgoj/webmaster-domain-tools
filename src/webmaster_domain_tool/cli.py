@@ -18,6 +18,7 @@ import rich.panel
 import typer
 from rich import box
 from rich.console import Console
+from rich.markup import escape
 
 # Remove borders from CLI help output by monkey-patching Panel
 _original_panel_init = rich.panel.Panel.__init__
@@ -158,7 +159,7 @@ def _analyze_single_domain(
             logger.error(f"Analyzer '{analyzer_id}' failed: {e}", exc_info=True)
             # Don't print error in bulk mode - just log it
             if not hasattr(renderer, "set_current_domain"):
-                console.print(f"[red]✗ Analyzer '{analyzer_id}' failed: {e}[/red]")
+                console.print(f"[red]✗ Analyzer '{escape(analyzer_id)}' failed: {escape(str(e))}[/red]")
 
 
 def _process_bulk_domains(
@@ -184,7 +185,7 @@ def _process_bulk_domains(
             with open(domain_file) as f:
                 domains = [line.strip() for line in f if line.strip()]
     except Exception as e:
-        console.print(f"[red]Error reading domain file: {e}[/red]")
+        console.print(f"[red]Error reading domain file: {escape(str(e))}[/red]")
         raise typer.Exit(1)
 
     if not domains:
@@ -825,7 +826,7 @@ def main() -> None:
         sys.exit(130)
     except Exception as e:
         logger.error(f"Unexpected error: {e}", exc_info=True)
-        console.print(f"[red]Unexpected error: {e}[/red]")
+        console.print(f"[red]Unexpected error: {escape(str(e))}[/red]")
         sys.exit(1)
 
 
