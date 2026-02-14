@@ -5,10 +5,12 @@ them to terminal using the Rich library with appropriate colors and formatting.
 """
 
 import json as json_module
+import sys
 from typing import Any
 
 from rich import box
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from ..analyzers.protocol import OutputDescriptor, OutputRow, VerbosityLevel
@@ -127,9 +129,14 @@ class CLIRenderer(BaseRenderer):
         # Section type handling
         if row.section_type == "heading":
             style = self.STYLE_MAP.get(row.style_class, "")
-            text = row.value or row.label
+            text = str(row.value or row.label)
+
+            # Escape text to prevent Rich markup issues
+            text = escape(text)
+            
+            # Use simple style tags - Rich handles combined styles better with separate tags
             if style:
-                self.console.print(f"{indent}[{style} bold]{text}[/{style}]")
+                self.console.print(f"{indent}[{style}][bold]{text}[/bold][/{style}]")
             else:
                 self.console.print(f"{indent}[bold]{text}[/bold]")
             self.console.print()
@@ -137,7 +144,7 @@ class CLIRenderer(BaseRenderer):
 
         if row.section_type == "text":
             # Simple text output (e.g., errors, warnings, info)
-            msg = str(row.value) if row.value else str(row.label)
+            msg = escape(str(row.value) if row.value else str(row.label))
             style = self.STYLE_MAP.get(row.style_class, "")
             icon = self.ICON_MAP.get(row.icon, "")
             icon_str = f"{icon} " if icon else ""
@@ -149,15 +156,15 @@ class CLIRenderer(BaseRenderer):
             return
 
         if row.section_type == "link":
-            label = row.label or "Link"
+            label = escape(row.label or "Link")
             url = row.link_url or row.value
-            text = row.link_text or url
+            text = escape(row.link_text or url)
             self.console.print(f"{indent}{label}: [link={url}]{text}[/link]")
             return
 
         if row.section_type == "badge":
-            label = row.label or ""
-            value = row.badge_value or row.value
+            label = escape(row.label or "")
+            value = escape(row.badge_value or row.value)
             style = self.STYLE_MAP.get(row.badge_style, "")
             self.console.print(f"{indent}{label}: [{style}]{value}[/{style}]")
             return
@@ -167,16 +174,16 @@ class CLIRenderer(BaseRenderer):
             if row.label:
                 style = self.STYLE_MAP.get(row.style_class, "")
                 if style:
-                    self.console.print(f"{indent}[{style}]{row.label}:[/{style}]")
+                    self.console.print(f"{indent}[{style}]{escape(row.label)}:[/{style}]")
                 else:
-                    self.console.print(f"{indent}{row.label}:")
+                    self.console.print(f"{indent}{escape(row.label)}:")
 
             items = row.value if isinstance(row.value, list) else [row.value]
             max_items = row.max_items or len(items)
 
             for i, item in enumerate(items[:max_items]):
                 icon = self.ICON_MAP.get("bullet", "•")
-                self.console.print(f"{indent}  {icon} {item}")
+                self.console.print(f"{indent}  {icon} {escape(str(item))}")
 
             if row.collapse_list and len(items) > max_items:
                 remaining = len(items) - max_items
@@ -198,7 +205,7 @@ class CLIRenderer(BaseRenderer):
 
                 # Add data rows
                 for data_row in row.value:
-                    table.add_row(*[str(v) for v in data_row.values()])
+                    table.add_row(*[escape(str(v)) for v in data_row.values()])
 
                 self.console.print(table)
             return
@@ -208,10 +215,10 @@ class CLIRenderer(BaseRenderer):
             if not row.show_if_empty and not row.value:
                 return
 
-            # Format value
+            # Format value (already escaped in _format_value)
             formatted_value = self._format_value(row)
 
-            # Apply semantic style
+            # Apply semantic style - wrap around already escaped value
             style = self.STYLE_MAP.get(row.style_class, "")
             if style:
                 formatted_value = f"[{style}]{formatted_value}[/{style}]"
@@ -220,9 +227,9 @@ class CLIRenderer(BaseRenderer):
             icon = self.ICON_MAP.get(row.icon, "")
             icon_str = f"{icon} " if icon else ""
 
-            # Render
+            # Render (label already escaped earlier)
             if row.label:
-                self.console.print(f"{indent}{row.label}: {icon_str}{formatted_value}")
+                self.console.print(f"{indent}{escape(row.label)}: {icon_str}{formatted_value}")
             else:
                 self.console.print(f"{indent}{icon_str}{formatted_value}")
 
@@ -245,13 +252,13 @@ class CLIRenderer(BaseRenderer):
         if isinstance(row.value, (list, tuple)):
             if row.collapse_list and len(row.value) > 3:
                 visible = row.value[:3]
-                return f"{', '.join(str(v) for v in visible)} ... (+{len(row.value) - 3})"
-            return ", ".join(str(v) for v in row.value)
+                return ", ".join(escape(str(v)) for v in visible) + f" ... (+{len(row.value) - 3})"
+            return ", ".join(escape(str(v)) for v in row.value)
 
         if isinstance(row.value, dict) and row.format_as == "json":
             return json_module.dumps(row.value, indent=2)
 
-        return str(row.value)
+        return escape(str(row.value))
 
     def render_summary(self) -> None:
         """Render summary of all analyses."""
