@@ -299,3 +299,21 @@ Kód je **připraven k produkci**. Všechny minor issues jsou kosmetické a neov
 ---
 
 *Review completed by automated code review subagent*
+
+---
+
+## ✅ MINOR ISSUES FIXED
+
+**Date:** 2026-02-15
+**Commit:** e463e59
+
+All minor issues from the review have been addressed:
+
+| Issue | Status | Fix |
+|-------|--------|-----|
+| Issue 1: Import inside method | ✅ FIXED | Moved `import time` to top of file |
+| Issue 2: Unused categories field | ✅ FIXED | Removed `categories` from config |
+| Issue 3: Lambda closure bug | ✅ FIXED | Changed `result` to `r` in lambda parameter |
+| Issue 4: Missing strategy validation | ✅ FIXED | Added `@field_validator` for strategy |
+
+**DONE**
