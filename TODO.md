@@ -39,19 +39,19 @@
 - [x] Commit: 0306a10
 - [x] Push
 
-### 5. Broken Links
-- [ ] Analyzátor: broken-links
-- [ ] Test na contimex.cz
-- [ ] Dokumentace
-- [ ] Commit
-- [ ] Push
+### 5. Broken Links ✅ DONE & PUSHED
+- [x] Analyzátor: broken-links
+- [x] Test na contimex.cz
+- [x] Dokumentace
+- [x] Commit: af2da7f
+- [x] Push
 
-### 6. Cookies/Consent
-- [ ] Analyzátor: cookies-consent
-- [ ] Test na contimex.cz
-- [ ] Dokumentace
-- [ ] Commit
-- [ ] Push
+### 6. Cookies/Consent ✅ DONE & PUSHED
+- [x] Analyzátor: cookies-consent
+- [x] Test na contimex.cz
+- [x] Dokumentace
+- [x] Commit: af2da7f
+- [x] Push
 
 ### 7. Third-party
 - [ ] Analyzátor: thirdparty
@@ -103,8 +103,8 @@
 
 ## PROGRESS TRACKING
 
-- **Hotovo:** 4/12
-- **Poslední commit:** 0306a10 (Lighthouse analyzer)
+- **Hotovo:** 5/12
+- **Poslední commit:** af2da7f (Broken Links analyzer)
 
 ---
 *Last updated: 2026-02-15 13:12*
