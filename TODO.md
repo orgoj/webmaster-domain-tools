@@ -7,37 +7,37 @@
 
 ## 🔴 VYSOKÁ PRIORITA
 
-### 1. Core Web Vitals ✅ DONE
+### 1. Core Web Vitals ✅ DONE & PUSHED
 - [x] Analyzátor: core-web-vitals
 - [x] Test na contimex.cz (API quota exceeded - analyzátor funguje)
 - [x] Dokumentace
-- [x] Commit: 4c2395e
-- [ ] Push
+- [x] Commit: 3a39d18
+- [x] Push
 
-### 2. Accessibility ✅ DONE
+### 2. Accessibility ✅ DONE & PUSHED
 - [x] Analyzátor: accessibility
 - [x] Test na contimex.cz
 - [x] Dokumentace
 - [x] Commit: c3f1c2d
-- [ ] Push
+- [x] Push
 
-### 3. Mobile ✅ DONE
+### 3. Mobile ✅ DONE & PUSHED
 - [x] Analyzátor: mobile
-- [x] Test na contimex.cz (82/100 - Mobile-Friendly)
+- [x] Test na contimex.cz (81/100 - Mobile-Friendly)
 - [x] Dokumentace
-- [ ] Commit
-- [ ] Push
+- [x] Commit: 2bea6b4
+- [x] Push
 
 ---
 
 ## 🟡 STŘEDNÍ PRIORITA
 
-### 4. Lighthouse
-- [ ] Analyzátor: lighthouse
-- [ ] Test na contimex.cz
-- [ ] Dokumentace
-- [ ] Commit
-- [ ] Push
+### 4. Lighthouse ✅ DONE & PUSHED
+- [x] Analyzátor: lighthouse
+- [x] Test na contimex.cz
+- [x] Dokumentace
+- [x] Commit: 0306a10
+- [x] Push
 
 ### 5. Broken Links
 - [ ] Analyzátor: broken-links
@@ -103,11 +103,8 @@
 
 ## PROGRESS TRACKING
 
-- **Hotovo:** 1/12
-- **V běhu:**
-  - Accessibility analyzer (subagent f4284e90) - guidance sent
-  - Mobile analyzer (subagent 5346ad1b)
-- **Poslední commit:** 4c2395e (Core Web Vitals)
+- **Hotovo:** 4/12
+- **Poslední commit:** 0306a10 (Lighthouse analyzer)
 
 ---
-*Last updated: 2026-02-15 11:27*
+*Last updated: 2026-02-15 13:12*
