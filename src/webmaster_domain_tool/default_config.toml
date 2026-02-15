@@ -152,6 +152,30 @@ rbl_servers = [
 ]
 
 # -----------------------------------------------------------------------------
+# Broken Links Checker
+# -----------------------------------------------------------------------------
+[broken-links]
+enabled = true
+# HTTP request timeout in seconds
+timeout = 10.0
+# Maximum pages to crawl
+max_pages = 100
+# Maximum links to extract per page
+max_links_per_page = 100
+# Maximum total links to check
+max_links_to_check = 500
+# Maximum concurrent HTTP requests
+concurrent_requests = 5
+# User agent for HTTP requests
+user_agent = "Mozilla/5.0 (compatible; WebmasterDomainTool/1.0 Broken Links Checker)"
+# Follow HTTP redirects
+follow_redirects = true
+# Check external links (not just same domain)
+check_external = true
+# Skip links disallowed by robots.txt
+respect_robots = true
+
+# -----------------------------------------------------------------------------
 # CDN Detection
 # -----------------------------------------------------------------------------
 [cdn]
@@ -160,6 +184,37 @@ enabled = true
 check_headers = true
 # Check CNAME records for CDN patterns
 check_cname = true
+
+# -----------------------------------------------------------------------------
+# Cookies & Consent Analysis (GDPR/ePrivacy)
+# -----------------------------------------------------------------------------
+[cookies_consent]
+enabled = true
+timeout = 15.0
+user_agent = "Mozilla/5.0 (compatible; WebmasterDomainTool/1.0)"
+check_cookie_policy = true
+detect_cmp = true
+check_banner_presence = true
+
+# -----------------------------------------------------------------------------
+# Third-Party Auditor (scripts, trackers, privacy analysis)
+# -----------------------------------------------------------------------------
+[third-party]
+enabled = true
+# HTTP request timeout in seconds
+timeout = 10.0
+# Check for third-party JavaScript files
+check_scripts = true
+# Check for third-party iframes
+check_iframes = true
+# Check for third-party images
+check_images = true
+# Check for third-party stylesheets and links
+check_links = true
+# Check for third-party cookie domains
+check_cookies = true
+# Maximum resources to analyze per page
+max_resources = 500
 
 # -----------------------------------------------------------------------------
 # SEO Files (robots.txt, sitemap.xml, llms.txt)
@@ -216,6 +271,58 @@ check_images = true
 check_seo = true
 # Check accessibility features
 check_accessibility = true
+
+# -----------------------------------------------------------------------------
+# Mobile-Friendly Analysis
+# -----------------------------------------------------------------------------
+[mobile]
+enabled = true
+# HTTP request timeout in seconds
+timeout = 10.0
+# Mobile user agent string for HTTP requests
+user_agent_mobile = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+# Desktop user agent string for responsive checks
+user_agent_desktop = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+# Minimum touch target size in pixels (Google recommends 48x48px)
+min_touch_target_size = 48
+# Minimum readable font size in pixels
+min_font_size = 12
+
+# -----------------------------------------------------------------------------
+# Technology Stack Detection
+# -----------------------------------------------------------------------------
+[technology]
+enabled = true
+# HTTP request timeout in seconds
+timeout = 10.0
+# User agent string for HTTP requests
+user_agent = "Mozilla/5.0 (compatible; WebmasterDomainTool/1.0)"
+# Check HTML content for technology signatures
+check_html = true
+# Check HTTP headers for technology signatures
+check_headers = true
+# Check script sources for technology signatures
+check_scripts = true
+# Check meta tags for technology signatures
+check_meta = true
+
+# -----------------------------------------------------------------------------
+# Structured Data Validator (Schema.org)
+# -----------------------------------------------------------------------------
+[structured-data]
+enabled = true
+# HTTP request timeout in seconds
+timeout = 15.0
+# User agent string for HTTP requests
+user_agent = "Mozilla/5.0 (compatible; WebmasterDomainTool/1.0 StructuredData Validator)"
+# Check JSON-LD structured data (recommended by Google)
+check_jsonld = true
+# Check Microdata markup
+check_microdata = true
+# Check RDFa markup
+check_rdfa = true
+# Maximum structured data blocks to analyze
+max_blocks = 50
 
 # -----------------------------------------------------------------------------
 # Domain Configuration Validator
