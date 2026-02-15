@@ -53,12 +53,12 @@
 - [x] Commit: af2da7f
 - [x] Push
 
-### 7. Third-party
-- [ ] Analyzátor: thirdparty
-- [ ] Test na contimex.cz
-- [ ] Dokumentace
-- [ ] Commit
-- [ ] Push
+### 7. Third-party ✅ DONE & PUSHED
+- [x] Analyzátor: thirdparty
+- [x] Test na contimex.cz
+- [x] Dokumentace
+- [x] Commit: e26a115
+- [x] Push
 
 ### 8. Technology
 - [ ] Analyzátor: technology
@@ -103,8 +103,8 @@
 
 ## PROGRESS TRACKING
 
-- **Hotovo:** 5/12
-- **Poslední commit:** af2da7f (Broken Links analyzer)
+- **Hotovo:** 6/12
+- **Poslední commit:** e26a115 (Third-party analyzer)
 
 ---
-*Last updated: 2026-02-15 13:12*
+*Last updated: 2026-02-15 14:25*
