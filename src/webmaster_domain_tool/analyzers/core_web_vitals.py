@@ -9,10 +9,11 @@ Also includes additional performance metrics from PageSpeed.
 """
 
 import logging
+import time
 from dataclasses import dataclass, field
 
 import httpx
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from ..core.registry import registry
 from .protocol import AnalyzerConfig, OutputDescriptor, VerbosityLevel
@@ -44,10 +45,14 @@ class CoreWebVitalsConfig(AnalyzerConfig):
         default="en",
         description="Locale for results",
     )
-    categories: list[str] = Field(
-        default=["performance"],
-        description="Categories to analyze",
-    )
+
+    @field_validator("strategy")
+    @classmethod
+    def validate_strategy(cls, v: str) -> str:
+        """Validate that strategy is either 'desktop' or 'mobile'."""
+        if v not in ("desktop", "mobile"):
+            raise ValueError("strategy must be 'desktop' or 'mobile'")
+        return v
 
 
 # ============================================================================
@@ -202,8 +207,6 @@ class CoreWebVitalsAnalyzer:
         result: CoreWebVitalsResult,
     ) -> dict | None:
         """Fetch data from Google PageSpeed Insights API."""
-        import time
-
         params = {
             "url": url,
             "strategy": config.strategy,
@@ -397,7 +400,7 @@ class CoreWebVitalsAnalyzer:
         descriptor = OutputDescriptor(title=self.name, category=self.category)
 
         # Quiet summary
-        descriptor.quiet_summary = lambda r: f"Core Web Vitals: {'✓' if self._all_vitals_good(result) else '✗'}"
+        descriptor.quiet_summary = lambda r: f"Core Web Vitals: {'✓' if self._all_vitals_good(r) else '✗'}"
 
         if not result.success:
             descriptor.add_row(
