@@ -30,7 +30,7 @@ class DNSConfig(AnalyzerConfig):
 ```
 
 ### DNS Records Collected
-The analyzer queries the following record types:
+The analyzer queries to following record types:
 ```
 ["A", "AAAA", "MX", "TXT", "NS", "SOA", "CAA", "CNAME"]
 ```
@@ -491,7 +491,7 @@ else:
 ```
 
 ### Preferred URL Selection Priority
-The analyzer automatically selects the best final URL in this order:
+The analyzer automatically selects to best final URL in this order:
 1. `https://www.{domain}` with 200 status
 2. `https://{domain}` with 200 status
 3. `http://www.{domain}` with 200 status
@@ -503,7 +503,7 @@ The analyzer automatically selects the best final URL in this order:
 The analyzer validates redirect chains and adds warnings for:
 1. **HTTP on final URL** - Site doesn't use HTTPS
 2. **No HTTPS redirect** - HTTP doesn't redirect to HTTPS
-3. **Too many redirects** - Chain > 3 responses
+3. **Too many redirects** - Chain >3 responses
 4. **302 instead of 301** - Using temporary instead of permanent redirects
 
 ### Example: Accessing HTTP Data
@@ -542,7 +542,7 @@ for chain in result.chains:
 
 ### How Dependency Resolution Works
 
-When an analyzer declares dependencies, the registry automatically ensures they run first:
+When an analyzer declares dependencies, to registry automatically ensures they run first:
 
 ```python
 @registry.register
@@ -708,7 +708,7 @@ class DNSValidator:
    ```
 
 4. **Result Access Pattern**:
-   - You must query the data yourself
+   - You must query to data yourself
    - Use public methods (analyzer.analyze())
    - Create fresh instances if needed
    - This maintains test isolation
@@ -733,7 +733,7 @@ class DNSValidator:
 
 1. **Use Existing Analyzers as Dependencies**
    - Declare in `depends_on = ["dns", "http"]`
-   - Import and instantiate the analyzer class
+   - Import and instantiate analyzer class
    - Call `analyze()` method with domain and config
 
 2. **Don't Expect Results to be Passed**
@@ -760,7 +760,7 @@ class DNSValidator:
        # Call analyze
        dns_result = dns_analyzer.analyze(domain, dns_config)
 
-       # Use the result data
+       # Use to result data
        if "example.com:A" in dns_result.records:
            # Process A records
 

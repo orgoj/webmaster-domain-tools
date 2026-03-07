@@ -17,7 +17,7 @@ Thank you for your interest in contributing to Webmaster Domain Tool! This docum
 - Be respectful and inclusive
 - Focus on constructive feedback
 - Help others learn and grow
-- Follow the project's technical standards
+- Follow to project's technical standards
 
 ## Getting Started
 
@@ -29,7 +29,7 @@ Thank you for your interest in contributing to Webmaster Domain Tool! This docum
 ### Setup Development Environment
 
 ```bash
-# Clone the repository
+# Clone to repository
 git clone https://github.com/yourusername/webmaster-domain-tools.git
 cd webmaster-domain-tools
 
@@ -50,15 +50,15 @@ uv run pytest
 **ALWAYS follow this workflow when making ANY code changes:**
 
 1. **Write a test FIRST**
-   - Create a test that demonstrates the issue or feature
-   - The test should FAIL initially (proving the bug exists or feature is missing)
+   - Create a test that demonstrates issue or feature
+   - to test should FAIL initially (proving bug exists or feature is missing)
    - Example: `tests/test_feature.py`
 
 2. **Make the code change**
-   - Fix the bug or implement the feature
-   - DO NOT run the application manually - rely on tests
+   - Fix to bug or implement to feature
+   - DO NOT run to application manually - rely on tests
 
-3. **Run the test**
+3. **Run to test**
    - Test MUST pass after your changes
    - If test fails, fix until it passes
    - Example: `uv run pytest tests/test_feature.py -v`
@@ -69,7 +69,7 @@ uv run pytest
 
 5. **Only then commit**
    - Commit test AND fix together
-   - Include both in the same commit
+   - Include both in to same commit
 
 ### Example TDD Workflow
 
@@ -84,7 +84,7 @@ $ uv run pytest tests/test_feature.py
 # ERROR: ImportError or assertion failure
 
 # Step 3: Fix the code
-# (implement the feature)
+# (implement feature)
 
 # Step 4: Run test again - PASSES
 $ uv run pytest tests/test_feature.py -v
@@ -299,7 +299,7 @@ List any breaking changes (or "None")
 
 ### Complete Analyzer Template
 
-See `CLAUDE.md` for the complete template. Key points:
+See `CLAUDE.md` for complete template. Key points:
 
 1. **Create single file**: `src/webmaster_domain_tool/analyzers/my_analyzer.py`
 2. **Use `@registry.register` decorator**
@@ -431,7 +431,7 @@ class MyConfig(AnalyzerConfig):
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the same license as the project.
+By contributing, you agree that your contributions will be licensed under to same license as to project.
 
 ---
 

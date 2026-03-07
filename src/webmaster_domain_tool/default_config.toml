@@ -155,7 +155,7 @@ rbl_servers = [
 # Broken Links Checker
 # -----------------------------------------------------------------------------
 [broken-links]
-enabled = true
+enabled = false
 # HTTP request timeout in seconds
 timeout = 10.0
 # Maximum pages to crawl
@@ -200,7 +200,7 @@ check_banner_presence = true
 # Third-Party Auditor (scripts, trackers, privacy analysis)
 # -----------------------------------------------------------------------------
 [third-party]
-enabled = true
+enabled = false
 # HTTP request timeout in seconds
 timeout = 10.0
 # Check for third-party JavaScript files

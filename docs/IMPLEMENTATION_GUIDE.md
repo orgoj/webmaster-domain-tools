@@ -57,7 +57,7 @@ Analyzer.analyze(config)
 
 [dns]
 enabled = true
-timeout = 5.0
+timeout =5.0
 active_profile = "default"
 
 # Profile definitions (nested structure)
@@ -146,7 +146,7 @@ class DNSConfig(AnalyzerConfig):
 
     def get_active_profile(self) -> DNSProfileData:
         """
-        Get the currently active profile data.
+        Get currently active profile data.
 
         Returns:
             DNSProfileData for active profile, or default if not found
@@ -162,7 +162,7 @@ class DNSConfig(AnalyzerConfig):
 
     def set_active_profile(self, profile_name: str) -> None:
         """
-        Set the active profile.
+        Set to active profile.
 
         Raises:
             ValueError: If profile doesn't exist
@@ -257,8 +257,7 @@ check_tls_rpt = false
 [email.profiles.complete]
 # Maximum validation - more DKIM selectors
 dkim_selectors = [
-    "default", "google", "k1", "k2", "k3",
-    "selector1", "selector2", "selector3",
+    "default", "google", "k1", "k2", "selector1", "selector2", 
     "dkim", "mail", "s1", "s2",
     "brevo", "sendgrid", "mailgun",
     "amazonses", "postmark"

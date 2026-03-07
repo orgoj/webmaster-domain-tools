@@ -1,0 +1,30 @@
+# Webmaster Domain Tool - User Configuration
+# Lightweight config with heavy modules disabled
+
+# =============================================================================
+# Analyzer Configuration - Heavy Modules DISABLED
+# =============================================================================
+
+# Cookies & Consent Analysis - DISABLED
+[cookies_consent]
+enabled = false
+
+# Structured Data Validator - DISABLED
+[structured-data]
+enabled = false
+
+# Mobile-Friendly Analysis - DISABLED
+[mobile]
+enabled = false
+
+# HTML Validator - DISABLED
+[html]
+enabled = false
+
+# Social Media Settings - DISABLED
+[social-media]
+enabled = false
+
+# Technology Stack Detection - DISABLED
+[technology]
+enabled = false
